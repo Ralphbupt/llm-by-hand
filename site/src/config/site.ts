@@ -8,7 +8,7 @@ export const SITE_TAGLINE = 'Build your own GPT, by hand.'
 export const SITE_DESCRIPTION =
   'Learn how large language models work by computing every number yourself, in small interactive levels: from one dot product to a GPT you write and train.'
 /** The course author, shown as the provider in structured data. alternateName links the liko.page domain to the same person. */
-export const AUTHOR = { name: 'Link', alternateName: 'Liko', url: 'https://blog.liko.page' }
+export const AUTHOR = { name: 'Link', alternateName: 'Liko', url: 'https://liko.page/' }
 export const LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
 /** theme-color for the browser chrome, matching --bg in global.css (light, dark). */
 export const THEME_COLOR = { light: '#fdfdfc', dark: '#16161a' }

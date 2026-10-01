@@ -31,7 +31,7 @@ export function levelDescription(l: Level): string {
   return s.length <= 200 ? s : q
 }
 
-const provider = { '@type': 'Person', name: AUTHOR.name, alternateName: AUTHOR.alternateName, url: AUTHOR.url }
+const provider = { '@type': 'Person', '@id': 'https://liko.page/#person', name: AUTHOR.name, alternateName: AUTHOR.alternateName, url: AUTHOR.url }
 const courseId = `${SITE_URL}/#course`
 
 export function websiteLd() {
