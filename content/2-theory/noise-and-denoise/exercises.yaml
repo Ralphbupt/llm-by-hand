@@ -1,0 +1,189 @@
+alpha-bar-3:
+  type: number
+  prompt: "With β = 0.1, 0.2, 0.5, what is alpha-bar after 3 steps?"
+  answer: 0.36
+  tol: 0.001
+  after: "0.9 × 0.8 × 0.5 = 0.36. After three steps, 36% of the signal’s variance is left. The signal itself is then multiplied by √0.36 = 0.6."
+  hints:
+    - when: { equals: 0.2 }
+      say: "That is 1 − (0.1 + 0.2 + 0.5): you subtracted the summed betas. Alpha-bar multiplies what each step keeps instead."
+    - when: { equals: 0.01 }
+      say: "That multiplies the betas, the noise added. Multiply what each step keeps: α = 1 − β."
+    - when: { equals: 0.5 }
+      say: "That is only the last step's α. Multiply all three: 0.9 × 0.8 × 0.5."
+    - when: { any: true }
+      say: ["Alpha-bar multiplies what each step keeps. What does one step keep, if it adds β of noise?", "Each step keeps α = 1 − β: 0.9, 0.8 and 0.5. The first two give 0.9 × 0.8 = 0.72."]
+
+var-sum:
+  type: number
+  prompt: "The signal is multiplied by 0.6 and the noise by 0.8. What is 0.6² + 0.8²?"
+  answer: 1
+  tol: 0.001
+  after: "0.36 + 0.64 = 1. Signal variance plus noise variance is 1 at every step."
+  hints:
+    - when: { equals: 1.4 }
+      say: "That is 0.6 + 0.8. Square each one first: 0.6 × 0.6 and 0.8 × 0.8."
+    - when: { any: true }
+      say: ["Square each number, then add.", "0.6² = 0.36. What is 0.8²?"]
+
+x3-first:
+  type: number
+  prompt: "x0 = [1, 2], eps = [0.5, −1], alpha-bar = 0.36. What is the first number of x₃?"
+  answer: 1.0
+  tol: 0.001
+  after: "0.6 × 1 + 0.8 × 0.5 = 1.0. The second number is 0.6 × 2 + 0.8 × (−1) = 0.4, so x₃ = [1.0, 0.4]."
+  hints:
+    - when: { equals: 0.68 }
+      say: "You used 0.36 and 0.64 directly. The formula takes their square roots: 0.6 and 0.8."
+    - when: { equals: 1.4 }
+      say: "You left x0 unscaled. The signal gets √0.36 = 0.6: 0.6 × 1 + 0.8 × 0.5."
+    - when: { equals: 1.1 }
+      say: "You gave the noise a weight of 1. It gets √(1 − 0.36) = 0.8."
+    - when: { any: true }
+      say: ["Use only the first numbers: x0 starts with 1, eps starts with 0.5.", "The signal part is 0.6 × 1. The noise part is 0.8 × the first number of eps. Add them."]
+
+end-of-road:
+  type: predict
+  prompt: "Noise is mixed into a spiral of 2D points with xₜ = √ᾱₜ x0 + √(1 − ᾱₜ) eps. On a 50-step schedule, alpha-bar at t = 50 is 0.0045. What does the spiral look like there?"
+  options: ["Still a spiral, just less sharp", "A round cloud with no trace of the spiral", "All the points at exactly [0, 0]"]
+  answer: 1
+  hints:
+    - when: { equals: 2 }
+      say: "The signal’s weight is nearly 0, but the noise’s weight √(1 − 0.0045) is nearly 1. Where does that put each point?"
+    - when: { equals: 0 }
+      say: "Only √0.0045 ≈ 0.07 of each point’s position is left. Is that enough to see a spiral?"
+  reveal: "A round cloud. √0.0045 ≈ 0.07, so only 7% of each point’s position is left, and the noise part has strength √0.9955 ≈ 1. The cloud is almost exactly a normal distribution. This is why it matters: at the end you know exactly what the data looks like, so generating can start there."
+
+add-noise:
+  type: code
+  prompt: "Write `add_noise`. ab is alpha-bar. It should work for one point or for an array of points."
+  template: |
+    def add_noise(x0, eps, ab):
+        return ____
+
+    x0 = np.array([1.0, 2.0])
+    eps = np.array([0.5, -1.0])
+    print(add_noise(x0, eps, 0.36))
+  solution: "np.sqrt(ab) * x0 + np.sqrt(1 - ab) * eps"
+  tests:
+    - expr: "add_noise(np.array([1.0, 2.0]), np.array([0.5, -1.0]), 0.36)"
+      expect: [1.0, 0.4]
+      say: "the page’s example: [1.0, 0.4]"
+    - expr: "add_noise(np.array([[1.0, 0.0], [0.0, 3.0]]), np.array([[0.0, 1.0], [2.0, 0.0]]), 0.64)"
+      expect: [[0.8, 0.6], [1.2, 2.4]]
+      say: "two points at once, alpha-bar 0.64"
+    - expr: "add_noise(np.array([2.0, -1.0]), np.array([5.0, 5.0]), 1.0)"
+      expect: [2.0, -1.0]
+      say: "alpha-bar = 1 means no noise yet"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Compare your function with the formula at the top of the page, term by term.", "Each term has a weight. Which weights are under a square root?", "The square root in NumPy is np.sqrt. Both weights need it."]
+    - when: { any: true }
+      say: ["Copy the formula xₜ = √ᾱ x0 + √(1 − ᾱ) eps term by term. ᾱ is ab.", "Two terms added together: the signal x0 and the noise eps, each with its own weight.", "Both weights are square roots. NumPy’s square root is np.sqrt."]
+  after: "√ab scales the signal and √(1 − ab) scales the noise, so the two variances add up to ab + (1 − ab) = 1. Every operation works number by number, so the same line works for one point or for an array of points."
+
+noisy-at-t:
+  type: code
+  prompt: "Write `noisy_at`: from the clean point x0, the noise eps, the list of betas and a step t (counting from 1), compute alpha-bar for step t, then return the noisy point xₜ."
+  template: |
+    def noisy_at(x0, eps, betas, t):
+        ____
+
+    betas = np.array([0.1, 0.2, 0.5])
+    print(noisy_at(np.array([1.0, 2.0]), np.array([0.5, -1.0]), betas, 3))
+  solution: |-
+    ab = np.prod(1 - betas[:t])
+        return np.sqrt(ab) * x0 + np.sqrt(1 - ab) * eps
+  tests:
+    - expr: "noisy_at(np.array([1.0, 2.0]), np.array([0.5, -1.0]), np.array([0.1, 0.2, 0.5]), 3)"
+      expect: [1.0, 0.4]
+      tol: 0.0001
+      say: "the page’s example: alpha-bar 0.36 at t = 3 gives [1.0, 0.4]"
+    - expr: "noisy_at(np.array([2.0, 0.0]), np.array([0.0, 3.0]), np.array([0.1, 0.2, 0.5]), 2)"
+      expect: [1.6971, 1.5875]
+      tol: 0.0001
+      say: "t = 2 uses only the first two steps: alpha-bar = 0.9 × 0.8 = 0.72"
+    - expr: "noisy_at(np.array([[4.0, 0.0], [0.0, 4.0]]), np.array([[0.0, 2.0], [2.0, 0.0]]), np.array([0.5, 0.5]), 2)"
+      expect: [[2.0, 1.7321], [1.7321, 2.0]]
+      tol: 0.0001
+      say: "two points at once, betas [0.5, 0.5]: alpha-bar 0.25, weights 0.5 and √0.75"
+  hints:
+    - when: { error: "not defined" }
+      say: ["Every name you use must be made inside `noisy_at`. Compute ab on a separate line first, then use it in the return line."]
+    - when: { testFailed: 1 }
+      say: ["Test 1 passed but t = 2 failed. Check which betas your slice takes for step t.", "Step t uses the first t betas, positions 0 to t − 1. A slice that stops before position t takes exactly those."]
+    - when: { any: true }
+      say: ["Two lines: first alpha-bar for step t, then the `add_noise` formula with that alpha-bar. Did you write return?", "Alpha-bar multiplies what each of the first t steps keeps. Each step keeps 1 − β, not β.", "np.prod multiplies all numbers of an array. The second line is the same as `add_noise`."]
+  after: "t counts from 1, so step t uses betas[:t], positions 0 to t − 1. The product of what each step keeps is alpha-bar. With it, one formula jumps straight to xₜ, without running the t steps one by one."
+
+undo-second:
+  type: number
+  prompt: "At t = 3 (alpha-bar 0.36), x₃ = [0.7, 1.0] and the true noise was eps = [0.5, 0.5]. What is the second number of x0?"
+  answer: 1.0
+  tol: 0.001
+  after: "(1.0 − 0.8 × 0.5) / 0.6 = 0.6 / 0.6 = 1.0. The first number is (0.7 − 0.4) / 0.6 = 0.5, so x0 = [0.5, 1.0]. Knowing the noise gives the clean point back exactly."
+  hints:
+    - when: { equals: 1.667 }
+      say: "That is 1.0 / 0.6. Remove the noise part first: 1.0 − 0.8 × 0.5 = 0.6."
+    - when: { equals: 0.36 }
+      say: "You multiplied by 0.6. Undoing a multiplication means dividing: (1.0 − 0.4) / 0.6."
+    - when: { equals: 0.6 }
+      say: "Right so far: 1.0 − 0.8 × 0.5 = 0.6. Now divide by 0.6."
+    - when: { any: true }
+      say: ["Undo the forward formula backward: first remove the noise part, then undo the 0.6.", "Second numbers only: x₃ = 1.0 and eps = 0.5. Remove the noise part 0.8 × 0.5 first."]
+
+zero-loss:
+  type: number
+  prompt: "The simplest network always guesses that the noise is [0, 0]. For one point the true noise is [0.5, −1]. What is the loss, mean((guess − eps)²)?"
+  answer: 0.625
+  tol: 0.001
+  after: "(0.25 + 1) / 2 = 0.625. Over many random noises this simplest guess averages 1.0, since each noise number has variance 1. Any useful network must beat 1.0."
+  hints:
+    - when: { equals: 1.25 }
+      say: "That is the sum. The loss is the mean: divide by 2 numbers."
+    - when: { equals: 0.25 }
+      say: "Square both numbers: 0.5² = 0.25 and (−1)² = 1. Then average."
+    - when: { any: true }
+      say: ["Find the two differences guess − eps first.", "The differences are 0 − 0.5 and 0 − (−1). Square each one, then average the two squares."]
+
+batch-shape:
+  type: shape
+  prompt: "One training batch has 128 noisy points. Each input row is the point’s x and y, plus 12 numbers that encode the step t. What shape goes into the network?"
+  answer: [128, 14]
+  after: "128 rows, 14 numbers each. The output is (128, 2): one noise guess per point."
+  hints:
+    - when: { shape: [128, 2] }
+      say: "That is the output, the noise guess. The input also carries the 12 time numbers."
+    - when: { shape: [128, 12] }
+      say: "Don't forget the point itself: x and y, plus the 12 time numbers."
+    - when: { any: true }
+      say: ["One row per point. How many numbers describe one point and its step?", "A row holds the point’s x and y, plus the 12 time numbers."]
+
+loss-floor:
+  type: predict
+  prompt: "Guess before you train: if training goes perfectly, where does the loss stop?"
+  options: ["All the way down to 0", "Below 1.0, but it stops falling somewhere above 0", "It stays at 1.0, like the [0, 0] guess"]
+  reveal: "It stops falling above 0: for this spiral, at about 0.32. Many different clean points can land on the same noisy point, so from xₜ alone nobody can know exactly which noise was added. The best possible guess is the average over all the possibilities, and that still has some error. This lower limit depends on the data: points that are easier to predict from each other give a lower limit."
+
+guess-clean:
+  type: code
+  prompt: "Write `guess_clean`: given a noisy point, the network’s noise guess, and alpha-bar, return the guess of x0."
+  template: |
+    def guess_clean(xt, eps_hat, ab):
+        return ____
+
+    print(guess_clean(np.array([1.0, 0.4]), np.array([0.5, -1.0]), 0.36))
+  solution: "(xt - np.sqrt(1 - ab) * eps_hat) / np.sqrt(ab)"
+  tests:
+    - expr: "guess_clean(np.array([1.0, 0.4]), np.array([0.5, -1.0]), 0.36)"
+      expect: [1.0, 2.0]
+      say: "the page’s example comes back to [1, 2]"
+    - expr: "guess_clean(np.array([[0.8, 0.6], [1.2, 2.4]]), np.array([[0.0, 1.0], [2.0, 0.0]]), 0.64)"
+      expect: [[1.0, 0.0], [0.0, 3.0]]
+      say: "undoes `add_noise` for two points at once"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Undo `add_noise` in the opposite order: the last thing added is removed first.", "First remove the noise term (its weight times `eps_hat`). What did `add_noise` multiply x0 by?", "After removing the noise term, divide by the signal’s weight."]
+    - when: { any: true }
+      say: ["This is the undo formula from section 2, with `eps_hat` in place of eps.", "Undo `add_noise` in reverse order: subtract the noise term first, then divide by the signal’s weight."]
+  after: "This is `add_noise` run backward: subtract the noise term, then divide by √ab. With the true eps you get x0 exactly. With the network’s `eps_hat` you get a guess, and it is only as good as the noise guess."

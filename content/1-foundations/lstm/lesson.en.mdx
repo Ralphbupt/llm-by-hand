@@ -1,0 +1,287 @@
+---
+title: LSTM and GRU
+level: "N4"
+order: 10.4
+part: foundations
+branch: classic
+question: How do gates let a network remember for longer?
+run: mixed
+glossarySkip: [encoder, decoder]
+checkpoint: boss-line
+mustSolve: [gru-boss]
+testOut: [lstm-c, keep-10, gru-params, gru-boss, boss-line]
+recap:
+  can:
+    - "Compute one LSTM step by hand: the new cell c from f, i and g, then h from o and tanh(c)."
+    - "Explain why the cell keeps its value: the path from c to c is only “multiply by f, add”."
+    - "Write a GRU step in NumPy from its formulas, and an LSTM cell in PyTorch."
+  keys:
+    - "$c_t = f \\cdot c_{t-1} + i \\cdot g$ and $h_t = o \\cdot \\tanh(c_t)$"
+    - "With nothing new added (i = 0), c keeps $f^n$ of its value after n steps"
+    - "GRU: $h_t = (1 - z)\\, h_{t-1} + z\\, \\tilde h$, with $\\tilde h = \\tanh(x_t W_h + (r \\cdot h_{t-1}) U_h + b_h)$"
+    - "One LSTM multiply `x @ W + h @ U + b` gives 4H numbers: blocks f, i, g, o"
+  mistakes:
+    - "Starting the forget bias at 0: f begins at 0.5 and the signal from early steps vanishes before training can use it."
+    - "Swapping (1 − z) and z in the GRU update, or multiplying the candidate’s $U_h$ by h instead of $r \\cdot h$."
+boss: "Write a complete GRU step in NumPy and pass every test in your browser. Then, on your computer, write the LSTM cell inside boss.py yourself and train it on text we generate until at least 90% of the lines it writes follow every rule."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import LstmCellLab from '@viz/LstmCellLab.astro'
+import MemoryLab from '@viz/MemoryLab.astro'
+import LstmSamplesLab from '@viz/LstmSamplesLab.astro'
+import GruLab from '@viz/GruLab.astro'
+import BiRnnLab from '@viz/BiRnnLab.astro'
+
+In level N3, a plain RNN could not remember the first symbol for 40 steps. Every step passed its hidden state through tanh and multiplied it by $w_h$,
+so what was added early got smaller and smaller. An **LSTM** (the name stands for “long short-term memory”) adds a second path,
+the **cell state** c, where the default is to keep what is there.
+
+The boss at the end has a part that runs on your computer. If you have not set that up yet, see
+[Run the code on your computer](/setup/).
+
+## 1. The cell state: a moving belt
+
+Think of c as an object on a moving belt (a conveyor belt): it travels from step to step, {/* en-ok: conveyor */}
+and at each step a little can be removed from it or added to it.
+
+Three **gates** decide what happens to c at each step. Each gate is a number between 0 and 1:
+
+- The **forget gate** f: how much of the old c to keep.
+- The **input gate** i: how much of the new candidate g to add.
+- The **output gate** o: how much of c to show as the output h.
+
+$$
+c_t = f \cdot c_{t-1} + i \cdot g
+$$
+
+$$
+h_t = o \cdot \tanh(c_t)
+$$
+
+<LstmCellLab hide={{ c: "lstm-c", h: "lstm-h", keep: "keep-10" }} />
+
+<Blank id="lstm-c" />
+
+<Gate requires="lstm-c">
+
+<Blank id="lstm-h" />
+
+Where do the gates come from? Each one is a small layer with a sigmoid, so its output lands between 0 and 1.
+It reads the new input and the previous h, just like the RNN did.
+
+<Blank id="gate-value" />
+
+</Gate>
+
+## 2. Why the cell keeps its value
+
+<Gate requires="gate-value">
+
+Look at the path c takes from one step to the next: multiply by f, add something. There is no tanh and no weight matrix on that path.
+If nothing new is added, the cell keeps a fraction f of what it had, every step. Move the f slider in the lab and watch the LSTM curve.
+
+<Blank id="keep-10" />
+
+<Predict id="f-half" />
+
+When the loss at a late step sends its signal back to step 1 along the cell, each step multiplies it by f.
+With f close to 1, the signal arrives. In the plain RNN, each step multiplied it by about 0.5.
+
+One detail decides whether training starts to work at all. Before training, a gate’s output is about sigmoid(its bias),
+because the weights start small. With the forget bias at 0, f starts at sigmoid(0) = 0.5. With the forget bias at 2,
+f starts at sigmoid(2) ≈ 0.88. The lab below trained two LSTMs that differ only in this starting bias.
+
+<Predict id="k80" />
+
+<MemoryLab kinds={["rnn", "lstm0", "lstm"]} />
+
+<Stuck q="Why does the starting value of the forget bias matter so much?">
+
+Before training, a gate’s output is about sigmoid(bias). With bias 0, f starts at 0.5, and over 79 steps the cell path keeps
+0.5⁷⁹ ≈ 1.65e-24 of the signal. The network cannot even notice that step 1 matters, so it never learns to raise f.
+
+With bias 2, f starts at 0.8808, and 0.8808⁷⁹ ≈ 4.42e-5. That is small, but it is enough for training to see the connection.
+Training then pushes f closer to 1 by itself. Starting the forget bias at 1 or 2 is standard practice.
+
+</Stuck>
+
+</Gate>
+
+## 3. The GRU: the same idea with two gates
+
+<Gate requires="k80">
+
+The LSTM carries two vectors, h and c, and uses three gates. A **GRU** (gated recurrent unit) keeps the same “keep by default”
+idea with fewer parts: one state h and two gates.
+
+Both gates are sigmoids, between 0 and 1, each computed from $x_t$ and $h_{t-1}$ with its own weights, like the LSTM’s gates:
+
+$$
+z = \sigma(x_t W_z + h_{t-1} U_z + b_z) \qquad r = \sigma(x_t W_r + h_{t-1} U_r + b_r)
+$$
+
+- The **update gate** z decides how much of the new candidate $\tilde h$ to take. The rest, 1 − z, is the old h, kept as it was:
+
+$$
+h_t = (1 - z)\, h_{t-1} + z\, \tilde h
+$$
+
+- The **reset gate** r decides how much of the old h to use when making the candidate. The candidate has its own weights $W_h$, $U_h$, $b_h$:
+
+$$
+\tilde h = \tanh\bigl(x_t W_h + (r \cdot h_{t-1})\, U_h + b_h\bigr)
+$$
+
+Here $r \cdot h_{t-1}$ multiplies number by number, like `r * h` in NumPy. With r near 0, the candidate ignores the old h.
+
+<Blank id="gru-h" />
+
+<Gate requires="gru-h">
+
+<GruLab />
+
+When z is near 0, the old h passes through almost unchanged, like c in the LSTM, so the gradient can also pass back through it.
+The GRU has no separate output gate and no separate cell, so it has fewer weights.
+
+<Blank id="gru-params" />
+
+</Gate>
+
+</Gate>
+
+## 4. Reading both ways
+
+<Gate requires="gru-params">
+
+Every RNN so far read left to right, so the state at a word knows only the words before it. Sometimes the words after
+matter more. In “he sat by the bank of the river”, it is “river”, four words later, that says which kind of bank this is (a bank for money, or the side of a river).
+
+A **bidirectional** RNN runs two RNNs over the same sentence: one left to right, one right to left. The output at each
+position is the two states side by side, so every word sees the whole sentence, from both ends.
+
+<Blank id="bi-read" />
+
+<Gate requires="bi-read">
+
+<BiRnnLab />
+
+<Blank id="bi-size" />
+
+<Predict id="bi-generate" />
+
+<Gate requires="bi-generate">
+
+<Stuck q="If reading both ways is better, why don’t text generators do it?">
+
+A generator writes one word at a time. When it picks word 5, words 6, 7 and 8 do not exist yet, so there is nothing for a
+right-to-left pass to read. Bidirectional models are for jobs where the whole input is there before you answer:
+labeling each word, classifying a sentence, or the encoder in level N5, which reads a whole input before the
+decoder starts writing.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+## 5. Lines that follow the rules
+
+<Gate requires="bi-generate">
+
+Our own generator writes lines like these:
+
+```
+the gray bee wants the gray cup.
+the blue fox sees the blue box.
+```
+
+The rules: `the <color> <animal> <verb> the <same color> <thing>.` There are 6 colors, 6 animals, 6 verbs and 6 things.
+A character-level model reads one letter at a time and learns to predict the next one. To follow the last rule, it has to remember the first
+color for 17 characters, across the animal and the verb.
+
+<Blank id="chance" />
+
+<Predict id="rnn-color" />
+
+<LstmSamplesLab />
+
+The LSTM learns the grammar first: by step 450, 98% of its lines follow the grammar. The colors still differ, at about the 1-in-6 chance level.
+Then, between step 900 and step 1,200, it suddenly starts carrying the color across. The plain RNN learns the grammar too, but never the color.
+
+<Stuck q="Why is there a long flat stretch before the jump?">
+
+Getting the grammar right helps at every character, so it is learned first. The color rule helps at only one character per line,
+and only once the network finds a way to carry the color forward. Until some gate starts holding it, the gradient for that rule is weak.
+Once a gate starts holding the color, the gain grows quickly, and the fraction of good lines jumps from 17% to 94% in 300 steps.
+
+</Stuck>
+
+Gates have limits too. We made the rule harder: the second color comes 40 characters later
+(for example `the big <thing> and the <same color> <thing>`). Our LSTM did not learn that version in 6,000 steps. In level 14, attention solves this kind of long-distance rule directly.
+
+## 6. Write it yourself
+
+Here is one LSTM step with vectors. As everywhere in the course, vectors are rows: the input x has D numbers, h and c have H.
+All four gates come from one matrix multiply, `x @ W + h @ U + b`, which gives 4H numbers.
+The first H belong to the forget gate, the next H to the input gate, then H for the candidate g, then H for the output gate.
+So W is (D, 4H) and U is (H, 4H). `z[:H]` takes the first H numbers, `z[H:2 * H]` the next H, and so on.
+
+Write the line that updates the cell.
+
+<CodeBlank id="lstm-step" />
+
+<Deeper title="PyTorch orders the gates differently">
+
+This page and `boss.py` order the four blocks f, i, g, o. PyTorch’s built-in `nn.LSTM` orders them i, f, g, o.
+If you ever copy weights between the two, swap the first two blocks of W, U and b. The math is the same; only the order of the
+blocks inside the big matrix differs.
+
+</Deeper>
+
+<Gate requires="lstm-step">
+
+### The boss, part 1: a GRU step
+
+Now a cell you have not seen as code. Write one GRU step from the formulas in section 3: the update gate z, the reset gate r,
+the candidate $\tilde h$, and the new h. The weights are in a dictionary, so `P["Wz"]` is $W_z$.
+
+<CodeBlank id="gru-boss" />
+
+<Gate requires="gru-boss">
+
+### The boss, part 2: your LSTM cell on your computer
+
+Download [boss.py](/files/lstm/boss.py) into a folder of its own and open it there ([setup](/setup/)). It has everything for training except
+one part: `LSTMCell.forward`. Write it in PyTorch, using the step from section 6 (`torch.sigmoid` and `torch.tanh` work like the NumPy ones,
+and `x` now holds a whole batch, one row per example, so slice the columns: `z[:, :H]`).
+
+Then run `python boss.py`. It first checks your cell against the formulas on this page, then trains a character model that uses it
+for a few minutes and samples 200 lines. At 180 or more good lines it prints a line that starts with `N4 PASS`. Paste that line here.
+The code at the end of the line only shows that you pasted it unchanged; this part relies on your honesty.
+
+The level counts as cleared once part 1 (the GRU step) and this line both pass.
+
+<CodeBlank id="boss-line" />
+
+<TryIt title="Then try">
+
+Turn your cell into a plain RNN and train again. In `forward`, right after the line that computes `z`, add
+`return torch.tanh(z[:, :self.H]), c`. Then put a `#` in front of `check_cell()` in `main`, because this cell fails that check on
+purpose. In our run the LSTM cell wrote 199 good lines out of 200, and the plain RNN wrote 6. Read the three lines it prints and
+see which rules they break.
+
+</TryIt>
+
+</Gate>
+
+</Gate>
+
+</Gate>

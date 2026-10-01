@@ -1,0 +1,267 @@
+---
+title: Tensors in memory
+level: "U1"
+order: 6.1
+part: foundations
+branch: internals
+question: Where do the numbers of an array really live, and why is a transpose free?
+run: browser
+checkpoint: code-read
+testOut: [strides-234, flat-T-1, code-read]
+glossarySkip: [stride]
+recap:
+  can:
+    - "Find where any element lives in memory from the shape, the strides and the start."
+    - "Say whether a transpose, a slice or a reshape is a view or a copy, before running it."
+    - "Explain why `view` fails after `transpose`, and what `.contiguous()` does about it."
+  keys:
+    - "position = start + $i \\cdot s_0 + j \\cdot s_1$"
+    - "Contiguous `(2, 5, 3)` → strides `(15, 3, 1)`: each stride is the product of the sizes to its right"
+    - "A transpose swaps the strides: `(4, 1)` → `(1, 4)`. Nothing moves in memory."
+    - "A broadcast axis has stride 0: every step reads the same numbers again"
+    - "NumPy `x.strides` counts bytes; PyTorch `x.stride()` counts elements"
+  mistakes:
+    - "Writing into a view and expecting the original to stay the same."
+    - "Calling `.view(...)` right after `.transpose(...)`: use `.reshape(...)` or `.contiguous().view(...)`."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import StridesLab from '@viz/StridesLab.astro'
+
+In level 1 an array was a table with a shape. Inside the computer there is no table. There is one long row of
+numbers, and a short description of how to read that row as a table. This level is about that description.
+
+It explains three things you will meet later:
+
+1. why `x.T` costs nothing, even for a huge matrix;
+2. why `reshape` sometimes makes a copy and sometimes does not;
+3. why level 21 writes `.transpose(1, 2).contiguous().view(...)` when it joins the attention heads.
+
+## 1. One long row
+
+Take twelve numbers and read them as 3 rows of 4:
+
+```python
+# np.arange(12.0) is 0.0, 1.0, …, 11.0
+x = np.arange(12.0).reshape(3, 4)
+# [[ 0.  1.  2.  3.]
+#  [ 4.  5.  6.  7.]
+#  [ 8.  9. 10. 11.]]
+```
+
+`reshape(3, 4)` reads the twelve numbers in order and fills row 0 first, then row 1, then row 2.
+In memory, nothing changed: the twelve numbers still lie in one row, 0 to 11.
+
+To find `x[i, j]`, NumPy needs to know how far to step in memory for each axis. These steps are the **strides**.
+
+- Moving one place along a row (`j` grows by 1) moves 1 place in memory.
+- Moving down one row (`i` grows by 1) jumps over a whole row of 4: 4 places.
+
+So the strides of `x` are `(4, 1)`, and every element follows one **address rule**:
+
+$$
+\text{position of } x[i, j] \;=\; \text{start} + i \cdot s_0 + j \cdot s_1
+$$
+
+For `x`, the start is 0. So `x[1, 2]` lives at $0 + 1 \cdot 4 + 2 \cdot 1 = 6$. An array is these four things:
+the memory, the shape, the strides and the start.
+
+Pick an array in the lab below, then point at or tap one of its cells. For now stay with `x`; the other buttons
+are in the next sections.
+
+<StridesLab hide={{ T: "strides-T" }} />
+
+One detail of units. NumPy’s `x.strides` counts **bytes**, not elements. Each float64 number takes 8 bytes,
+so NumPy prints `(32, 8)`. Divide by `x.itemsize` (8) to get `(4, 1)`. This page always counts in elements, and
+so does PyTorch’s `x.stride()`.
+
+<Blank id="addr-2-3" />
+
+<Gate requires="addr-2-3">
+
+With more axes the rule is the same. The last axis has stride 1. Each axis to its left jumps over everything to
+its right, so its stride is the product of the sizes to its right. An array whose strides follow this pattern is
+**contiguous**: reading it in row order walks through memory one step at a time.
+
+<Blank id="strides-234" />
+
+<Gate requires="strides-234">
+
+Now write the pattern as code. Walk the shape from the right: the step starts at 1, and after each axis it
+grows by that axis’s size. `strides.insert(0, s)` puts `s` at the front of a list, so the list is finally in
+left-to-right order.
+
+<CodeBlank id="code-strides" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="code-strides">
+
+## 2. A view: new strides, same memory
+
+Press **x.T** in the lab. The transpose has shape (4, 3), but it has no memory of its own. It reads the same
+twelve numbers, with the shape and the strides swapped. No number is moved, so a transpose of a huge matrix takes
+no time.
+
+<Blank id="strides-T" />
+
+<Gate requires="strides-T">
+
+An array that reads another array’s memory is a **view**. NumPy can tell you when two arrays share memory:
+
+```python
+np.shares_memory(x, x.T)    # True
+```
+
+<Predict id="pred-write" />
+
+Slicing makes views too. `x[:, ::2]` takes every second column, so one step along its row is 2 steps in memory:
+strides `(4, 2)`. `x[1:, 1:]` keeps the strides `(4, 1)` but starts at position 5. Both are in the lab.
+
+Some operations always make a **copy**, an array with new memory: `x.copy()`, and indexing with a list such as
+`x[[0, 2]]`.
+
+With more axes, a transpose names the two axes to swap. In NumPy that is `np.swapaxes(t, 1, 2)`, and in PyTorch
+`t.transpose(1, 2)`. Both swap those two sizes in the shape and the same two strides.
+
+<Blank id="strides-swap" />
+
+<TryIt>
+
+Press **x[:, ::2]** and look at the memory row. The dashed cells are memory this array never reads. Then press
+**x[1:, 1:]**: the first five cells are dashed, because the view starts at position 5.
+
+</TryIt>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="strides-swap">
+
+## 3. When reshape has to copy
+
+`reshape` keeps the numbers in **row order**: row 0 left to right, then row 1, and so on.
+If the array is contiguous, row order is memory order, and `reshape` only writes new strides. Press
+**x.reshape(2, 6)**: strides `(6, 1)`, same memory.
+
+Now try it on `x.T`. Read `x.T` in row order: 0, 4, 8, 1, 5, 9, … In memory these sit at positions 0, 4, 8, 1, 5, 9:
+forward 4, forward 4, back 7. No single stride can describe that walk, so `x.T.reshape(12)` cannot be a view.
+NumPy makes a copy with the numbers in the new order. Press **x.T.reshape(2, 6)** to see the new memory.
+
+<Blank id="flat-T-1" />
+
+<Gate requires="flat-T-1">
+
+<Predict id="pred-copy" />
+
+PyTorch has the same rules, with names for each case:
+
+| PyTorch | What it does |
+|---|---|
+| `x.stride()` | the strides, in elements |
+| `x.is_contiguous()` | `True` when row order is memory order |
+| `x.T`, `x.transpose(1, 2)` | a view with swapped strides; never copies |
+| `x.view(...)` | a new shape on the same memory; an error if no strides fit |
+| `x.reshape(...)` | a view when possible, a copy otherwise |
+| `x.contiguous()` | a copy in row order (or `x` itself, if it is already contiguous) |
+
+Level 21 joins the attention heads. The output `out` has shape `(B, h, L, d_k)`. To put the heads side by side for
+each word, the code swaps axes 1 and 2 and then joins the last two axes:
+`out.transpose(1, 2).contiguous().view(B, L, d_model)`.
+
+<Blank id="heads-strides" />
+
+<Gate requires="heads-strides">
+
+<Stuck q="view says “view size is not compatible with input tensor’s size and stride”. What happened?">
+
+After `transpose(1, 2)` the strides are `(640, 16, 160, 1)`. To join the last two axes into one axis of 64,
+the 4 heads × 16 numbers of one word would have to sit in one run of 64 neighbors in memory. They do not:
+the next head is 160 places away. `view` never moves numbers, so it refuses.
+
+`.contiguous()` copies the numbers into row order, with strides `(640, 64, 16, 1)`, and then `view` works.
+`.reshape(B, L, d_model)` does both steps in one call.
+
+</Stuck>
+
+</Gate>
+
+<Deeper title="Why contiguous memory is also faster">
+
+Memory is read in blocks of neighbors (64 bytes at a time is common), not one number at a time. Reading a
+contiguous array uses every number of every block. Reading down a column of a large matrix stored row by row uses one number
+per block and does not use the rest. Many fast functions, on the CPU and on the GPU, first make their input
+contiguous for this reason. A copy costs time and memory too, so code that runs often avoids copies it does not need.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="heads-strides">
+
+## 4. Broadcasting is stride 0
+
+In level 1, broadcasting “stretched” a size-1 axis to match the other array, and the stretched cells were pale
+because they were not stored. Here is how NumPy does it: the stretched axis gets **stride 0**.
+
+```python
+b = np.broadcast_to(x[0], (3, 4))   # x[0] is [0, 1, 2, 3]
+b.strides                           # (0, 8) in bytes → (0, 1) in elements
+```
+
+Moving down one row of `b` moves 0 places in memory, so every row reads the same four numbers.
+Press **`broadcast_to`(x[0], (3, 4))** in the lab: each used memory cell is read by 3 cells of the array (×3).
+
+<Blank id="bytes-bc" />
+
+<Gate requires="bytes-bc">
+
+The view from `broadcast_to` is read-only. Writing `b[0, 0] = 5` raises an error, because that one memory cell is
+also `b[1, 0]` and `b[2, 0]`.
+
+NumPy can build any view by hand with `as_strided`, if you give it the shape and the strides in bytes:
+
+```python
+from numpy.lib.stride_tricks import as_strided
+as_strided(x[0], shape=(3, 4), strides=(0, 8))   # the same as broadcast_to(x[0], (3, 4))
+```
+
+Use it with care. `as_strided` checks nothing. A stride that is too big makes it read memory past the end of the
+array, and you get random numbers, or a crash, with no error message.
+
+<Deeper title="Sliding windows with `as_strided`">
+
+With strides `(8, 8)` on `np.arange(6.0)`, each row starts one number after the row before:
+
+```python
+as_strided(np.arange(6.0), shape=(4, 3), strides=(8, 8))
+# [[0. 1. 2.]
+#  [1. 2. 3.]
+#  [2. 3. 4.]
+#  [3. 4. 5.]]
+```
+
+These are all windows of 3 neighbors, with no copy. Convolutions (level N1) read their input this way.
+NumPy has a safe function for exactly this: `np.lib.stride_tricks.sliding_window_view(a, 3)`, which checks the
+sizes for you.
+
+</Deeper>
+
+Now put the whole level into one function. `read` builds an array from memory using only the shape, the strides
+and the start. The tests give it a transpose, a step, a slice and a broadcast: every view in this level.
+
+<CodeBlank id="code-read" />
+
+</Gate>
+
+</Gate>

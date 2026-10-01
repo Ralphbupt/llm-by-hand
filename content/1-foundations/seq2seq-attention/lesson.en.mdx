@@ -1,0 +1,286 @@
+---
+title: Seq2seq and the first attention
+short: "Seq2seq + attention"
+level: "N5"
+order: 10.5
+part: foundations
+branch: classic
+question: How do you turn one sequence into another, and why did attention appear?
+run: mixed
+checkpoint: boss-line
+mustSolve: [attend-all]
+testOut: [handover, weight-0, ctx-shape, attend-all, boss-line]
+recap:
+  can:
+    - "Explain the bottleneck: without attention, the whole input must fit into the encoder’s last state."
+    - "Compute one attention step by hand: dot-product scores, softmax weights, weighted average of the encoder states."
+    - "Write attention for every decoder step at once in NumPy, softmax included."
+  keys:
+    - "One step: `scores = E @ s`, `w = softmax(scores)`, `context = w @ E`"
+    - "Shapes: `E` (L, H), `s` (H,), scores and weights (L,), context (H,)"
+    - "All steps: `softmax(S @ E.T) @ E`, with `S @ E.T` of shape (T, L), softmax along each row"
+    - "Subtract each row’s largest score before `np.exp`: same softmax, no overflow"
+  mistakes:
+    - "Taking the softmax over the wrong axis: each decoder state’s row of weights must add up to 1."
+    - "Thinking a bigger state fixes the bottleneck: it only moves the length where accuracy drops."
+boss: "Write attention for every decoder step at once in NumPy, softmax included, and pass every test in your browser. Then, on your computer, put the same three lines into boss.py in PyTorch and train an LSTM encoder–decoder that reverses at least 90% of new 20-digit strings."
+glossarySkip: [encoder, decoder]
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import AttnStepLab from '@viz/AttnStepLab.astro'
+import BottleneckLab from '@viz/BottleneckLab.astro'
+import AlignmentLab from '@viz/AlignmentLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+Level N4’s LSTM reads a sequence and predicts the next symbol. Many tasks need more: read one whole sequence, then write a
+different one, often of a different length. Digits in, words out: `427015` → “four hundred twenty seven thousand fifteen”.
+Or a string in, the same string backwards out. This is **sequence to sequence**, “seq2seq” for short.
+
+This level builds the first model that did it well, finds its weakness, and fixes it with the idea the whole Transformer
+uses: **attention**. The boss has a part that runs on your computer; see [Run the code on your computer](/setup/).
+
+## 1. An encoder and a decoder
+
+The model is two LSTMs, one after the other:
+
+1. The **encoder** reads the input, one token at a time, exactly like level N4. It produces one state per input token.
+   Its last state (h and c) is its summary of the whole input.
+2. The **decoder** starts from that summary. It writes the output one token at a time: it gets a start token `<bos>`,
+   predicts the first word, gives that word to itself as the next input, predicts the next, and stops when it writes `<eos>`.
+
+As everywhere in the course, vectors are rows. With a state of H numbers, the encoder turns an input of L tokens into
+L states, an array of shape (L, H). The decoder receives only the last one.
+
+<Blank id="handover" />
+
+<Gate requires="handover">
+
+This is the problem: a 4-digit input and a 24-digit input both have to fit into the same 64 numbers. Before you look at
+the measurements, make a guess.
+
+<Predict id="grow" />
+
+<Gate requires="grow">
+
+Two of these models were trained to reverse strings of 2 to 24 digits, then tested on 300 new strings of each length.
+An answer counts only if every digit is right.
+
+<BottleneckLab models={["plain"]} />
+
+The short strings are easy. The long ones fail: the summary vector is a **bottleneck**, a narrow passage. Everything the decoder will
+ever know about the input has to pass through it.
+
+<Stuck q="Why not make the state bigger? Switch H to 128.">
+
+It helps: at 16 digits the bigger model gets 62% instead of 4%. But it only moves the length where accuracy drops. At 24 digits it is back to 5%.
+Any fixed size is not enough for a long enough input, and every extra number in the state costs weights and time.
+The fix is not a bigger state. It is letting the decoder look at the input again.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 2. Attention: read every encoder state
+
+<Gate requires="grow">
+
+The encoder did not only produce a summary. It produced a state for every input token, and those are still there.
+**Attention** lets the decoder use all of them, at every step it writes:
+
+1. **Score** each encoder state against the decoder’s current state s with a dot product (level 1). E holds the encoder
+   states as rows, so all the scores at once are `scores = E @ s`.
+2. Turn the scores into **weights** that add up to 1, with softmax (level 10).
+3. Take the **weighted average** of the encoder states: `context = weights @ E`. That is a vector of H numbers,
+   computed again for this step.
+
+The decoder then predicts the next word from s and the context together. A state that scores high gets a big weight,
+so the context is mostly made of the input positions that matter for this word.
+
+Here are three encoder states with two numbers each, and a decoder state. The encoder states are the encoder’s
+hidden states, so we call them h₀, h₁, h₂ (the rows of E). Drag them.
+
+<AttnStepLab hide={{ score: "score-0", weight: "weight-0", ctx: "ctx-second" }} />
+
+<Blank id="score-0" />
+
+<Gate requires="score-0">
+
+All three scores are [2, 0, 0]. Softmax turns them into weights: raise e to each score, then divide each by the total.
+
+<Blank id="weight-0" />
+
+<Gate requires="weight-0">
+
+The weights are about [0.79, 0.11, 0.11]. The context is the weighted average: 0.79 × h₀ + 0.11 × h₁ + 0.11 × h₂.
+
+<Predict id="ctx-second" />
+
+<Gate requires="ctx-second">
+
+In a real model the states have many numbers. Shapes tell you what goes where: `E` is (L, H), `s` is (H,),
+the scores and the weights are (L,): one per input token.
+
+<Blank id="ctx-shape" />
+
+<Gate requires="ctx-shape">
+
+Now write the last line of one attention step. `softmax` from level 10 is ready to use.
+
+<CodeBlank id="ctx-line" />
+
+<Deeper title="Other ways to score">
+
+The dot product is the simplest score, and the one the Transformer uses. An older version scores each encoder state h with
+a small network instead: `v · tanh(s @ W1 + h @ W2)`, where W1, W2 and v are learned. It can compare vectors of different
+sizes and was popular in the first attention models. Both work. The dot product won because it is a single matrix
+multiply for all positions at once, and fast hardware is designed for exactly that.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+## 3. Does it fix the bottleneck?
+
+<Gate requires="ctx-line">
+
+The same reversing experiment, the same LSTM sizes, now with attention added to the decoder.
+
+<Predict id="fix" />
+
+<Gate requires="fix">
+
+<BottleneckLab models={["plain", "attn"]} />
+
+With a 32-number state, the plain model gets 0% at 20 digits. With attention it gets 72%. With 128 numbers, attention
+keeps 85% at 24 digits, where the plain model is at 5%. The summary vector no longer has to carry everything. The decoder
+can get what it needs from the input when it needs it.
+
+</Gate>
+
+</Gate>
+
+## 4. Where does it look?
+
+<Gate requires="fix">
+
+An attention model leaves a trace you can read: the weights at every output step. This one writes numbers as English words, up to six
+digits, the same kind of task the Transformers of level 17 and level [N7](/learn/encoder-decoder/) learn. English reads 427015 in groups of three digits:
+“four hundred twenty seven” (427), then “thousand”, then “fifteen” (015). It was trained on random numbers and tested on 1,000 it
+never saw: it reads 100% of them exactly right.
+
+<Predict id="seven-look" />
+
+<Gate requires="seven-look">
+
+<AlignmentLab />
+
+Nobody told the model which digit goes with which word. It learned these **alignments** only because looking at the
+right digit made its next word easier to predict.
+
+The same weights for 427015, drawn as arcs from each word back to the digits. A brighter, thicker arc is a larger weight.
+
+<ArchLab which="seq2seq" />
+
+<TryIt>
+
+Pick 427,015 and point at the row for “hundred”. It does not look at the 4. It looks two digits ahead, at the 7:
+the last two digits decide whether “seventeen” or “twenty seven” comes after “hundred”. Then look at “thousand”, which spreads its weight over the last three digits.
+Switch to “Reversing digits”: the bright cells run along the diagonal from the top right to the bottom left, the last input digit first.
+
+</TryIt>
+
+</Gate>
+
+</Gate>
+
+## 5. Keep the attention, drop the recurrence
+
+<Gate requires="seven-look">
+
+Attention fixed the bottleneck, but the model still reads with an LSTM: one token after another, each step waiting for
+the previous one, and the encoder’s own states still get weaker over long inputs (level N3). The next idea was a big change:
+
+| Model | How the input is read | How the output finds the input |
+|---|---|---|
+| encoder–decoder | an LSTM, step by step | only the final summary |
+| + attention (this level) | an LSTM, step by step | attention over every encoder state |
+| encoder–decoder Transformer ([level N7](/learn/encoder-decoder/)) | attention, all tokens at once | attention over every encoder state |
+| GPT (levels 17–21) | attention over earlier tokens, all at once | there is no separate encoder |
+
+Keep the attention and remove the recurrence. In level 14, every word builds its new vector by attending to every
+other word in the same sentence, with the same three steps you just computed: dot-product scores, softmax, weighted average.
+
+<Stuck q="Is this the same attention as level 14?">
+
+The arithmetic is the same: scores from dot products, softmax, weighted average. Two things change. Here the decoder state
+looks at the encoder states, two different sequences; level 14 starts with words looking at words of their own sentence,
+which is called self-attention. And level 14 first multiplies each vector by learned matrices (queries, keys, values),
+so “what I look for”, “what others compare against” and “what I give” can be different. It also divides the scores by √`d_k`,
+so long vectors do not make the softmax too sharp. The step from this level to the cross-attention of level [N7](/learn/encoder-decoder/) is short:
+the decoder’s query looks at the encoder’s keys and values.
+
+</Stuck>
+
+## 6. The boss
+
+### Part 1: every decoder step at once
+
+So far the decoder had one state s. It writes T words, so it has T states, and attention runs once for each.
+Stack them as the rows of S, shape (T, H), and all the scores come from one matrix product: `S @ E.T` is (T, L),
+row t holding decoder state t’s scores against every encoder state.
+
+The softmax then runs along each row separately. Two NumPy tools do that. `x.max(axis=-1, keepdims=True)` takes the largest
+number of each row and keeps the result as a column, so it lines up with x; `x.sum(axis=-1, keepdims=True)` does the same
+with the sum:
+
+```python
+x = np.array([[2., 0, 0], [0, 2, -2]])
+x.max(axis=-1, keepdims=True)    # [[2.], [2.]]   one number per row
+x - x.max(axis=-1, keepdims=True)  # [[0., -2., -2.], [-2., 0., -4.]]   no number above 0, so exp never overflows
+```
+
+Subtracting each row’s largest score before `np.exp` does not change the softmax (level 10), and it keeps `exp` from overflowing.
+
+<CodeBlank id="attend-all" />
+
+<Gate requires="attend-all">
+
+Look at what you just wrote: `softmax(S @ E.T) @ E`. Rename S to Q (the queries) and E to K and V (the keys and the values), and it is
+level 14’s attention, `softmax(Q @ K.T) @ V`, minus the scaling by √`d_k` and the learned matrices that make Q, K and V.
+
+### Part 2: on your computer
+
+Download [boss.py](/files/seq2seq-attention/boss.py) into a folder of its own and open it there ([setup](/setup/)). It has the whole
+reverser except `attend_all(S, E)`. Write it in PyTorch: the same three steps as part 1, for a whole batch. Now S is
+(B, T, H) and E is (B, L, H): every tensor has a batch axis in front, and each of the B examples gets its own attention.
+
+Run `python boss.py`. It checks your `attend_all()` on random batches, trains the reverser for about a minute and tests it on 300
+new 20-digit strings. At 270 or more exactly right it prints a line that starts with `N5 PASS`. Paste that line here.
+The code at the end of the line only shows that you pasted it unchanged; this part relies on your honesty.
+
+The level counts as cleared once part 1 (`attend_all` on this page) and this line both pass.
+
+<CodeBlank id="boss-line" />
+
+We also trained the same reverser with and without attention, with H = 128 and on this one task only. The plain model
+does better than in the chart above (50% at 20 digits on our machine), but it is still far below attention (98%).
+
+</Gate>
+
+</Gate>

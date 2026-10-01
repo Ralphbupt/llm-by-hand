@@ -1,0 +1,127 @@
+---
+import '../styles/global.css'
+import { loadGlossary } from '@lib/glossaryData'
+import { settingsBootScript } from '@lib/settings'
+import SiteHeader from '../components/SiteHeader.astro'
+import SeoHead from '../components/SeoHead.astro'
+import { glossaryLd, breadcrumbLd } from '@lib/seo'
+
+const terms = await loadGlossary()
+const letterOf = (t: string) => {
+  const c = t[0].toUpperCase()
+  return /[A-Z]/.test(c) ? c : '#'
+}
+const groups = new Map<string, typeof terms>()
+for (const t of terms) {
+  const l = letterOf(t.term)
+  groups.set(l, [...(groups.get(l) ?? []), t])
+}
+const letters = [...groups.keys()]
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title="Glossary · LLM by Hand" description={`${terms.length} terms from the course, each with a short definition and the level that introduces it.`}
+      jsonLd={[glossaryLd(terms), breadcrumbLd([['LLM by Hand', '/'], ['Glossary', '/glossary/']])]} page={{ kind: 'glossary' }} />
+    <script is:inline set:html={settingsBootScript} />
+    <style>
+      .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .top .tools { display: flex; gap: 0.5rem; }
+      .crumb { font-size: 0.85rem; color: var(--dim); text-decoration: none; }
+      .crumb:hover { color: var(--accent); }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0.3rem 0 0.2rem; }
+      .lede { color: var(--dim); margin: 0 0 1.2rem; max-width: 62ch; }
+      /* the filter and the letters stay on screen while you scroll */
+      .bar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 0.6rem 0; margin-bottom: 1rem;
+        border-bottom: 1px solid var(--line); display: grid; gap: 0.5rem; }
+      .filter input { width: 100%; font: inherit; padding: 0.5rem 0.75rem; border: 1px solid var(--field); border-radius: 8px;
+        background: var(--card); color: var(--fg); }
+      .filter input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+      .letters { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+      /* two even rows (the letters never fit one row at 32px each): no lone "V W" left on a second line */
+      @media (min-width: 561px) { .letters { display: grid; grid-template-columns: repeat(var(--half), max(2rem, 32px)); } }
+      .letters a.empty { opacity: 0.35; pointer-events: none; }
+      .none { color: var(--dim); }
+      .letters a { font-family: var(--mono); font-size: 0.85rem; min-width: max(2rem, 32px); min-height: max(2rem, 32px); display: inline-grid; place-items: center; text-align: center; padding: 0.1rem 0.3rem; box-sizing: border-box;
+        border: 1px solid var(--line); border-radius: 4px; text-decoration: none; color: var(--fg); }
+      .letters a:hover { border-color: var(--accent); color: var(--accent); }
+      h2 { font-family: var(--mono); font-size: 1rem; color: var(--dim); margin: 1.8rem 0 0.4rem; scroll-margin-top: 7.5rem; }
+      @media (max-width: 560px) {
+        /* one row that scrolls sideways: the right edge fades out, so the cut-off letters read as "more this way";
+           the end padding lets the last letter scroll clear of the fade */
+        .letters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-right: 5rem;
+          -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 6rem), rgb(0 0 0 / 0.25) calc(100% - 2rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 6rem), rgb(0 0 0 / 0.25) calc(100% - 2rem), transparent); }
+        .letters a { flex: none; min-width: 2.5rem; min-height: 2.5rem; display: grid; place-items: center; }
+        .filter input { font-size: 16px; }
+      }
+      dl { margin: 0; }
+      .entry { padding: 0.7rem 0.8rem; border-radius: 8px; scroll-margin-top: 7.8rem; }
+      .entry:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+      dt { font-weight: 700; }
+      dt .aka { font-weight: 400; color: var(--dim); font-size: 0.85rem; margin-left: 0.4rem; }
+      dd { margin: 0.2rem 0 0; }
+      dd p { margin: 0 0 0.25rem; max-width: 66ch; }
+      dd a { font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <SiteHeader current="glossary" />
+    <div class="wrap">
+      <h1>Glossary</h1>
+      <p class="lede">{terms.length} terms, each in a sentence or two, with the level that teaches it. In every level, the first use of a term has a dotted underline: point at it or tap it to see the same card.</p>
+
+      <div class="bar">
+        <label class="filter">
+          <span class="sr-only">Filter terms</span>
+          <input type="search" id="gl-filter" placeholder="Filter terms, e.g. norm" autocomplete="off" spellcheck="false" />
+        </label>
+        <nav class="letters" aria-label="Jump to a letter" style={`--half: ${Math.ceil(letters.length / 2)}`}>
+          {letters.map((l) => <a href={`#letter-${l}`} data-letter={l}>{l}</a>)}
+        </nav>
+      </div>
+      <p class="none" id="gl-none" hidden>No term matches. Try a shorter word, or <a href="/">search the levels</a>.</p>
+
+      {letters.map((l) => (
+        <section data-group={l}>
+          <h2 id={`letter-${l}`}>{l}</h2>
+          <dl>
+            {groups.get(l)!.map((t) => (
+              <div class="entry" id={t.id} data-text={[t.term, ...(t.aliases ?? []), t.def].join(' ').toLowerCase()}>
+                <dt>{t.term}{t.aliases?.length ? <span class="aka">also: {t.aliases.join(', ')}</span> : null}</dt>
+                <dd>
+                  <p>{t.def}</p>
+                  <a href={`/learn/${t.level}/`}>Taught in level {t.levelNum}: {t.levelTitle} →</a>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+    <script>
+      // filter: show only terms whose name, aliases or definition contain every typed word
+      const input = document.getElementById('gl-filter') as HTMLInputElement
+      const none = document.getElementById('gl-none')!
+      function apply() {
+        const words = input.value.toLowerCase().trim().split(/\s+/).filter(Boolean)
+        let shown = 0
+        document.querySelectorAll<HTMLElement>('section[data-group]').forEach((sec) => {
+          let n = 0
+          sec.querySelectorAll<HTMLElement>('.entry').forEach((e) => {
+            const ok = words.every((w) => e.dataset.text!.includes(w))
+            e.hidden = !ok
+            if (ok) n++
+          })
+          sec.hidden = n === 0
+          document.querySelector(`.letters a[data-letter="${sec.dataset.group}"]`)?.classList.toggle('empty', n === 0)
+          shown += n
+        })
+        none.hidden = shown > 0
+      }
+      input.addEventListener('input', apply)
+    </script>
+  </body>
+</html>

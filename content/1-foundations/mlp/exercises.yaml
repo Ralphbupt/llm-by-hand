@@ -1,0 +1,161 @@
+fwd-hidden:
+  type: number
+  prompt: "x = [2, 1], W1 = [[1, −1], [0, 1]], b1 = [0, 0], activation ReLU. The hidden layer is h = ReLU(x @ W1 + b1). What is h[1], the second hidden value?"
+  answer: 0
+  tol: 0
+  after: "x @ W1 = [2×1 + 1×0, 2×(−1) + 1×1] = [2, −1]. ReLU turns the negative −1 into 0: h = [2, 0]."
+  hints:
+    - when: { equals: -1 }
+      say: "−1 is the value before ReLU. ReLU turns every negative number into 0."
+    - when: { equals: -2 }
+      say: "Column 1 of W1 is [−1, 1], not just −1. Multiply it with all of x: 2×(−1) + 1×1."
+    - when: { equals: 1 }
+      say: "Check the order: x is a row on the left, so h[1] uses column 1 of W1, [−1, 1]: 2×(−1) + 1×1."
+    - when: { any: true }
+      say: ["Hidden neuron 1 uses column 1 of W1: [−1, 1].", "Its input is x[0]·W1[0][1] + x[1]·W1[1][1] + b1[1]. Then apply ReLU: negatives become 0."]
+
+fwd-out:
+  type: number
+  prompt: "h = [2, 0], W2 = [[2], [−1]], b2 = 0.5. What is z = h @ W2 + b2, the number that goes into the output sigmoid?"
+  answer: 4.5
+  tol: 0
+  after: "2×2 + 0×(−1) + 0.5 = 4.5. The output is σ(4.5) ≈ 0.989, so the network says “class 1”. The hidden neuron that ReLU set to 0 adds nothing."
+  hints:
+    - when: { equals: 4 }
+      say: "You forgot b2 = 0.5."
+    - when: { equals: 5.5 }
+      say: "You used −1 for h[1]. After ReLU, h[1] is 0."
+    - when: { equals: 3.5 }
+      say: "h[1] is 0 after ReLU, so the −1 weight contributes nothing. Use h = [2, 0]."
+    - when: { any: true }
+      say: ["The output neuron takes the hidden values h times W2, plus b2.", "z = h[0]·W2[0] + h[1]·W2[1] + b2, with W2 = [2, −1] and b2 = 0.5."]
+
+hidden-shape:
+  type: shape
+  prompt: "X holds 50 examples with 2 numbers each, (50, 2). W1 is (2, 16). What shape is H = tanh(X @ W1 + b1)?"
+  answer: [50, 16]
+  after: "One row per example, one column per hidden unit. tanh and the bias don’t change the shape."
+  hints:
+    - when: { shape: [2, 16] }
+      say: "That is W1’s shape. X has one row per example: how many rows does X @ W1 have?"
+    - when: { shape: [16, 50] }
+      say: "Rows come from X, columns from W1."
+    - when: { any: true }
+      say: ["Use the shape rule (n, k) @ (k, m) → (n, m). tanh and the bias keep the shape.", "(50, 2) @ (2, 16): the inner 2s disappear. Which numbers are left?"]
+
+width-2:
+  type: predict
+  prompt: "A network with 1 hidden layer of only 2 tanh units trains on the two spirals. Guess before you try it: how does it do?"
+  options: ["It separates the spirals almost perfectly", "It gets a big part of the plane wrong", "It is no better than random guessing"]
+  reveal: "It gets a big part of the plane wrong. Two units means two lines, bent once each. That splits the plane into a few regions, nowhere near enough to follow two winding arms. It is still better than random guessing, because some regions are mostly one color. Try it in the lab now."
+
+params-1:
+  type: number
+  prompt: "A network 2 → 8 → 1: 2 inputs, one hidden layer of 8 units, 1 output. How many weights and biases does it have in total?"
+  answer: 33
+  tol: 0
+  after: "W1 is 2×8 = 16 weights, plus 8 biases. W2 is 8×1 = 8 weights, plus 1 bias. 16 + 8 + 8 + 1 = 33."
+  hints:
+    - when: { equals: 24 }
+      say: "That is only the weights (16 + 8). Every hidden unit and the output also has a bias."
+    - when: { equals: 16 }
+      say: "That is only W1. Don’t forget W2 and the biases."
+    - when: { any: true }
+      say: ["Count layer by layer: each layer has (inputs × outputs) weights plus one bias per output.", "First layer: 2 inputs, 8 outputs. Second layer: 8 inputs, 1 output."]
+
+params-deep:
+  type: number
+  prompt: "A network 2 → 8 → 8 → 1: 2 inputs, two hidden layers of 8 units, 1 output. How many weights and biases?"
+  answer: 105
+  tol: 0
+  after: "(2×8 + 8) + (8×8 + 8) + (8×1 + 1) = 24 + 72 + 9 = 105. The middle layer is the expensive one: width × width."
+  hints:
+    - when: { equals: 33 }
+      say: "33 is the one-hidden-layer network. Add the middle layer: an 8 × 8 weight matrix plus 8 biases."
+    - when: { equals: 88 }
+      wrong: "2*8 + 8*8 + 8*1"
+      say: "Close: you have the weights. Add the biases: 8 + 8 + 1."
+    - when: { any: true }
+      say: ["There are three layers of weights now: 2 → 8, 8 → 8, 8 → 1.", "Each layer: inputs × outputs weights plus one bias per output. Add the three layers."]
+
+mlp-forward:
+  type: code
+  prompt: "Write the hidden layer: tanh of X @ W1 plus b1."
+  template: |
+    def sigmoid(z):
+        return 1 / (1 + np.exp(-z))
+
+    def mlp(X, W1, b1, W2, b2):
+        H = ____
+        return sigmoid(H @ W2 + b2)
+
+    X = np.array([[1.0, 2.0], [0.5, -1.0]])
+    W1 = np.array([[1.0, -1.0, 0.5], [0.0, 1.0, -0.5]])
+    b1 = np.array([0.0, 0.0, 0.1])
+    W2 = np.array([[2.0], [-1.0], [1.0]])
+    b2 = np.array([0.5])
+    print("p =", mlp(X, W1, b1, W2, b2).ravel().round(4))
+  solution: "np.tanh(X @ W1 + b1)"
+  tests:
+    - setup: "X = np.array([[1.0, 2.0], [0.5, -1.0]]); W1 = np.array([[1.0, -1.0, 0.5], [0.0, 1.0, -0.5]]); b1 = np.array([0.0, 0.0, 0.1]); W2 = np.array([[2.0], [-1.0], [1.0]]); b2 = np.array([0.5])"
+      expr: "mlp(X, W1, b1, W2, b2).ravel()"
+      expect: [0.7072, 0.9535]
+      tol: 0.0005
+      say: "two examples at once"
+    - setup: "X = np.array([[0.0, 0.0]])"
+      expr: "mlp(X, W1, b1, W2, b2).ravel()"
+      expect: [0.6456]
+      tol: 0.0005
+      say: "the origin: only the biases matter"
+  hints:
+    - when: { error: "not aligned|mismatch|shapes" }
+      say: "Check the order: X is (N, 2) and W1 is (2, 3), so it is X @ W1, not W1 @ X."
+    - when: { error: "is not defined" }
+      say: "Plain tanh isn’t defined here. NumPy’s version is np.tanh."
+    - when: { any: true }
+      say: ["Three steps: multiply X by W1, add b1, then apply tanh.", "Compute the pre-activations first: X times W1, plus b1. Then apply NumPy’s tanh to all of them at once."]
+  after: "X @ W1 is (N, 2) @ (2, 3) → (N, 3): one row per example, one column per hidden unit. b1 is added to every row by broadcasting, and np.tanh works on every element. The bias goes inside the tanh. Without it, the origin would always give tanh(0) = 0."
+
+mlp-deep:
+  type: code
+  prompt: "Write the forward pass of a network with two hidden ReLU layers, then return the output of the last layer (W3 and b3, no sigmoid). Several lines."
+  template: |
+    def mlp2(X, W1, b1, W2, b2, W3, b3):
+        # 1. first hidden layer  2. second hidden layer  3. return the output
+        ____
+
+    X = np.array([[2.0, 1.0], [1.0, 3.0]])
+    W1 = np.array([[1.0, -1.0], [0.0, 1.0]]); b1 = np.array([0.0, 0.0])
+    W2 = np.array([[1.0, -1.0], [1.0, 1.0]]); b2 = np.array([0.0, 1.0])
+    W3 = np.array([[2.0], [1.0]]);            b3 = np.array([0.5])
+    print("out =", mlp2(X, W1, b1, W2, b2, W3, b3).ravel())
+  solution: "H1 = np.maximum(0, X @ W1 + b1)\n    H2 = np.maximum(0, H1 @ W2 + b2)\n    return H2 @ W3 + b3"
+  tests:
+    - setup: "X = np.array([[2.0, 1.0], [1.0, 3.0]]); W1 = np.array([[1.0, -1.0], [0.0, 1.0]]); b1 = np.array([0.0, 0.0]); W2 = np.array([[1.0, -1.0], [1.0, 1.0]]); b2 = np.array([0.0, 1.0]); W3 = np.array([[2.0], [1.0]]); b3 = np.array([0.5])"
+      expr: "mlp2(X, W1, b1, W2, b2, W3, b3).ravel()"
+      expect: [4.5, 8.5]
+      tol: 0.0001
+      say: "x = [2, 1] gives H1 = [2, 0], H2 = [2, 0], out 4.5; x = [1, 3] gives out 8.5"
+    - setup: "W1 = np.array([[1.0, -1.0], [0.0, 1.0]]); b1 = np.array([0.0, 0.0]); W2 = np.array([[1.0, -1.0], [1.0, 1.0]]); b2 = np.array([0.0, 1.0]); W3 = np.array([[2.0], [1.0]]); b3 = np.array([0.5])"
+      expr: "mlp2(np.zeros((1, 2)), W1, b1, W2, b2, W3, b3).ravel()"
+      expect: [1.5]
+      tol: 0.0001
+      say: "at the origin only the biases matter: H1 = [0, 0], H2 = [0, 1], out 1.5"
+    - setup: "rng = np.random.default_rng(0); X = rng.normal(size=(50, 2)); W1 = rng.normal(size=(2, 8)); b1 = np.zeros(8); W2 = rng.normal(size=(8, 8)); b2 = np.zeros(8); W3 = rng.normal(size=(8, 1)); b3 = np.zeros(1)"
+      expr: "mlp2(X, W1, b1, W2, b2, W3, b3).shape"
+      expect: [50, 1]
+      say: "50 examples through 2 → 8 → 8 → 1 give one output per example, (50, 1)"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Every line inside the function needs the same 4 spaces in front as the first one."
+    - when: { error: "not aligned|mismatch|shapes" }
+      say: ["Check the order of each product: the examples come first, X @ W1, then H1 @ W2.", "The second layer takes H1, not X, as its input."]
+    - when: { error: "is not defined" }
+      say: "Compute each name before you use it: H1, then H2 from H1. ReLU in NumPy is np.maximum(0, …)."
+    - when: { error: "NoneType" }
+      say: "The function returns nothing. The last line needs return in front of the output."
+    - when: { testFailed: 0 }
+      say: ["For x = [2, 1], check H1 first: it should be [2, 0].", "Before the second ReLU, H1 @ W2 + b2 is [2, −1]. Did ReLU turn the −1 into 0?", "The output layer has no ReLU. It uses H2, W3 and b3.", "Check the biases too: b1 and b2 go inside the ReLUs, and b3 is added at the end."]
+    - when: { any: true }
+      say: ["Three lines: H1 from X, H2 from H1, then return the output from H2. Each hidden layer is the same line as before: ReLU of (input @ W + b).", "Layer 1 uses X, W1, b1. Layer 2 uses H1, W2, b2. Then the output layer."]
+  after: "Every hidden layer is the same line, ReLU(input @ W + b), and each layer takes the output of the layer before it. The last layer has no ReLU, so the output can be any number. In a 2 → 8 → 8 → 1 network the shapes go (N, 2) → (N, 8) → (N, 8) → (N, 1)."

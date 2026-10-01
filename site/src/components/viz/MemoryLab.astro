@@ -1,0 +1,6 @@
+---
+import Lab from './MemoryLab.svelte'
+interface Props { kinds?: ('rnn' | 'lstm0' | 'lstm')[] }
+const { kinds } = Astro.props
+---
+<Lab client:visible kinds={kinds} />

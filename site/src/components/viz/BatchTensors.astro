@@ -1,0 +1,17 @@
+---
+/** Level 1, section 4: the batch multiply X (2,5,4) @ W (4,8) = Y (2,5,8) in 3D. One word's row and its result row are highlighted. */
+import TensorsLab from './TensorsLab.svelte'
+const tensors = [
+  { name: 'X', shape: [2, 5, 4], axes: ['batch', 'words', 'features'], highlight: [{ from: [0, 0, 0], to: [0, 0, 3], tone: 'accent' }] },
+  '@',
+  { name: 'W', shape: [4, 8], axes: ['in', 'out'], highlight: [{ from: [0, 0, 0], to: [0, 3, 7], tone: 'cat-2' }] },
+  '=',
+  { name: 'Y', shape: [2, 5, 8], axes: ['batch', 'words', 'features'], highlight: [{ from: [0, 0, 0], to: [0, 0, 7], tone: 'accent' }] },
+]
+const keys = [
+  { label: 'one word of the first sentence: 4 numbers in, 8 out', tone: 'accent' },
+  { label: 'W: the same for every word of every sentence', tone: 'cat-2' },
+]
+---
+<TensorsLab client:visible title="A batch through one weight matrix" hint="Only the last axis changes: 4 numbers per word become 8. In 3D, drag to turn the blocks."
+  tensors={tensors} keys={keys} ariaLabel="X with shape (2, 5, 4) times W with shape (4, 8) gives Y with shape (2, 5, 8)" />

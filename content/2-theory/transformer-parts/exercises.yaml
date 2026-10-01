@@ -1,0 +1,344 @@
+swap-no-pe:
+  type: predict
+  prompt: "Self-attention with no position information runs on “cat dog car”, then on “car dog cat”. Is cat’s output different?"
+  options: ["Yes, cat moved, so its output changes", "No, it is exactly the same", "It changes a little"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Look at what attention computes for cat: its dot product with every word, then a weighted sum. Does any of that use where cat sits?"
+    - when: { equals: 2 }
+      say: "Swapping words swaps rows and columns of the score table. Cat’s own row has the same three scores, just in another order."
+  reveal: "Exactly the same: [1.723, 0.277] both times. Swapping words only swaps rows of the score table; cat still sees the same three words with the same scores. Attention by itself treats a sentence as a set of words with no order. Adding a position vector to each word fixes this."
+
+pe-0-1:
+  type: number
+  prompt: "With 2 numbers per word, position pos gets [sin(pos), cos(pos)]. What is PE[0][1], the second number of position 0’s vector?"
+  answer: 1
+  tol: 0
+  after: "cos(0) = 1, so position 0 gets [0, 1], not a vector of zeros. Even the first word is marked."
+  hints:
+    - when: { equals: 0 }
+      say: "0 is sin(0), the first number. The second number is cos(0)."
+    - when: { any: true }
+      say: ["Put pos = 0 into [sin(pos), cos(pos)] and take the second number.", "cos(0): the cosine of an angle of 0."]
+
+sqrt-dmodel:
+  type: number
+  prompt: "A model has `d_model` = 64. Before the position vector is added, each word vector is multiplied by √`d_model`. By what number?"
+  answer: 8
+  tol: 0
+  after: "√64 = 8. With `d_model` = 512 it would be about 22.6."
+  hints:
+    - when: { equals: 64 }
+      wrong: "64"
+      say: "That is `d_model` itself. Take its square root."
+    - when: { equals: 32 }
+      wrong: "64/2"
+      say: "That is half of 64. The square root of 64 is the number that, multiplied by itself, gives 64."
+    - when: { any: true }
+      say: ["√`d_model` is the square root of `d_model`.", "Which number times itself is 64?"]
+
+pe-shape:
+  type: shape
+  prompt: "A sentence has 10 tokens and `d_model` = 8. What shape is its positional encoding?"
+  answer: [10, 8]
+  after: "One vector per position, the same size as a word vector, so the two can be added."
+  hints:
+    - when: { shape: [8, 10] }
+      say: "Rows are positions, like rows of X are words."
+    - when: { any: true }
+      say: ["It is added to X.", "So it must have X’s shape: (tokens, `d_model`)."]
+
+ffn-hidden-shape:
+  type: shape
+  prompt: "X is (3, 2) and W1 is (2, 4). What shape is the hidden layer?"
+  answer: [3, 4]
+  after: "(3, 2) @ (2, 4) → (3, 4): every word now has 4 hidden numbers. W2 (4, 2) makes it (3, 2) again."
+  hints:
+    - when: { shape: [2, 4] }
+      say: "That is W1. Multiply X by it."
+    - when: { any: true }
+      say: ["Matrix product shapes: (n, k) @ (k, m) → (n, m).", "(3, 2) @ (2, 4): which numbers disappear?"]
+
+cat-lit:
+  type: number
+  prompt: "cat = [2, 0], W1 = [[1, −1, 0, 1], [0, 1, −1, 1]], b1 = [0, 0, 1, −2]. Before ReLU cat’s 4 hidden units are cat @ W1 + b1. How many are on (above 0) after ReLU?"
+  answer: 2
+  tol: 0
+  after: "Before ReLU cat has [2, −2, 1, 0]. Units 0 and 2 are above 0; unit 3 is exactly 0, which counts as off."
+  hints:
+    - when: { equals: 3 }
+      wrong: "2 + 1"
+      say: "One of them is exactly 0. ReLU of 0 is 0, so that unit is off."
+    - when: { any: true }
+      say: ["Compute cat @ W1 first. Because cat = [2, 0], it is 2 times row 0 of W1.", "Add b1 to that, then count the numbers strictly above 0."]
+
+ffn-alone:
+  type: predict
+  prompt: "The FFN computes ReLU(X @ W1 + b1) @ W2 + b2. First X holds three words, cat, dog and car. Then you run it on cat alone. Compared with cat’s row when all three are processed together, the result is…"
+  options: ["exactly the same", "slightly different", "completely different"]
+  answer: 0
+  hints:
+    - when: { any: true }
+      say: ["Inside the FFN, which numbers does cat’s row get multiplied with?", "Do dog’s or car’s numbers appear anywhere in cat’s row of X @ W1?"]
+  reveal: "Exactly the same: [1, 1] both ways. The FFN only multiplies each word’s own numbers by W1 and W2; no word’s numbers are used in another word’s row. That is why it is called position-wise. Mixing words is attention’s job."
+
+deep-plain:
+  type: predict
+  prompt: "30 layers, each multiplies by a random matrix that shrinks things a bit (gain 0.5). No residual, no LayerNorm. After 30 layers the numbers are…"
+  options: ["about the same size", "almost zero", "huge"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Each layer roughly halves the size. What is 0.5 multiplied by itself 30 times?"
+    - when: { equals: 2 }
+      say: "Gain 0.5 shrinks. Growing would need a gain above 1."
+  reveal: "Almost zero: about 10⁻⁸ with random matrices. Each layer roughly halves the size, and 0.5³⁰ is about 10⁻⁹. Almost nothing of the input is left, and the gradient that reaches the first layers is almost 0."
+
+ln-clean:
+  type: number
+  prompt: "LayerNorm the word [1, 1, 5, 5]. Its mean is 3 and its std is 2. What does each 5 become?"
+  answer: 1
+  tol: 0.01
+  after: "(5 − 3) / 2 = 1. The whole word becomes [−1, −1, 1, 1]: mean 0, std 1."
+  hints:
+    - when: { equals: 2 }
+      say: "That is 5 minus the mean. Now divide by the std, 2."
+    - when: { equals: 2.5 }
+      wrong: "5/2"
+      say: "Subtract the mean first, then divide by the std."
+    - when: { any: true }
+      say: ["LayerNorm does two things to each number: subtract the mean, then divide by the std.", "Start with 5 − 3."]
+
+ln-count:
+  type: number
+  prompt: "X is (2, 5, 8): 2 sentences, 5 words, 8 numbers per word. How many separate means does LayerNorm compute?"
+  answer: 10
+  tol: 0
+  after: "One per word: 2 × 5 = 10. Each mean is over that word’s 8 numbers."
+  hints:
+    - when: { equals: 8 }
+      wrong: "8"
+      say: "That would be one mean per column, across words. LayerNorm works inside each word."
+    - when: { equals: 80 }
+      wrong: "2*5*8"
+      say: "That is the count of all numbers. Each mean summarizes one word’s 8 of them."
+    - when: { any: true }
+      say: ["LayerNorm normalizes the last axis, one word at a time. How many words are there in total?", "2 sentences, 5 words each."]
+
+layer-norm:
+  type: code
+  prompt: "Finish LayerNorm over the last axis."
+  template: |
+    def layer_norm(x, eps=1e-5):
+        mu = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        return (x - mu) / ____
+
+    print(layer_norm(np.array([1.0, 2.0, 3.0, 6.0])))
+  solution: "np.sqrt(var + eps)"
+  tests:
+    - expr: "layer_norm(np.array([1.0, 2.0, 3.0, 6.0]))"
+      expect: [-1.069, -0.535, 0.0, 1.604]
+      tol: 0.001
+      say: "[1, 2, 3, 6] → [−1.069, −0.535, 0, 1.604]"
+    - expr: "layer_norm(np.array([[1.0, 3.0], [10.0, 30.0]]))"
+      expect: [[-1.0, 1.0], [-1.0, 1.0]]
+      tol: 0.001
+      say: "each row is normalized on its own"
+    - expr: "layer_norm(np.array([0.0, 0.002]))"
+      expect: [-0.3015, 0.3015]
+      tol: 0.001
+      say: "[0, 0.002] has variance 0.000001, so eps matters: → [−0.3015, 0.3015]"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["LayerNorm divides by the std, not the variance.", "The std is the square root of the variance. Which NumPy function takes a square root?"]
+    - when: { testFailed: 1 }
+      say: ["Each row needs its own std. The template already computes var for each row.", "Use var, the (rows, 1) array, inside your answer."]
+      wrong: "np.sqrt(x.var() + eps)"
+    - when: { testFailed: 2 }
+      say: ["The row [0, 0.002] has variance 0.000001, which is close to eps = 0.00001. So where eps goes changes the answer.", "eps is added to the variance, before the square root is taken."]
+    - when: { any: true }
+      say: ["You have the variance. LayerNorm divides by the std.", "The std is the square root of the variance. Which NumPy function takes a square root?", "eps is there so you never divide by 0. It goes inside the square root."]
+  after: "Dividing by the std, not the variance, gives each row a std of 1. eps sits inside the square root, so a row of equal numbers (variance 0) never divides by 0. keepdims=True keeps mu and var as (rows, 1), so broadcasting uses them for every number of their row."
+
+ffn-block:
+  type: code
+  prompt: "Write the FFN sublayer with its residual, X + ffn(X): widen with W1 and b1, ReLU, narrow back with W2 and b2, then add the input X. Two lines."
+  template: |
+    X = np.array([[2.0, 0.0],    # cat
+                  [1.0, 1.0],    # dog
+                  [0.0, 2.0]])   # car
+    W1 = np.array([[1.0, -1.0, 0.0, 1.0],
+                   [0.0, 1.0, -1.0, 1.0]])   # (2, 4)
+    b1 = np.array([0.0, 0.0, 1.0, -2.0])
+    W2 = np.array([[1.0, 0.0],
+                   [0.0, 1.0],
+                   [-1.0, 1.0],
+                   [0.5, 0.5]])              # (4, 2)
+    b2 = np.zeros(2)
+
+    def ffn_block(X):
+        ____
+        return out
+
+    print(ffn_block(X))
+  solution: "h = np.maximum(0, X @ W1 + b1)\n    out = X + h @ W2 + b2"
+  tests:
+    - expr: "ffn_block(np.array([[1.0, 1.0]]))"
+      expect: [[2, 1]]
+      tol: 0.001
+      say: "dog [1, 1]: the FFN gives [1, 0], and [1, 1] + [1, 0] = [2, 1]"
+    - expr: "ffn_block(X)"
+      expect: [[3, 1], [2, 1], [0, 4]]
+      tol: 0.001
+      say: "cat, dog, car: X + FFN(X) = [[3, 1], [2, 1], [0, 4]]"
+    - expr: "ffn_block(np.array([[-3.0, 0.0]]))"
+      expect: [[-4, 4]]
+      tol: 0.001
+      say: "[−3, 0]: hidden layer [0, 3, 1, 0], FFN [−1, 4], plus the input gives [−4, 4]"
+    - setup: "b2 = np.array([0.5, -0.5])"
+      expr: "ffn_block(np.array([[1.0, 1.0]]))"
+      expect: [[2.5, 0.5]]
+      tol: 0.001
+      say: "with b2 = [0.5, −0.5], dog becomes [2, 1] + [0.5, −0.5] = [2.5, 0.5]"
+  hints:
+    - when: { error: "not defined" }
+      say: ["Give the variable `out` a value before `return out`.", "First a line for the hidden layer h, then a line for out."]
+    - when: { error: "axis|integer scalar|'int' object" }
+      say: ["np.max finds the largest number inside one array; its second argument is an axis. ReLU compares two things, 0 and each number.", "Use np.maximum(0, …): it compares 0 with every number and keeps the larger one."]
+      wrong: "h = np.max(0, X @ W1 + b1)\n    out = X + h @ W2 + b2"
+    - when: { error: "shape|not aligned|broadcast|matmul|core dimension" }
+      say: ["A product has mismatched shapes. X is (3, 2), W1 is (2, 4), W2 is (4, 2).", "The hidden layer is (3, 4). Which matrix makes it (3, 2) again?"]
+    - when: { testFailed: 0 }
+      say: ["For dog, [1, 1], the FFN alone gives [1, 0], but the answer is [2, 1]. Did you add the input X?", "The residual adds the input to the FFN’s output."]
+    - when: { testFailed: 1 }
+      say: ["Cat’s hidden layer must be [2, 0, 1, 0]. Is the ReLU there?", "ReLU sets every negative hidden number to 0. In NumPy that is np.maximum with 0."]
+    - when: { testFailed: 2 }
+      say: ["For [−3, 0] the answer has a negative number, −4. ReLU acts only on the hidden layer, not on the output.", "Apply np.maximum to X @ W1 + b1 only. The narrowing with W2 and the residual come after it, with no ReLU."]
+      wrong: "h = np.maximum(0, X @ W1 + b1)\n    out = np.maximum(0, X + h @ W2 + b2)"
+    - when: { testFailed: 3 }
+      say: ["This test sets b2 to [0.5, −0.5]. Is b2 in your second line?", "Narrowing back is h @ W2 + b2, the same pattern as the first layer."]
+    - when: { any: true }
+      say: ["Two steps: the hidden layer with ReLU, then narrow back and add X.", "Line 1 makes the hidden layer h, shape (3, 4). Line 2 makes out, shape (3, 2), from X and h.", "ReLU in NumPy is np.maximum with 0. W2 makes each word 2 numbers again, so X can be added."]
+  after: "The hidden layer widens each word to 4 numbers, and ReLU turns some of them off. W2 makes each word 2 numbers again, so the result can be added to X. That sum is the residual: the FFN only has to learn a change to X."
+
+zero-sublayer:
+  type: predict
+  prompt: "A pre-norm block runs the line x = x + ffn(`layer_norm`(x)). For one token, x = [3, 1], and the FFN’s output is [0, 0]. What is x after this line?"
+  options: ["[0, 0]", "[3, 1], x unchanged", "[1, −1], the LayerNorm of x"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "The FFN gives [0, 0], but the line adds that to x."
+    - when: { equals: 2 }
+      say: "That would be section 3’s placement, LayerNorm(x + sublayer(x)). Here the LayerNorm only touches the copy that goes into the FFN."
+  reveal: "[3, 1]. The FFN’s output is added to x, and x itself was never normalized: only its copy going into the FFN was. A sublayer that adds nothing leaves x exactly as it was. With section 3’s placement, the result would be LayerNorm([3, 1]) = [1, −1]."
+
+block-ln-count:
+  type: number
+  prompt: "A model has 3 pre-norm decoder blocks, each with a LayerNorm before attention and one before the FFN, and one final LayerNorm before the output layer. How many LayerNorms does it have?"
+  answer: 7
+  tol: 0
+  after: "2 per block × 3 blocks = 6, plus the final one = 7. The final one is there because nothing else normalizes the residual path."
+  hints:
+    - when: { equals: 6 }
+      wrong: "2*3"
+      say: "That is the blocks only. Pre-norm adds one more LayerNorm after the last block."
+    - when: { equals: 4 }
+      wrong: "3 + 1"
+      say: "Each block has two LayerNorms, one per sublayer."
+    - when: { any: true }
+      say: ["Count per block first: one LayerNorm in front of each sublayer.", "2 per block, 3 blocks, then the final LayerNorm."]
+
+decoder-block:
+  type: code
+  prompt: "Write the decoder stack: `n_blocks` pre-norm decoder blocks, then the final LayerNorm. In each block, masked self-attention and then the FFN read the LayerNorm of x, and each result is added to x."
+  template: |
+    def layer_norm(x, eps=1e-5):
+        mu = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        return (x - mu) / np.sqrt(var + eps)
+
+    def attention(x):          # masked, Q = K = V = x, no weights
+        L, d = x.shape
+        scores = x @ x.T / np.sqrt(d)
+        blocked = np.triu(np.ones((L, L), dtype=bool), k=1)
+        return softmax(np.where(blocked, -np.inf, scores)) @ x
+
+    W1 = np.array([[1.0, -1.0, 0.0, 1.0],
+                   [0.0, 1.0, -1.0, 1.0]])   # (2, 4)
+    b1 = np.array([0.0, 0.0, 1.0, -2.0])
+    W2 = np.array([[1.0, 0.0],
+                   [0.0, 1.0],
+                   [-1.0, 1.0],
+                   [0.5, 0.5]])              # (4, 2)
+
+    def ffn(x):
+        return np.maximum(0, x @ W1 + b1) @ W2
+
+    def decoder(x, n_blocks):
+        ____
+        return x
+
+    X = np.array([[2.0, 0.0],    # cat
+                  [1.0, 1.0],    # dog
+                  [0.0, 2.0]])   # car
+    print(decoder(X, 2))
+  solution: "for i in range(n_blocks):\n        x = x + attention(layer_norm(x))\n        x = x + ffn(layer_norm(x))\n    x = layer_norm(x)"
+  tests:
+    - expr: "decoder(np.array([[0.0, 4.0]]), 1)"
+      expect: [[-1, 1]]
+      tol: 0.001
+      say: "one block takes [0, 4] to [−1, 7], and the final LayerNorm turns that into [−1, 1]"
+    - setup: "seen = []\nnormalize = layer_norm\ndef layer_norm(x, eps=1e-5):\n    seen.append(x.copy())\n    return normalize(x, eps)"
+      expr: "[decoder(np.array([[0.0, 4.0]]), 1), seen][1][0]"
+      expect: [[0, 4]]
+      tol: 0.001
+      say: "the first LayerNorm reads x itself, [0, 4], before anything is added"
+    - setup: "seen = []"
+      expr: "[decoder(np.array([[0.0, 4.0]]), 1), seen][1][1]"
+      expect: [[-1, 5]]
+      tol: 0.001
+      say: "the second LayerNorm reads x after attention was added: [0, 4] + [−1, 1] = [−1, 5]"
+    - setup: "seen = []"
+      expr: "[decoder(np.array([[0.0, 4.0]]), 1), seen][1]"
+      expect: [[[0, 4]], [[-1, 5]], [[-1, 7]]]
+      tol: 0.001
+      say: "with 1 block, the LayerNorms read [0, 4], then [−1, 5], then [−1, 7] (the final one)"
+    - setup: "seen = []"
+      expr: "[decoder(np.array([[0.0, 4.0]]), 2), seen][1]"
+      expect: [[[0, 4]], [[-1, 5]], [[-1, 7]], [[-2, 8]], [[-2, 10]]]
+      tol: 0.001
+      say: "with 2 blocks, the LayerNorms read [0, 4], [−1, 5], [−1, 7], [−2, 8], then [−2, 10] (the final one)"
+    - setup: "seen = []"
+      expr: "[decoder(X, 1), seen][1][1]"
+      expect: [[3, -1], [1.5, 0.5], [-0.7225, 2.7225]]
+      tol: 0.001
+      say: "with 3 tokens, the second LayerNorm reads cat, dog, car after attention: [3, −1], [1.5, 0.5], [−0.7225, 2.7225]"
+    - expr: "decoder(X, 1)"
+      expect: [[1, -1], [-1, 1], [-1, 1]]
+      tol: 0.001
+      say: "cat, dog, car after 1 block are [2, 1], [0.5, 2.5], [−0.7225, 4.7225]; the final LayerNorm keeps only the order of the two numbers"
+  hints:
+    - when: { error: "not defined" }
+      say: "Use the names defined above: `layer_norm`, attention, ffn and `n_blocks`."
+    - when: { testFailed: 0 }
+      say: ["One block takes [0, 4] to [−1, 7], as in the worked example. What does the stack do after its last block?", "Nothing else normalizes the residual path, so the stack ends with one final LayerNorm, after the loop."]
+    - when: { testFailed: 1 }
+      say: ["The first LayerNorm reads [0, 8], not [0, 4]: something was added to x before it was normalized. That is section 3’s order, LayerNorm(x + sublayer(x)).", "In pre-norm, the first thing in a block is `layer_norm`(x). Attention reads that normalized copy, and its result is added to x afterward."]
+      wrong: "for i in range(n_blocks):\n        x = layer_norm(x + attention(x))\n        x = layer_norm(x + ffn(x))\n    x = layer_norm(x)"
+    - when: { testFailed: 2 }
+      say: ["Your second LayerNorm reads [−2, 2]: x itself was normalized. Only the copy going into the sublayer is normalized; x is added back untouched.", "Don’t assign `layer_norm`(x) to x. Pass it straight into attention, and add attention’s result to the x you had before."]
+      wrong: "for i in range(n_blocks):\n        x = layer_norm(x)\n        x = x + attention(x)\n        x = x + ffn(layer_norm(x))\n    x = layer_norm(x)"
+    - when: { testFailed: 3 }
+      say: ["The test records what each LayerNorm reads. After one block, x must be [−1, 7]. If the list stops at [−1, 5], you wrote only one line: the FFN line is missing.", "A block has two lines, one per sublayer: attention first, then the FFN. Each reads `layer_norm`(x), and its result is added to x itself."]
+    - when: { testFailed: 4 }
+      say: ["With 2 blocks, the two lines run twice, and the final LayerNorm runs once.", "Repeat the block `n_blocks` times with a for loop. Put the final LayerNorm after the loop, not inside it."]
+      wrong: "for i in range(n_blocks):\n        x = x + attention(layer_norm(x))\n        x = x + ffn(layer_norm(x))\n        x = layer_norm(x)"
+    - when: { testFailed: 5 }
+      say: ["The second LayerNorm should read x after attention. With 1 token, attention gives the token back, so the tests above can’t see it. With 3 tokens, attention mixes each token with the ones before it. Is attention in your first line?", "The first line of the block is x = x + attention(`layer_norm`(x)). Use the attention defined above: it has the causal mask."]
+      wrong: "for i in range(n_blocks):\n        x = x + layer_norm(x)\n        x = x + ffn(layer_norm(x))\n    x = layer_norm(x)"
+    - when: { any: true }
+      say: ["A loop over the blocks, two lines in each, then one LayerNorm.", "Each block line reads a normalized copy of x and adds the result to x. Don’t normalize the sum inside the loop: only the final LayerNorm touches x itself."]
+  after: "Inside the loop, each line reads a normalized copy of x and adds its result to x itself, so x is never rescaled between blocks. Only the final LayerNorm normalizes x. With only 2 numbers per token, it turns every row into [−1, 1] or [1, −1]. A real model has hundreds of numbers per token, so much more of x is left."

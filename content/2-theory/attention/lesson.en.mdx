@@ -1,0 +1,281 @@
+---
+title: Self-attention
+level: "14"
+order: 14
+part: theory
+question: How does one word “look at” the other words?
+run: browser
+checkpoint: self-attention
+testOut: [cat-dog-score, scores-shape, unscaled-self, self-attention]
+recap:
+  can:
+    - "Compute one word’s scores, softmax weights and output by hand for 2–3 words."
+    - "Make Q, K and V from X with three matrices and say the shape of every step."
+    - "Write one attention head in NumPy from X to the output."
+  keys:
+    - "Attention: `softmax(Q @ K.T / √d_k) @ V`"
+    - "`Q = X @ W_Q`, `K = X @ W_K`, `V = X @ W_V`"
+    - "`(L, d_k) @ (d_k, L)` → scores `(L, L)`: row i = the word that looks, column j = the word it looks at"
+    - "Each row of weights adds up to 1; the output is a weighted average of the rows of V"
+    - "Divide by $\\sqrt{d_k}$ so the scores keep std about 1 for any $d_k$"
+  mistakes:
+    - "Writing `Q @ K` or `Q * K.T` for the scores: every query dotted with every key is `Q @ K.T`."
+    - "Reading rows and columns of the weight table swapped: `weights[0][2]` is how much word 0 takes from word 2."
+glossarySkip: [activation function]
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import AttentionLab from '@viz/AttentionLab.astro'
+import QkvLab from '@viz/QkvLab.astro'
+import KnobLab from '@viz/KnobLab.astro'
+
+After level 13, every word is a list of numbers. But the list for “bank” is the same in “river bank” and “bank account”.
+A word needs to use information from the words around it. **Attention** is how it does that: every word builds a new vector
+by mixing all the words in the sentence, in proportions it computes itself.
+
+This is the most important part of the Transformer. This level builds it in small steps, always with three words and two numbers per word.
+
+## 1. Why not just read left to right?
+
+Before attention, the usual way to read a sentence was a **recurrent network** (RNN). It reads one word at a time
+and keeps a single summary of everything so far, the hidden state h. Each new word $x_t$ updates it: $h_t = \tanh(w\,h_{t-1} + x_t)$
+(a one-number version of the RNN in side trip N3).
+
+That design has two problems:
+
+1. **Fixed size.** By the 50th word, everything about the 49 words before it has to fit into the same few numbers.
+2. **Early words get weaker and weaker.** The effect of the first word reaches the end through every later step, and each
+   step multiplies it by w (and by the slope of tanh, which is never above 1). So when the model gets the end of a sentence
+   wrong, almost none of the correction reaches the first word, and training can't learn to use it.
+
+<Blank id="rnn-fade" />
+
+<Gate requires="rnn-fade">
+
+Here is how fast it shrinks with w = 0.5:
+
+| words later | the first word’s effect is multiplied by |
+|---|---|
+| 1 | 0.5 |
+| 2 | 0.25 |
+| 5 | 0.0312 |
+| 10 | 0.000977 |
+| 50 | 8.88 × 10⁻¹⁶ |
+
+After a few dozen words, the effect of the start of the sentence is almost zero. Attention does the opposite:
+every word looks at every other word **directly**, in one step, whatever the distance. For the 50th word, reading the
+first word is exactly as easy as reading the 49th. The rest of this level builds that.
+
+The Classic networks branch builds an RNN and an LSTM (levels N3 and N4) and shows this shrinking in full. Side trip N5
+measures the problem on a real task: a summary of 32 numbers reverses 0% of 20-digit strings. N5 also computes a first
+attention with a single question vector. This level adds the matrices `W_Q`, `W_K`, `W_V` and lets every word ask.
+
+</Gate>
+
+## 2. A weighted average
+
+Three words: cat = [2, 0], dog = [1, 1], car = [0, 2]. Attention does three things:
+
+1. **Scores.** Dot every word with every word: `scores = X @ X.T`. A big dot product means “these two point in the same direction”.
+   The lab then divides every score by √2. Take that as a fixed scaling for now; section 5 explains why.
+2. **Weights.** Turn each row of scores into proportions that add up to 1, with softmax.
+3. **Output.** Each word’s new vector is the weighted average of all the words: `output = weights @ X`.
+
+Drag the dots. Every table below changes with them.
+
+<AttentionLab hide={{ score: "cat-dog-score", outX: "cat-out-x", unscaledSelf: "unscaled-self" }} />
+
+<Blank id="cat-dog-score" />
+
+<Gate requires="cat-dog-score">
+
+Softmax turns a row of scores into weights. It takes `e` to the power of each score and divides by the total,
+so big scores get most of the weight, and every weight is positive.
+Cat’s row of scores is [2.83, 1.41, 0] after scaling, which becomes the weights [0.768, 0.187, 0.045].
+
+<Blank id="cat-out-x" />
+
+<Predict id="who-looks" />
+
+<Predict id="car-55" />
+
+<Stuck q="Why is score(cat, dog) always the same as score(dog, cat)?">
+
+Because both come from the same dot product: cat · dog = dog · cat.
+When every word uses its own vector to ask *and* to answer, the score table is symmetric: the same on both sides of the diagonal.
+
+That is a real limitation. “The cat chased the dog” {/* en-ok: chase */}needs cat → dog to be different from dog → cat.
+Section 3 fixes it.
+
+</Stuck>
+
+Now write it. The browser has `np` and `softmax` ready.
+
+<CodeBlank id="attention-fn" />
+
+<TryIt>
+
+Press “Car becomes [5, 5]”. Car’s row of weights jumps to almost [0, 0, 1]. Now press “All three the same”:
+every row becomes [0.33, 0.33, 0.33]. When no score is much bigger than the others, attention is just a plain average.
+
+</TryIt>
+
+</Gate>
+
+## 3. Q, K, V: three versions of each word
+
+So far each word used the same vector for three jobs. In a real Transformer, each word makes three versions of itself,
+by multiplying with three learned matrices:
+
+- **Q = X @ `W_Q`**, the query: what this word is looking for.
+- **K = X @ `W_K`**, the key: the label that other words compare their query against.
+- **V = X @ `W_V`**, the value: what this word gives to the output when another word looks at it.
+
+The score of “a looks at b” is now a’s query · b’s key.
+
+<Gate requires="attention-fn">
+
+Then everything is as before: `attention(Q, K, V) = softmax(Q @ K.T / √d_k) @ V`.
+
+<QkvLab hide={{ carCat: "oneway-car-cat" }} />
+
+Press “Swap the keys”: cat now looks mostly at car. Then press “One-way keys”: `W_K` = [[0, 0], [1, 0]], so each word’s key
+is its y number moved to the front, [y, 0]. Look at the badge under the scores.
+
+<Blank id="oneway-car-cat" />
+
+<Blank id="scores-shape" />
+
+<Stuck q="If `W_V` is not in the scores, does it matter at all?">
+
+The scores (and the weights) only use Q and K. `W_V` does not change *who* gets looked at. It changes *what* is copied.
+Press “V keeps only x”: the weights stay exactly the same, but every output loses its y number,
+because V only carries x. Q and K choose which words to read; V decides what each of those words gives.
+
+</Stuck>
+
+<Deeper title="Why not just use one matrix?">
+
+The score `q_a · k_b` equals `x_a W_Q W_Kᵀ x_bᵀ`. So the scores only depend on the product `W_Q W_Kᵀ`, a 2×2 matrix here.
+If that product is symmetric, the scores are symmetric too. That is why “Swap the keys” still gives a symmetric table:
+the swap matrix is symmetric. “One-way keys” is not, so cat can look at car without car looking back.
+
+Splitting the product into `W_Q` and `W_Kᵀ` also lets the model compare words in a smaller space (`d_k` numbers)
+than the word vectors themselves (`d_model` numbers). Level 15 uses that to run several attentions side by side.
+
+</Deeper>
+
+</Gate>
+
+## 4. Nobody designs these matrices
+
+The matrices in section 3 were written by hand. In a real model nobody writes them: they are learned, the same way
+level 2 learned a line. Here is the smallest version. Two words, apple = [1, 0] and sweet = [0, 1].
+The task: sweet’s output should be apple’s content, [1, 0]. `W_K` and `W_V` are the identity, and
+`W_Q` = [[0, 0], [c, 0]]: only the bottom-left number, c, can change.
+Sweet’s query is then [0, 1] @ `W_Q` = [c, 0], so c sets how strongly sweet looks at apple.
+The lab measures the difference from the target with level 2’s squared error, added over both numbers:
+loss = (`out_x` − 1)² + (`out_y` − 0)². Gradient descent changes c to make the loss smaller.
+
+<Gate requires="scores-shape">
+
+<KnobLab hide={{ start: "knob-start", forever: "knob-forever" }} />
+
+<Blank id="knob-start" />
+
+<Predict id="knob-forever" />
+
+Are Q, K and V trained in advance? No. Two different kinds of numbers live in a model, and only one kind is trained.
+
+| kind | examples | where it comes from | saved with the model? |
+|---|---|---|---|
+| parameters | `W_Q`, `W_K`, `W_V`, the embedding table | start random; training changes them | yes, fixed after training |
+| activations | Q, K, V, scores, weights, outputs | computed from the input X every time the model runs | no: deleted after each run (training keeps them until the backward pass) |
+
+So `W_Q` is stored inside the model; Q is not. Give the model a new sentence and the same fixed `W_Q` produces a new Q.
+(Level 18 shows one exception: while writing a long text, K and V of earlier words are kept for a while, the KV cache.)
+
+Running a trained model on new input is called **inference**: the parameters stay fixed, the input passes through every layer
+once, and the model gives its output. Attention is one step inside every layer of that run. **Training** runs the same steps, then
+compares the output with the target, then changes the parameters.
+
+<Predict id="infer-change" />
+
+<Stuck q="Is the target an attention pattern? Do we tell the model where to look?">
+
+No. The loss compares sweet’s **output** with [1, 0]. The weights never appear in the loss. Training changes c until
+the output is right. The weights change too, but only because c changed.
+
+The target comes from the task. In this lab it was given. In a language model it is already in the text: the next word
+(level 11). Nobody ever writes down “this word should look at that word”.
+
+</Stuck>
+
+<Deeper title="Train `W_V` too: same loss, different attention">
+
+The lab trains only c and keeps `W_V` fixed. What if `W_Q`, `W_K` and `W_V` are all trained? `demo.py` does it four times:
+
+| what is trained | sweet’s weight on apple | loss |
+|---|---|---|
+| `W_Q` and `W_K` (`W_V` fixed to the identity) | 1.00 | 0.0000 |
+| all three, starting from the identity | 0.52 | 0.0000 |
+| all three, random start (seed 0) | 0.16 | 0.0000 |
+| all three, random start (seed 1) | 0.73 | 0.0000 |
+
+Every run produces the right output, but the attention weights are completely different. When `W_V` can change, V can make
+“look at sweet” give [1, 0] too. So an attention map is one of many ways to get the same output. A heatmap shows what one
+trained model does, not what it must do. Read heatmaps with care.
+
+</Deeper>
+
+</Gate>
+
+## 5. Why divide by √`d_k`
+
+So far every score was divided by √`d_k` = √2 before softmax. (`d_k` is the number of numbers in each query and key, here 2.)
+What happens without it?
+
+<Gate requires="knob-forever">
+
+<Blank id="unscaled-self" />
+
+Check it: uncheck “divide by √`d_k`” in the first lab and watch cat’s row.
+
+Without the division the weights get sharper. With two numbers per word that is a small effect.
+With 64 or 512 numbers it is a big one: a dot product adds up `d_k` terms, so it grows with `d_k`.
+Softmax of big numbers puts nearly all the weight on one word, and then the gradients that train `W_Q` and `W_K` almost vanish.
+
+<Deeper title="How big do the scores get?">
+
+Take random query and key vectors whose numbers have a standard deviation (std) of 1. Their dot product has std √`d_k`:
+
+| `d_k` | std of q · k | after dividing by √`d_k` |
+|---|---|---|
+| 2 | 1.42 | 1.01 |
+| 64 | 8.08 | 1.01 |
+| 512 | 22.55 | 1.00 |
+
+Dividing by √`d_k` puts the scores back to std 1, whatever `d_k` is. `demo.py` prints this table.
+
+</Deeper>
+
+</Gate>
+
+## 6. Write one attention head
+
+You now know every piece of one attention head: three projections, scores, scaling, softmax, a weighted average.
+Put them together in one function. The browser has `np` and `softmax` ready.
+
+<Gate requires="unscaled-self">
+
+<CodeBlank id="self-attention" />
+
+Every word here may look at every word, including the words after it. Level 15 adds masks, so a word can be stopped
+from looking ahead or at padding, and splits attention into several heads.
+
+</Gate>

@@ -1,0 +1,263 @@
+---
+title: Convolutions
+level: "N1"
+order: 10.1
+part: foundations
+branch: classic
+question: How can one small filter find an edge anywhere in a picture?
+run: browser
+glossarySkip: [padding]
+checkpoint: conv-stride
+testOut: [conv-00, size-32, ch-params, conv-stride]
+recap:
+  can:
+    - "Compute one output cell by hand: lay the filter on its window, multiply cell by cell, add the products."
+    - "Compute a layer’s output size and its number of weights and biases before you build it."
+    - "Write a convolution with any filter size and stride in NumPy, with two loops and a window slice."
+  keys:
+    - "$\\text{output side} = \\left\\lfloor \\frac{n - k + 2p}{s} \\right\\rfloor + 1$"
+    - "Parameters: $k \\cdot k \\cdot C_{in} \\cdot C_{out}$ weights + $C_{out}$ biases"
+    - "Window for output (i, j): `x[i*s:i*s+f, j*s:j*s+f]`, filter side `f`, stride `s`"
+    - "Receptive field: a k×k conv adds (k − 1) × gap; a 2×2 pool adds 1 × gap, then doubles the gap"
+  mistakes:
+    - "Forgetting that each filter reads every input channel: it is $C_{in} \\times k \\times k$, not $k \\times k$."
+    - "Cutting a window with `x[0:3][0:3]` (rows twice) instead of `x[0:3, 0:3]`, or using `@` instead of `*`."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import ConvLab from '@viz/ConvLab.astro'
+import ReceptiveLab from '@viz/ReceptiveLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+A 28×28 picture is 784 numbers. An MLP from level 5 gives every one of them its own weight to every hidden unit.
+But an edge looks the same whether it is in the top-left corner or the middle.
+A **convolution** uses one small grid of weights, the **filter**, and slides it over the whole picture.
+
+## 1. One filter, one window
+
+The picture below is 5×5: a vertical stroke of 1s, like the digit 1. The filter is 3×3.
+To get one output number, lay the filter on a 3×3 window of the picture, multiply the 9 pairs, and add them up.
+Then slide one step and do it again.
+
+<ConvLab hide={{ id: "conv-00", i: 0, j: 0 }} />
+
+<Blank id="conv-00" />
+
+<Gate requires="conv-00">
+
+The left side of the filter is −1 and the right side is +1. So the output is large where the picture is brighter on the
+right than on the left. That is a vertical edge. Each output cell answers one question:
+“is there a dark-to-bright step here, going left to right?”
+
+<Blank id="conv-shift" />
+
+<Predict id="h-edge" />
+
+<Stuck q="Why does one stroke appear twice, as +3 and as −3?">
+
+The stroke has two edges. On its left side the picture goes from 0 to 1: dark to bright, so the filter says +3.
+On its right side it goes from 1 back to 0: bright to dark, so the filter says −3.
+A network learns to use both. Later layers can combine “a +3 here and a −3 two pixels to the right” into “a thin line”.
+
+</Stuck>
+
+</Gate>
+
+## 2. Output size: stride and padding
+
+<Gate requires="h-edge">
+
+Two settings change the output size:
+
+- **Stride** is how far the filter moves each step. Stride 2 uses only every second position (0, 2, 4, …) and roughly halves the output.
+- **Padding** adds a ring of zeros around the picture, so the filter can also sit on the border pixels.
+
+For a picture of side $n$, a filter of side $k$, stride $s$ and padding $p$:
+
+$$
+\text{output side} = \left\lfloor \frac{n - k + 2p}{s} \right\rfloor + 1
+$$
+
+The brackets $\lfloor \; \rfloor$ mean **round down** to a whole number: $\lfloor 15.5 \rfloor = 15$.
+
+Try both settings in the lab above. With padding 1 and stride 1, a 5×5 picture stays 5×5.
+
+<Blank id="size-24" />
+
+<Blank id="size-32" />
+
+</Gate>
+
+## 3. Why one shared filter
+
+<Gate requires="size-32">
+
+The same 9 weights are used at every position. That is called **weight sharing**. Compare it with a dense layer
+(level 5) that produces the same output: it has one weight for every pair of (input pixel, output cell).
+
+<Blank id="dense-weights" />
+
+<Gate requires="dense-weights">
+
+For a real digit the gap is huge. A 28×28 picture has 784 pixels, a 26×26 output has 676 cells, and a dense layer needs
+784 × 676 = 529,984 weights. The filter still needs 9: about 59,000 times fewer.
+The filter learns “what an edge looks like” once and finds it everywhere.
+
+<Predict id="cnn-vs-mlp" />
+
+<Deeper title="Does a convolutional network still work on a shifted picture?">
+
+Not fully. Moving the picture moves the feature map by the same amount: the filters find the same edges, just elsewhere.
+But at the end, the network flattens the feature maps into one list and multiplies it by a dense layer. That layer
+learned which positions matter, and it does not treat every position the same.
+
+The level’s [demo.py](/files/convolutions/demo.py) measures it. Moving every test digit 3 pixels right and 3 pixels down drops the convolutional network from 98.0% to 31.2%,
+and the MLP from 96.2% to 16.2%. Both are hurt. The convolutional network is hurt less, because its pooling
+layers (section 5) keep only the largest number in each small block, so a small move changes less.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 4. Channels: many filters at once
+
+<Gate requires="cnn-vs-mlp">
+
+One filter answers one question, such as “is there a vertical edge here?”. A real layer asks many questions at once:
+it has many filters, and each one makes its own output map. The maps are stacked, and each map is called a **channel**.
+A layer with 8 filters turns one picture into 8 channels.
+
+The next layer then reads all 8 channels. So each of its filters is not 3×3 but 8×3×3: one 3×3 slice per input channel.
+At each position it multiplies all 8 windows by their slices and adds the 72 products into **one** number.
+A color picture works the same way from the start: it has 3 input channels (red, green, blue).
+
+| | shape |
+|---|---|
+| input | (`C_in`, H, W) |
+| one filter | (`C_in`, k, k) |
+| the layer | `C_out` filters, plus one bias each |
+| output | (`C_out`, H′, W′) |
+
+So a layer has $k \cdot k \cdot C_{in} \cdot C_{out}$ weights plus $C_{out}$ biases.
+Example: a 3×3 layer from 1 channel to 8 channels has 3 · 3 · 1 · 8 = 72 weights and 8 biases, 80 numbers in all.
+
+<Blank id="ch-params" />
+
+<Gate requires="ch-params">
+
+That is how the convolutional network from the Predict above gets its 5,258 numbers: 80 for the first layer, 1,168 for the second,
+and 4,010 for the final dense layer (16 channels × 5 × 5 positions = 400 inputs, to 10 digit scores: 400 · 10 + 10).
+
+<Deeper title="Same four steps, different connections">
+
+An MLP, a convolutional network, a recurrent network (side trip N3) and a Transformer (level 14 onward) all do the same
+four things: multiply inputs by weights, add a bias, apply a nonlinearity, and learn the weights with gradient descent.
+They differ only in **which inputs each weight touches** and **which weights are shared**.
+
+| network | each output reads | weights shared across |
+|---|---|---|
+| MLP | every input | nothing |
+| convolution | a small window | every position in the picture |
+| recurrent | this step’s input and the last state | every time step |
+| Transformer | every token, mixed by attention weights | every token position |
+
+In deep learning, “convolution” does not flip the filter first, as the math definition does. It is really a
+*cross-correlation*. Because the filter is learned, the difference does not matter.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 5. Stacking layers: seeing more of the picture
+
+<Gate requires="ch-params">
+
+One 3×3 filter sees a 3×3 window. Put a second 3×3 layer on top of the first one. Each of its outputs reads a 3×3 window of
+first-layer outputs, and each of those reads 3×3 pixels. Together, one second-layer output depends on a bigger patch of the picture.
+That patch is its **receptive field**.
+
+<Blank id="rf-2" />
+
+**Pooling** shrinks a feature map. 2×2 max pooling keeps the largest number in each 2×2 block, so the map halves in each direction.
+
+<Blank id="pool-max" />
+
+<Gate requires="pool-max">
+
+To find the receptive field of a deeper stack, track two numbers as you go up, one layer at a time:
+
+- **width**: how many pixels wide the patch is. Start at 1 (one pixel).
+- **gap**: how many pixels apart two neighboring cells of the current map are. Start at 1.
+
+Then apply one rule per layer:
+
+- a k×k convolution adds (k − 1) × gap to the width;
+- a 2×2 pooling adds 1 × gap to the width, and then doubles the gap (its output cells sit twice as far apart).
+
+Worked example, the first two layers of “conv, pool, …”:
+
+| layer | width | gap |
+|---|---|---|
+| start | 1 | 1 |
+| 3×3 conv | 1 + 2 × 1 = 3 | 1 |
+| 2×2 pool | 3 + 1 × 1 = 4 | 2 |
+
+Without pooling the gap stays 1, which is why two 3×3 layers gave 5. Now continue the table for two more layers.
+
+<Blank id="rf-pool" />
+
+</Gate>
+
+</Gate>
+
+## 6. What deeper layers see
+
+<Gate requires="rf-pool">
+
+<ReceptiveLab />
+
+Early layers see small patches and find edges. Deeper layers see large patches and combine edges into loops, corners and whole digits.
+
+Here is the whole digit network from section 4 in 3D. Each layer is a block: width and height are the picture, depth is the channels.
+
+<ArchLab which="conv" />
+
+<TryIt>
+
+Switch the convolution lab to **Real digits** and try the vertical-edge filter on the 1 and on the 0. Then edit the filter so it gives large outputs
+only on strokes that lean like “/”. Which three cells did you make positive?
+
+</TryIt>
+
+## 7. Write it yourself
+
+First, how to cut out a window in NumPy. For a 2D array, `x[0:3, 0:3]` takes rows 0–2 **and** columns 0–2 in one step: a 3×3 block.
+The list habit `x[0:3][0:3]` does something else: `x[0:3]` takes rows 0–2, and the second `[0:3]` takes rows 0–2 **of that again**,
+so you get all columns. For a window starting at row i and column j, write `x[i:i+3, j:j+3]`.
+
+`*` multiplies two same-shape arrays cell by cell, and `.sum()` adds up every number in an array.
+
+Write a convolution with two loops. For each output position, take the window under the filter and add up window × filter.
+
+<CodeBlank id="conv-loop" />
+
+<Gate requires="conv-loop">
+
+Now let the filter side and the stride change. With filter side `f` and stride `s`, output cell (i, j) reads the window that starts at
+row `i * s` and column `j * s`, so the window is `x[i*s:i*s+f, j*s:j*s+f]`. With no padding, the output side is the formula from section 2
+with p = 0. In Python, `a // b` divides and rounds down: `7 // 2` is 3.
+
+<CodeBlank id="conv-stride" />
+
+</Gate>
+
+</Gate>

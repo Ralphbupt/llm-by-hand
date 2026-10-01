@@ -1,0 +1,188 @@
+grad-plain:
+  type: number
+  prompt: "A plain stack has 4 layers. Going down, each one multiplies the gradient by its slope, 0.5. The gradient at the top is 1. What reaches the bottom?"
+  answer: 0.0625
+  tol: 0.001
+  after: "0.5 × 0.5 × 0.5 × 0.5 = 0.0625, one sixteenth. Thirty such layers would leave about one billionth."
+  hints:
+    - when: { equals: 2 }
+      say: "That adds the four slopes. Going down, each layer multiplies the gradient by its slope."
+    - when: { equals: 0.125 }
+      say: "That is three layers. Count the multiplications: one per layer, four layers."
+    - when: { equals: 0.5 }
+      say: "That is one layer. The gradient passes through all four."
+    - when: { any: true }
+      say: ["Start with 1 at the top. What does the first layer do to it?", "Each layer multiplies by 0.5. Do that four times, starting from 1."]
+
+depth-guess:
+  type: predict
+  prompt: "30 plain tanh layers. Going down, each one shrinks the gradient to about three quarters of its size. The gradient at the top has std 1. Roughly how big is it when it reaches layer 0?"
+  options: ["About 1, the same as at the top", "About 0.1", "About 0.0001"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "Each layer keeps only three quarters. What do 30 factors of 3/4 multiply to?"
+    - when: { equals: 1 }
+      say: "Ten factors of 3/4 already give about 0.06. There are thirty, so do that three times."
+  reveal: "About 0.0001. In demo.py the std goes 1.02 at the top, 0.098 ten layers down, 0.0059 twenty layers down and 0.000135 at the bottom. The first ten layers divide it by about 10, the next ten by about 17, the last ten by about 44: it shrinks faster on the way down."
+
+res-deriv:
+  type: number
+  prompt: "A residual layer computes y = x + f(x), with f(x) = 0.5 · x. What is the slope dy/dx?"
+  answer: 1.5
+  tol: 0
+  after: "dy/dx = 1 + f′(x) = 1 + 0.5 = 1.5. The 1 comes from the plain x path, and it is there whatever f does."
+  hints:
+    - when: { equals: 0.5 }
+      say: "That is the slope of f alone. y also contains x itself, which has slope 1."
+    - when: { equals: 1 }
+      say: "That is the slope of the x part. Add the slope of f(x) = 0.5·x."
+    - when: { any: true }
+      say: ["y is a sum of two parts. What is the slope of each part?", "Slopes of a sum add. The slope of x is 1. What is the slope of 0.5·x?"]
+
+resblock-shape:
+  type: shape
+  prompt: "x has shape (64, 8, 8): 64 channels, each 8×8. Both convolutions on the layer side are 3×3 with padding 1 and 64 filters. What shape is F(x)?"
+  answer: [64, 8, 8]
+  after: "(64, 8, 8), the same as x. Padding 1 keeps 8×8, and 64 filters give 64 channels, so x + F(x) adds cell by cell."
+  hints:
+    - when: { shape: [64, 6, 6] }
+      say: "That is a 3×3 convolution without padding. With padding 1 the height and width stay the same."
+    - when: { shape: [8, 8, 64] }
+      say: "Right numbers, but keep the order of x: channels first, then height and width."
+    - when: { any: true }
+      say: ["How many channels does a convolution with 64 filters output?", "Padding 1 with a 3×3 filter keeps the height and width of x."]
+
+bn-x20:
+  type: number
+  prompt: "Feature 0 (column 0) is [1, 1, 5, 5]. Its mean is 3. Find its std, then the BatchNorm value of X[2][0] = (5 − mean) ÷ std. Ignore the tiny ε."
+  answer: 1
+  tol: 0.01
+  after: "The differences from 3 are −2, −2, 2, 2. Their squares are all 4, so the variance is 4 and the std is 2. (5 − 3) ÷ 2 = 1."
+  hints:
+    - when: { equals: 2 }
+      say: "2 is the std. Now divide the difference 5 − 3 by it."
+    - when: { equals: 0.5 }
+      say: "Check the std: the variance is 4, and the std is its square root."
+    - when: { equals: -1 }
+      say: "Right size, wrong sign. X[2][0] = 5 is above the mean, so the result is positive."
+    - when: { any: true }
+      say: ["First the std of [1, 1, 5, 5]: subtract 3 from each, then square.", "Differences −2, −2, 2, 2 → squares 4, 4, 4, 4. The variance is their average, and the std is its square root."]
+
+running:
+  type: number
+  prompt: "BatchNorm’s running mean for a feature is 2. The next batch has mean 4 for that feature. The update keeps 0.9 of the old value and adds 0.1 of the new one. What is the running mean now?"
+  answer: 2.2
+  tol: 0.001
+  after: "0.9 × 2 + 0.1 × 4 = 1.8 + 0.4 = 2.2. It moves a little toward each new batch, so at test time it holds an average over many batches."
+  hints:
+    - when: { equals: 4 }
+      say: "That replaces the old value. The update keeps 0.9 of it."
+    - when: { equals: 3 }
+      say: "That is a 50/50 mix. Here the old value gets 0.9 and the new one 0.1."
+    - when: { equals: 3.8 }
+      say: "The weights are swapped. 0.9 goes with the old value 2, 0.1 with the new 4."
+    - when: { any: true }
+      say: ["Multiply the old value by 0.9 and the new one by 0.1.", "0.9 × 2 = 1.8. Add 0.1 × 4."]
+
+bn-one:
+  type: predict
+  prompt: "Training with a batch of 1 example, x = [3, 7, 1]. BatchNorm subtracts each feature’s mean over the batch. What is the output?"
+  options: ["[3, 7, 1], unchanged", "Mean 0 and std 1, as always", "All zeros, whatever x was"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "With one example, what is the mean of feature 0 over the batch?"
+    - when: { equals: 1 }
+      say: "The mean of one number is that number. What is x − x?"
+  reveal: "All zeros. With one example, each feature’s mean over the batch is the example’s own value, so x − mean = 0 everywhere, and the std is 0 too. The input is erased. BatchNorm needs a batch."
+
+ln-x21:
+  type: number
+  prompt: "LayerNorm uses each row’s own mean and std. Example 2 (row 2) is [5, 1, 5, 1]. What is the LayerNorm value of X[2][1]? Ignore ε."
+  answer: -1
+  tol: 0.01
+  after: "Row 2 has mean 3. Its differences are 2, −2, 2, −2, so the variance is 4 and the std 2. (1 − 3) ÷ 2 = −1. The whole row becomes [1, −1, 1, −1]."
+  hints:
+    - when: { equals: 1 }
+      say: "Right size, wrong sign: X[2][1] = 1 is below the row’s mean."
+    - when: { equals: -2 }
+      say: "That is 1 − 3. Divide by the row’s std."
+    - when: { equals: -0.73 }
+      say: "That is BatchNorm: column 1’s mean and std. LayerNorm uses row 2."
+    - when: { any: true }
+      say: ["Use row 2 only: [5, 1, 5, 1]. What is its mean?", "The mean is 3. The differences are 2, −2, 2, −2, so the variance is 4. Now find the std and divide 1 − 3 by it."]
+
+bn-count:
+  type: number
+  prompt: "A batch has 32 examples with 64 features each: shape (32, 64). LayerNorm computes 32 means, one per example. How many means does BatchNorm compute?"
+  answer: 64
+  tol: 0
+  after: "64, one per feature. BatchNorm averages down each of the 64 columns; LayerNorm averages across each of the 32 rows."
+  hints:
+    - when: { equals: 32 }
+      say: "That is LayerNorm’s count. BatchNorm averages down columns, and there is one column per feature."
+    - when: { equals: 2048 }
+      say: "That counts every number. Each mean covers a whole column."
+    - when: { any: true }
+      say: ["BatchNorm: one mean per column. How many columns are there?"]
+
+why-ln:
+  type: predict
+  prompt: "A model writes text one token at a time, so at each step its input is a single sequence. Which normalization still works there?"
+  options: ["BatchNorm with batch statistics", "LayerNorm", "Both work equally well"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "With one sequence, what are the batch statistics computed from?"
+    - when: { equals: 2 }
+      say: "With a batch of 1, each feature’s mean is the example’s own value. What does BatchNorm give then?"
+  reveal: "LayerNorm. Each token is normalized over its own features, so it needs no other examples. With one sequence, BatchNorm’s batch statistics come from that one sequence. For a batch of 1, BatchNorm gives all zeros. This is one of three reasons every Transformer block uses LayerNorm (or the similar RMSNorm, level 19)."
+
+ln-code:
+  type: code
+  prompt: "Write `layer_norm`: normalize each row (one example) by its own mean and variance, with ε added to the variance before the square root, as `batch_norm` does for columns."
+  template: |
+    def batch_norm(X, eps=1e-5):
+        mean = X.mean(axis=0, keepdims=True)
+        var = X.var(axis=0, keepdims=True)
+        return (X - mean) / np.sqrt(var + eps)
+
+    def layer_norm(X, eps=1e-5):
+        ____
+
+    X = np.array([[1., 4, 2, 9], [1, 0, 6, 3], [5, 1, 5, 1], [5, 7, 3, 1]])
+    print(layer_norm(X).round(2))
+  solution: |-
+    mean = X.mean(axis=1, keepdims=True)
+        var = X.var(axis=1, keepdims=True)
+        return (X - mean) / np.sqrt(var + eps)
+  after: "The only change from `batch_norm` is axis=1: the statistics run across each row instead of down each column. So every example is normalized alone, and a batch of 1 works. keepdims=True gives a (B, 1) mean that broadcasts across the row."
+  tests:
+    - setup: "X = np.array([[1., 4, 2, 9], [1, 0, 6, 3], [5, 1, 5, 1], [5, 7, 3, 1]])"
+      expr: "layer_norm(X)[2]"
+      expect: [1, -1, 1, -1]
+      tol: 0.001
+      say: "row 2 = [5, 1, 5, 1] should become [1, −1, 1, −1]"
+    - expr: "layer_norm(np.array([[1., 1, 3, 3]]))"
+      expect: [[-1, -1, 1, 1]]
+      tol: 0.001
+      say: "a single example must work too: [1, 1, 3, 3] → [−1, −1, 1, 1]"
+    - expr: "layer_norm(np.array([[2., 2, 2, 2]]))"
+      expect: [[0, 0, 0, 0]]
+      tol: 0.001
+      say: "a constant row has variance 0: with ε you get zeros, not a division by 0"
+    - setup: "X = np.array([[1., 4, 2, 9], [1, 0, 6, 3], [5, 1, 5, 1], [5, 7, 3, 1]])"
+      expr: "layer_norm(X).shape"
+      expect: [4, 4]
+  hints:
+    - when: { error: "is not defined" }
+      say: "Set mean and var inside `layer_norm` before you use them, the same way `batch_norm` does."
+    - when: { error: "shapes|broadcast|matmul|core dimension" }
+      say: ["The mean must keep its axis so that it broadcasts against X. Use keepdims=True.", "With keepdims=True a (4, 4) table gives a (4, 1) mean, which broadcasts across each row."]
+    - when: { testFailed: 0 }
+      say: ["Row 2 is wrong. Is the mean taken across a row, or down a column?", "`batch_norm` uses axis=0, down each column. A row is the other axis."]
+    - when: { testFailed: 2 }
+      say: ["A row of equal numbers has variance 0. What keeps the division safe?", "Divide by np.sqrt(var + eps), not by np.sqrt(var)."]
+    - when: { any: true }
+      say: ["Copy the shape of `batch_norm`: a mean, a variance, then the division.", "Change the axis so each row gets its own mean and variance."]

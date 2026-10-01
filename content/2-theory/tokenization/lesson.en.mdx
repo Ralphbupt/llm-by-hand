@@ -1,0 +1,221 @@
+---
+title: "Tokens: from characters to BPE"
+short: "Tokens and BPE"
+level: "12"
+order: 12
+part: theory
+question: Where does text get cut into pieces, and why does it matter?
+run: browser
+checkpoint: pair-counts
+testOut: [encode, tokens-cats, merge-fn, pair-counts, emb-params]
+recap:
+  can:
+    - "Build a character vocabulary, give each character an id, and encode a string as a list of ids."
+    - "Count weighted neighboring pairs and run a few BPE merges by hand."
+    - "Encode a new word by applying the learned merges in the order they were learned."
+  keys:
+    - "Vocabulary = the distinct characters, sorted; ids count from 0"
+    - "BPE: count every neighboring pair (weighted by word count), merge the most frequent, repeat"
+    - "Each merge adds one token to the vocabulary and makes the sequences shorter"
+    - "Embedding table: one row per token, so vocabulary × width numbers (1,000 tokens × 64 = 64,000)"
+  mistakes:
+    - "Counting each word once instead of as often as it appears (a + t is 4 + 2 + 3 + 1 = 10, not 4)."
+    - "Applying the merges in any order, or skipping one that can apply: “that” should become t·hat, not t·h·at."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import CharTokenLab from '@viz/CharTokenLab.astro'
+import BpeLab from '@viz/BpeLab.astro'
+
+Level 11's model predicted the next **word**. But "word" was a choice. A model reads a list of **tokens**,
+and someone has to decide where one token ends and the next begins. That choice sets the size of the vocabulary,
+the length of every sequence, and which texts the model can read at all.
+
+Each distinct token gets an **id**, a number from 0 up to the vocabulary size minus one. Level 13 turns ids into vectors.
+
+## 1. Cutting into characters
+
+The simplest cut: every character is a token. Take the word `hello`. The **vocabulary** is the list of
+distinct characters in it, sorted alphabetically. Each character's id is its position in that list, counting from 0.
+Compute it before you look:
+
+<Blank id="vocab-size" />
+
+<Blank id="id-l" />
+
+<Gate requires="id-l">
+
+Now check yourself in the lab, and type anything else you like.
+
+<CharTokenLab />
+
+The vocabulary gives two dictionaries: `stoi` (string to id) and `itos` (id to string).
+Code that builds them uses two Python tools:
+
+```python
+list(enumerate(["e", "h", "l"]))          # [(0, 'e'), (1, 'h'), (2, 'l')]   each item with its position
+{c: i for i, c in enumerate(["e", "h"])}  # {'e': 0, 'h': 1}                 a dictionary built in one line
+```
+
+That one-line form is called a dictionary comprehension. The same form with `[ ]` builds a list (a list comprehension).
+
+<CodeBlank id="stoi-code" />
+
+<Gate requires="stoi-code">
+
+Encoding looks up every character. Decoding goes back. Nothing is lost on the way.
+
+<CodeBlank id="encode" />
+
+<Stuck q="Why sort the characters? Does it matter which character gets which id?">
+
+It doesn't matter at all. Any fixed order works, as long as encoding and decoding use the same one.
+Sorting is an easy way to get the same order every time you run the code.
+
+The ids are names, not amounts: “l” being 2 doesn’t make it twice “h”. Level 13 shows how the model avoids reading them as amounts.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="encode">
+
+## 2. Cutting into words
+
+Characters give a tiny vocabulary but long sequences: "hello" is 5 tokens. The other extreme is one token per word.
+Level 11 did that, with the vocabulary of its stories: the, a, cat, dog, sat, ran, on, mat, rug, and ".".
+
+<Predict id="unk-word" />
+
+Whole words have two problems. Every form of a word needs its own entry (cat, cats, catlike, …), so a real
+vocabulary would need millions of entries. And a word that wasn't in the list can't be read at all.
+
+</Gate>
+
+<Gate requires="unk-word">
+
+## 3. Byte-pair encoding: let the data decide
+
+**BPE** starts from characters and builds bigger tokens out of pieces that often appear together:
+
+1. Cut every word into characters.
+2. Count every pair of neighboring tokens, across all the words, weighted by how often each word appears.
+3. Merge the most frequent pair into one new token. Add it to the vocabulary.
+4. Repeat from step 2, as many times as you like.
+
+Here is a tiny word list: **cat** appears 4 times, **cats** 2 times, **hat** 3 times, **hats** 1 time.
+
+<Blank id="pair-at" />
+
+<Gate requires="pair-at">
+
+So the first merge is a + t → "at". Now the words are c·at, c·at·s, h·at, h·at·s.
+
+<Blank id="merge2-count" />
+
+</Gate>
+
+<Gate requires="merge2-count">
+
+That pair wins, so merge 2 is c + at → "cat". Merge 3 is h + at → "hat".
+With those 3 merges, a word is encoded by cutting it into characters and applying the merges **in the order they were learned**.
+
+<Blank id="tokens-cats" />
+
+<Blank id="tokens-that" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="tokens-that">
+
+Now step through it yourself. The lab starts with the same four words. Then switch to the 40 generated words
+(8 base words, called stems, like *play*, *walk*, *cook* with the endings -s, -ed, -ing, -er, each with a count from a fixed rule).
+One question before you start merging:
+
+<Predict id="more-merges" />
+
+<Gate requires="more-merges">
+
+<BpeLab />
+
+<TryIt>
+
+With the generated words, watch the first merges: k + e, a + l, o + o, i + n, then in + g. BPE finds pieces
+like “ke” (from walked, cooker, …) and “ing” without being told what an ending is. Then type a word that isn't in the list,
+like `jumping` or `parker`, and see it split into known pieces.
+
+</TryIt>
+
+Applying one merge to a word is a small loop. Write the condition:
+
+<CodeBlank id="merge-fn" />
+
+</Gate>
+
+<Gate requires="merge-fn">
+
+Step 2 of BPE counts the pairs. Two Python tools do it:
+
+```python
+seg = ["c", "a", "t", "s"]
+list(zip(seg, seg[1:]))      # [('c', 'a'), ('a', 't'), ('t', 's')]   every neighboring pair
+d = {}
+d["x"] = d.get("x", 0) + 4   # {'x': 4}   get gives 0 when the key is not there yet
+```
+
+A word that appears n times adds n to each of its pairs, as in the count of a + t above.
+
+<CodeBlank id="pair-counts" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pair-counts">
+
+## 4. How many merges?
+
+Each merge adds one token to the vocabulary and makes the sequences shorter. On the 40 generated words:
+before any merge there are 19 characters and 1,068 tokens; after 40 merges, the vocabulary has 59 entries and the words take only 263 tokens.
+Fewer tokens means less work per text. It also means more text fits in the model's **context window**:
+a model reads at most a fixed number of tokens at once, so the shorter each text, the more of it the model can see.
+
+A big vocabulary also has a cost. The model keeps an **embedding table**: a plain table with one row of numbers per token
+(level 13 shows how it is used). Every token needs its own row there, and its own column in the final layer that scores the next token.
+
+<Blank id="emb-params" />
+
+<Deeper title="What real tokenizers do differently">
+
+- **They start from bytes, not characters.** Every text is a list of bytes, values 0 to 255, so the starting
+  vocabulary is 256 and nothing is ever unknown: an emoji or a rare script just becomes several byte tokens.
+- **Spaces stick to words.** Text is first split so that a space travels with the word after it, so "␣cat" and "cat"
+  are different tokens. That keeps spacing exact when decoding.
+- **Tens of thousands of merges.** Real vocabularies have about 30,000 to 200,000 tokens. Common words become one token;
+  rare words become two to five pieces.
+
+The idea is the same as the lab: count pairs, merge the most frequent, repeat.
+
+</Deeper>
+
+<Stuck q="Why do models struggle to spell, count letters, or do arithmetic on long numbers?">
+
+Because they never see the letters. A word like "chatting" may arrive as two tokens, say "chat" and "ting".
+The model gets two ids, not eight characters. To count the t's, it has to have learned what is inside each token.
+
+Numbers are cut the same arbitrary way: "12345" might become "123" and "45", while "12346" is cut differently.
+The digits are not in the same columns from one number to the next, which makes column-by-column arithmetic hard.
+Some models fix this by always splitting numbers into single digits.
+
+</Stuck>
+
+</Gate>

@@ -1,0 +1,6 @@
+---
+import Lab from './NormLab.svelte'
+interface Props { hide?: { ln?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

@@ -1,0 +1,220 @@
+handover:
+  type: number
+  prompt: "An LSTM encoder with H = 32 reads a string of 24 digits. The decoder receives only the encoder’s last h and c. How many numbers is that?"
+  answer: 64
+  tol: 0
+  after: "32 for h plus 32 for c: 64 numbers, whether the input has 4 digits or 24."
+  hints:
+    - when: { equals: 32 }
+      say: "An LSTM gives the decoder two vectors, not one. Remember the cell state from level N4."
+    - when: { equals: 768 }
+      say: "That is every encoder state (24 × 32). The plain decoder gets only the last one."
+    - when: { equals: 1536 }
+      say: "That counts h and c for all 24 steps. The decoder receives only the final pair."
+    - when: { any: true }
+      say: ["The decoder gets the encoder’s final state, not one per digit.", "An LSTM’s state is h and c, each of H numbers."]
+
+grow:
+  type: predict
+  prompt: "Guess before you look. With H = 32, the plain encoder–decoder reverses 4-digit strings perfectly. On new 20-digit strings, about what percent does it get exactly right?"
+  options: ["About 100%", "About 50%", "About 0%"]
+  reveal: "About 0%. At 4 digits it gets 100%, at 12 digits 47%, at 16 digits 4%, and at 20 digits none at all. Sixty-four numbers cannot hold twenty digits in order."
+
+score-0:
+  type: number
+  prompt: "E = [[1, 0], [0, 1], [0, −1]] (rows h₀, h₁, h₂) and the decoder state s = [2, 0]. What is the score of h₀, that is h₀ · s?"
+  answer: 2
+  tol: 0
+  after: "1 × 2 + 0 × 0 = 2. h₁ · s = 0 × 2 + 1 × 0 = 0, and h₂ · s = 0 too. All three at once: E @ s = [2, 0, 0]."
+  hints:
+    - when: { equals: 0 }
+      say: "That is the score of h₁ or h₂. h₀ = [1, 0]."
+    - when: { any: true }
+      say: ["Multiply h₀ and s number by number, then add.", "h₀ = [1, 0] and s = [2, 0]. Multiply the first numbers, multiply the second numbers, then add."]
+
+weight-0:
+  type: number
+  prompt: "The scores are [2, 0, 0]. Use e² ≈ 7.39 and e⁰ = 1. After softmax, what weight does h₀ get? (2 decimals)"
+  answer: 0.79
+  tol: 0.01
+  after: "e² + e⁰ + e⁰ = 7.39 + 1 + 1 = 9.39, and 7.39 / 9.39 ≈ 0.79. The other two get 1 / 9.39 ≈ 0.11 each."
+  hints:
+    - when: { equals: 7.39 }
+      say: "That is e², before dividing. Softmax divides by the sum of all three."
+    - when: { equals: 1 }
+      say: "That would be 2 / (2 + 0 + 0): softmax works on e to the score, not on the score itself."
+    - when: { equals: 0.33 }
+      say: "That splits the weight evenly over the three states. The higher score gets a bigger part: 7.39 out of the total."
+    - when: { any: true }
+      say: ["Softmax: raise e to each score, then divide each by the total.", "The total is 7.39 + 1 + 1. h₀’s part is 7.39 out of it."]
+
+ctx-second:
+  type: predict
+  prompt: "The weights are [0.79, 0.11, 0.11] and E = [[1, 0], [0, 1], [0, −1]]. What is the second number of context = weights @ E?"
+  options: ["0.11", "0", "−0.11", "0.79"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "That is only h₁’s part. h₂ = [0, −1] adds its own part to the second number too."
+    - when: { equals: 2 }
+      say: "That is only h₂’s part. Add h₁’s part as well."
+    - when: { equals: 3 }
+      say: "0.79 is the first number. The second number of each state is 0, 1 and −1."
+  reveal: "0.79 × 0 + 0.11 × 1 + 0.11 × (−1) = 0. The two small states pull in opposite directions and cancel. The first number is 0.79 × 1 = 0.79, so the context is [0.79, 0], mostly h₀."
+
+ctx-shape:
+  type: shape
+  prompt: "E holds 8 encoder states of 32 numbers each: E is (8, 32). The decoder state s is (32,). What shape is context = weights @ E? (Write one number, like (5).)"
+  answer: [32]
+  after: "weights is (8,), one per input token. (8,) @ (8, 32) → (32,): one vector of the same size as a state, built from all eight."
+  hints:
+    - when: { shape: [8] }
+      say: "That is the shape of the scores and the weights. The context is an average of states."
+    - when: { shape: [8, 32] }
+      say: "That is E itself. The weighted average combines the 8 rows into one."
+    - when: { any: true }
+      say: ["weights has one number per input token: (8,).", "(8,) @ (8, 32): the 8s meet and disappear, as in level 1."]
+
+ctx-line:
+  type: code
+  prompt: "Finish one attention step: the context is the weighted average of the encoder states."
+  template: |
+    def attend(E, s):
+        scores = E @ s              # one score per encoder state
+        w = softmax(scores)         # weights that add up to 1
+        ctx = ____
+        return w, ctx
+
+    w, ctx = attend(np.array([[1., 0], [0, 1], [0, -1]]), np.array([2., 0]))
+    print("weights", w.round(4), " context", ctx.round(4))
+  solution: "w @ E"
+  tests:
+    - expr: "attend(np.array([[1., 0], [0, 1], [0, -1]]), np.array([2., 0]))[1]"
+      expect: [0.787, 0.0]
+      tol: 0.001
+      say: "The example from the page: context ≈ [0.79, 0]."
+    - expr: "attend(np.array([[2., 0], [0, 2], [1, 1]]), np.array([1., 0]))[1]"
+      expect: [1.5752, 0.4248]
+      tol: 0.0001
+      say: "Another set of three states."
+  hints:
+    - when: { error: "shapes|not aligned|mismatch" }
+      say: ["The shapes don’t meet. w is (3,) and E is (3, 2); which order makes the 3s meet?", "In a product, the last size of the left side meets the first size of the right side. Which order makes 3 meet 3?"]
+    - when: { testFailed: 0 }
+      say: ["You get the wrong vector for the page’s example. The context should be about [0.79, 0].", "Weight each row of E by its weight and add the rows up. As a matrix product, the weights come first."]
+    - when: { any: true }
+      say: ["The context is the weighted average of the rows of E.", "Each weight says how much of one row of E to take. Which product of w and E adds up the weighted rows?"]
+  after: "w is (3,) and E is (3, 2), so w @ E is (2,): each row of E is multiplied by its weight, and the rows are added. A weighted average is one matrix product, weights first."
+
+fix:
+  type: predict
+  prompt: "The same reversing task and the same LSTM with H = 32, now with attention. At 20 digits the plain model got 0%. Does the attention model do better than 0%?"
+  promptShort: "An LSTM with H = 32 learns to reverse strings of digits. Without attention it gets 0% of the 20-digit strings right. With attention added, does it do better than 0%?"
+  options: ["No, about 0% like before", "Yes, clearly better than 0%"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "With attention, does the decoder still depend on the 64-number summary alone?"
+  reveal: "Much better: 72% at 20 digits instead of 0%. The decoder can read every encoder state, not only the last one. It is not perfect, because each encoder state is still made by an LSTM reading step by step. With a 128-number state it keeps 85% even at 24 digits."
+
+seven-look:
+  type: predict
+  prompt: "The model reads 427015 and writes “four hundred twenty seven thousand fifteen”. When it writes “seven”, which digit should get the most weight?"
+  options: ["The 4", "The 2", "The 7", "The 5"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "The 4 gives “four hundred”. Which digit says “seven”?"
+    - when: { equals: 1 }
+      say: "The 2 gives “twenty”. “Seven” comes from the next digit."
+    - when: { equals: 3 }
+      say: "The 5 belongs to “fifteen”, in the second group of three digits."
+  reveal: "The 7, with weight 0.99. Writing “four” it looks at the 4, writing “twenty” at the 2, and writing “fifteen” at the 5."
+
+attend-all:
+  type: code
+  prompt: "The boss, part 1. Write attention for every decoder step at once: one row of weights per decoder state, each a softmax over the encoder states, and one context row per decoder state. Write the softmax yourself. Replace ____ with as many lines as you need."
+  template: |
+    softmax = None   # no ready-made softmax in the boss: write it yourself
+
+    def attend_all(S, E):
+        # S: (T, H), one decoder state per row.  E: (L, H), one encoder state per row.
+        # return W (T, L): row t is the softmax of decoder state t's scores,
+        # and C (T, H) = W @ E
+        ____
+        return W, C
+
+    E = np.array([[1., 0], [0, 1], [0, -1]])
+    S = np.array([[2., 0], [0, 2]])
+    W, C = attend_all(S, E)
+    print("W =", W.round(4))
+    print("C =", C.round(4))
+  reference: |-
+    scores = S @ E.T
+        W = np.exp(scores - scores.max(axis=-1, keepdims=True))
+        W = W / W.sum(axis=-1, keepdims=True)
+        C = W @ E
+  tests:
+    - expr: "attend_all(np.array([[2., 0], [0, 2]]), np.array([[1., 0], [0, 1], [0, -1]]))[0]"
+      expect: [[0.787, 0.1065, 0.1065], [0.1173, 0.8668, 0.0159]]
+      tol: 0.0001
+      say: "row 0 is the page’s example (scores [2, 0, 0]); row 1 has scores [0, 2, −2]"
+    - expr: "attend_all(np.array([[2., 0], [0, 2]]), np.array([[1., 0], [0, 1], [0, -1]]))[1]"
+      expect: [[0.787, 0.0], [0.1173, 0.8509]]
+      tol: 0.0001
+      say: "one context row per decoder state"
+    - expr: "attend_all(np.array([[10., 0], [0, 10]]), np.array([[100., 0], [0, 100]]))[0]"
+      expect: [[1.0, 0.0], [0.0, 1.0]]
+      tol: 0.0001
+      say: "big scores (1,000 and 0) must not overflow: subtract each row’s largest score before exp"
+    - setup: "rng = np.random.default_rng(0); E5 = rng.normal(0, 1, (5, 3)); S4 = rng.normal(0, 1, (4, 3))"
+      expr: "attend_all(S4, E5)[1]"
+      expect: [[-1.6926, -0.3104, -0.7111], [0.773, 0.5728, -0.4535], [0.5112, 0.1509, -0.0079], [0.8561, 0.608, -0.4773]]
+      tol: 0.0001
+      say: "5 encoder states, 4 decoder states, 3 numbers each (seed 0)"
+  hints:
+    - when: { error: "NoneType" }
+      say: "softmax is not applied here. Write it: exp of each score, then divide by the row’s sum."
+    - when: { error: "is not defined" }
+      say: "Set every name you return (W and C) inside the function."
+    - when: { error: "shapes|not aligned|mismatch" }
+      say: ["Check the shapes: S is (T, H) and E is (L, H). Which one needs the transpose so the H’s meet?", "S @ E.T: (T, H) @ (H, L) gives (T, L), one row of scores per decoder state."]
+    - when: { testFailed: 2 }
+      say: ["The small cases pass but big scores give nan. e¹⁰⁰⁰ is too big for a float.", "Subtract each row’s largest score before exp: scores.max(axis=-1, keepdims=True)."]
+    - when: { testFailed: 0 }
+      say: ["Check row 0 first: its scores are [2, 0, 0], so its weights should be about [0.79, 0.11, 0.11].", "Each row must add up to 1 by itself: divide by the sum along axis=-1, with keepdims=True."]
+    - when: { testFailed: 1 }
+      say: ["The weights are right, the context is not. Each context row is a weighted average of the rows of E.", "One matrix product gives all rows at once, weights first."]
+    - when: { any: true }
+      say: ["Four steps: scores, exp (stable), divide by each row’s sum, context.", "Section 6 shows the row-by-row max and sum with keepdims."]
+  after: "S @ E.T gives one row of scores per decoder state, (T, L). The softmax works on each row separately (axis=-1, keepdims=True), and subtracting the row’s largest score first keeps exp from overflowing. Then W @ E builds every context row at once, (T, H)."
+
+boss-line:
+  type: code
+  prompt: "The boss, part 2. Paste the PASS line that boss.py printed for your own `attend_all()`, between the quotes."
+  paste: boss.py
+  template: |
+    line = "____"      # it looks like: N5 PASS 0.900 1a2b3c4d
+    print(line)
+  mustFail: ["N5 PASS 1.000 00000000", "N5 PASS 0.950", "N5 PASS 7 eae66215"]
+  tests:
+    - setup: "import re\n_p = line.split()"
+      expr: "int(len(_p) == 4 and _p[0] == 'N5' and _p[1] == 'PASS' and bool(re.fullmatch(r'0\\.[0-9]{3}|1\\.000', _p[2])))"
+      expect: 1
+      say: "a PASS line from boss.py: N5 PASS, the score, the code"
+    - expr: "['llm-by-hand/N5/' + _p[2], _p[3]]"
+      sha256Pair: true
+      say: "the code matches the score: the line is unchanged"
+    - expr: "int(float(_p[2]) >= 0.9)"
+      expect: 1
+      say: "a score of at least 0.9 (90%)"
+  hints:
+    - when: { error: "IndexError|ValueError" }
+      say: "Paste the whole line, with all four parts: N5, PASS, the score and the code."
+    - when: { testFailed: 0 }
+      say: ["Download boss.py from /files/seq2seq-attention/boss.py, complete `attend_all()`, and run python boss.py in the same folder.", "Copy the whole line that starts with N5 PASS, and paste it between the quotes."]
+    - when: { testFailed: 1 }
+      say: "The code doesn’t match the score. Copy the line again exactly as boss.py printed it, without editing it."
+    - when: { any: true }
+      say: "Paste the whole line boss.py printed, between the quotes."
+  after: "With your attention, the model reverses 20-digit strings, longer than any plain encoder–decoder of this size could. The code at the end only shows that the line was pasted unchanged; this part relies on your honesty."

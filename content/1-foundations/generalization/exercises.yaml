@@ -1,0 +1,126 @@
+params:
+  type: number
+  prompt: "A polynomial of degree 9, c0 + c1·x + c2·x² + … + c9·x⁹, has how many parameters?"
+  answer: 10
+  tol: 0
+  after: "c0 to c9: ten. Ten parameters for ten training points means it can pass through every point exactly, so its training loss can reach 0."
+  hints:
+    - when: { equals: 9 }
+      say: "Don’t forget c0, the constant."
+    - when: { any: true }
+      say: ["Each coefficient c is one parameter. Count them.", "They run from c0 up to c9."]
+
+capacity-curve:
+  type: predict
+  prompt: "You fit the 10 points with degree 0, then 1, 2, … up to 9. The training loss keeps going down. What does the loss on the 40 held-out points do?"
+  options: ["Keeps going down too", "Goes down, then back up", "Goes up from the start"]
+  reveal: "Down, then up. Degree 3 is near the best: held-out 0.1579. Degree 9 hits every training point (train 0.0000) but held-out jumps to 0.8275."
+
+decay-w:
+  type: number
+  prompt: "Weight decay adds a penalty to the loss: total loss = data loss + 0.1·w². The data’s gradient for w is 0 right now, w = 2, lr = 0.5. After one gradient step, what is w?"
+  answer: 1.8
+  tol: 0.001
+  after: "The penalty’s gradient is 2·0.1·2 = 0.4, so w ← 2 − 0.5·0.4 = 1.8. Each step shrinks w by 10%, until the data’s gradient becomes as large as the penalty’s."
+  hints:
+    - when: { equals: 1.9 }
+      say: "The gradient of 0.1·w² is 2·0.1·w, not 0.1·w."
+    - when: { equals: 1.6 }
+      say: "Multiply the gradient 0.4 by the learning rate 0.5 before subtracting."
+    - when: { any: true }
+      say: ["The penalty 0.1·w² has gradient 2 · 0.1 · w. The data’s gradient is 0.", "At w = 2 the gradient is 0.4. Then w − lr · gradient."]
+
+decay-code:
+  type: code
+  prompt: "Write one gradient step with weight decay: add the penalty’s gradient 2·lam·w to the data’s gradient `g_data`, then step downhill with lr. It must work for one weight and for an array of weights."
+  template: |
+    def decay_step(w, g_data, lam, lr):
+        ____
+        return w
+
+    print(decay_step(2.0, 0.0, 0.1, 0.5))
+    print(decay_step(np.array([2.0, -1.0]), np.array([1.0, 0.0]), 0.1, 0.5))
+  solution: |-
+    g = g_data + 2 * lam * w
+        w = w - lr * g
+  tests:
+    - expr: "decay_step(2.0, 0.0, 0.1, 0.5)"
+      expect: 1.8
+      tol: 0.0001
+      say: "data gradient 0: only the penalty pulls, 2 − 0.5·(2·0.1·2) = 1.8"
+    - expr: "decay_step(np.array([2.0, -1.0]), np.array([1.0, 0.0]), 0, 0.5)"
+      expect: [1.5, -1]
+      tol: 0.0001
+      say: "lam = 0 is plain gradient descent: w − 0.5·[1, 0] = [1.5, −1]"
+    - expr: "decay_step(np.array([2.0, -1.0]), np.array([1.0, 0.0]), 0.1, 0.5)"
+      expect: [1.3, -0.9]
+      tol: 0.0001
+      say: "both together: gradient [1 + 0.4, 0 − 0.2] = [1.4, −0.2], so w = [1.3, −0.9]"
+  hints:
+    - when: { error: "is not defined" }
+      say: "Compute the total gradient on the first line and give it a name before the second line uses it."
+    - when: { testFailed: 0 }
+      say: ["With `g_data` = 0 only the penalty is left. Its gradient is 2·lam·w, not lam·w.", "The answer should be 1.8: the gradient is 0.4 and lr is 0.5."]
+    - when: { testFailed: 1 }
+      say: ["With lam = 0 this is the plain step from level 2. Is `g_data` in your gradient?", "The total gradient is `g_data` plus the penalty’s gradient."]
+    - when: { testFailed: 2 }
+      wrong: "w = w - lr * g_data\n    w = w - lr * 2 * lam * w"
+      say: ["Each part works alone but not together. Add the two gradients first, then multiply the sum by lr.", "Subtract: w − lr·(total gradient)."]
+    - when: { any: true }
+      say: ["Line 1: the total gradient. Line 2: the step.", "Line 1 adds the data’s gradient and the penalty’s gradient. Line 2 steps against that sum, as in level 2."]
+  after: "The penalty lam·w² has gradient 2·lam·w, so it always pulls w toward 0. Add it to the data’s gradient first, then take one normal step. The same two lines work for one number and for an array."
+
+dropout-unit:
+  type: number
+  prompt: "Hidden units h = [2, 4, 6, 8], dropout p = 0.5, keep mask [1, 0, 1, 0]. The kept units are divided by 1 − p. What does the third unit, 6, become?"
+  answer: 12
+  tol: 0
+  after: "6 / (1 − 0.5) = 12. The layer becomes [4, 0, 12, 0]. On average each unit is still worth 6: half the time 12, half the time 0."
+  hints:
+    - when: { equals: 6 }
+      say: "It is kept, but kept units are scaled by 1/(1 − p)."
+    - when: { equals: 3 }
+      say: "Divide by 1 − p, don’t multiply by p."
+    - when: { any: true }
+      say: ["Is the third unit kept or dropped? Look at the third mask value.", "Kept units are divided by 1 − p = 0.5."]
+
+dropout-code:
+  type: code
+  prompt: "Write an inverted dropout layer. When train is False, return h unchanged. When train is True, drop each unit whose random number u is below p, and divide the kept ones by 1 − p. Several lines."
+  template: |
+    def dropout(h, u, p, train):
+        # u: one random number between 0 and 1 per unit, already drawn
+        ____
+
+    h = np.array([2.0, 4.0, 6.0, 8.0])
+    u = np.array([0.9, 0.1, 0.7, 0.3])
+    print("training:", dropout(h, u, 0.5, True))
+    print("testing: ", dropout(h, u, 0.5, False))
+  solution: "if not train:\n        return h\n    keep = u >= p\n    return h * keep / (1 - p)"
+  tests:
+    - expr: "dropout(np.array([2.0, 4.0, 6.0, 8.0]), np.array([0.9, 0.1, 0.7, 0.3]), 0.5, True)"
+      expect: [4, 0, 12, 0]
+      say: "units 1 and 3 have u below 0.5, so they are dropped; the others are divided by 0.5"
+    - expr: "dropout(np.ones(3), np.array([0.5, 0.2, 0.1]), 0.25, True)"
+      expect: [1.3333333, 0, 0]
+      tol: 0.0001
+      say: "with p = 0.25, only the first unit stays on, and it is divided by 0.75"
+    - expr: "dropout(np.array([2.0, 4.0, 6.0, 8.0]), np.array([0.9, 0.1, 0.7, 0.3]), 0.5, False)"
+      expect: [2, 4, 6, 8]
+      say: "at test time nothing is dropped and nothing is scaled"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Indent your first line by 4 spaces, like ____. The line under an if gets 4 more spaces."
+    - when: { error: "is not defined" }
+      say: "Make the keep mask from u and p before you use it."
+    - when: { testFailed: 0 }
+      say: ["Did you get [0, 8, 0, 16]? Then you kept the wrong units. A unit is dropped when its u is below p.", "Two steps: set the dropped units to 0 with the keep mask, then divide the kept ones by 1 − p.", "In Python, / 1 - p is not the same as / (1 - p)."]
+    - when: { testFailed: 1 }
+      wrong: "if not train:\n        return h\n    keep = u >= 0.5\n    return h * keep / 0.5"
+      say: "Use p from the argument, not a fixed 0.5, both for the mask and for the division."
+    - when: { testFailed: 2 }
+      wrong: "keep = u >= p\n    return h * keep / (1 - p)"
+      say: ["When train is False the layer must not change h at all: no zeros and no scaling.", "Check train first with an if, and return h immediately when it is False."]
+    - when: { any: true }
+      say: ["Two cases: testing returns h as it is; training builds the keep mask, sets the dropped units to 0 and scales the kept ones.", "The keep mask is True where u is at least p. A kept unit is divided by the fraction of units that stay on."]
+  after: "Multiplying by the keep mask sets the dropped units to 0. Dividing by 1 − p keeps the average of each unit the same as without dropout, so at test time the layer can return h unchanged. Write the brackets: / 1 - p divides by 1 first."

@@ -1,0 +1,551 @@
+---
+import '../styles/global.css'
+import 'katex/dist/katex.min.css'
+import { allLevels, sectionName, RUN_NAME, type Level, BRANCH_NAME, PART_NAME, navItem } from '@lib/levels'
+import { AFTER_COURSE, neighbors, placement, tripsAfter, tripGroups, RECOMMENDED } from '@lib/nav'
+import { inlineMath } from '@lib/inlineMath'
+
+type Props = Level['data'] & { slug: string }
+import { smart } from '@lib/typo'
+import { settingsBootScript } from '@lib/settings'
+import Settings from '../components/Settings.svelte'
+import Share from '../components/Share.svelte'
+import Search from '../components/Search.svelte'
+import { loadGlossary } from '@lib/glossaryData'
+import { levelIndex, toJsonScript } from '@lib/score'
+import { loadExercises } from '@lib/quiz'
+import { defaultTestOut } from '@lib/testout'
+import TestOut from '../components/quiz/TestOut.astro'
+import Warmup from '../components/quiz/Warmup.astro'
+import Recap from '../components/text/Recap.astro'
+import SeoHead from '../components/SeoHead.astro'
+import { levelDescription, levelLabel, levelLd, breadcrumbLd } from '@lib/seo'
+const { level, run, checkpoint, slug } = Astro.props
+const title = smart(Astro.props.title)
+const question = smart(Astro.props.question)
+const boss = Astro.props.boss && smart(Astro.props.boss)
+
+const all = await allLevels()
+const i = all.findIndex((e) => e.id === slug)
+const here = all[i]
+// the path (lib/nav.ts): main levels walk the main line; a branch walks itself and its ends lead back to the main line
+const nav = all.map((e) => ({ ...e, ...navItem(e) }))
+const nb = neighbors(nav, slug)
+const prev = nb.prev, next = nb.next
+const isBranch = !!here?.data.branch
+const home = nb.home
+// side trips that open after this main level ("Side trips now open")
+const tripsHere = isBranch ? [] : tripsAfter(nav, slug)
+// the side trip this level points out (listed first, and a second link on the end card)
+const recTrip = tripsHere.find((t) => RECOMMENDED[t.id])
+// the last main level: its end card leads to the course map, then to the first of these side trips not yet cleared
+const isLast = !isBranch && !next
+const afterCourse = isLast ? AFTER_COURSE.map((id) => nav.find((e) => e.id === id)).filter((e) => !!e) : []
+// the meta line names the part a level sits in on the sidebar: a side trip sits under the main level it opens after
+const metaSection = isBranch && home ? `${PART_NAME[home.data.part]} · ${BRANCH_NAME[here.data.branch as keyof typeof BRANCH_NAME]}` : sectionName(here)
+// sidebar: each part with its main levels; each main level is followed by the side trips that open after it,
+// so the sidebar, the map and Prev/Next tell the same story
+const placed = placement(nav)
+const partKeys = [...new Set(placed.map((p) => p.main.data.part))]
+const groups = partKeys.map((part) => {
+  const rows = placed.filter((p) => p.main.data.part === part)
+  const ids = rows.flatMap((p) => [p.main.id, ...p.trips.flatMap((t) => t.levels.map((l) => l.id))])
+  const out = rows.map((p) => ({ main: p.main, trips: p.trips.map((t) => ({ name: BRANCH_NAME[t.branch as keyof typeof BRANCH_NAME], levels: t.levels })) }))
+  return { part, name: PART_NAME[part], rows: out, ids, here: ids.includes(slug) }
+})
+// the main level list as plain data, for the browser (branch pages send the learner back to where they came from)
+const mainData = placed.map((p) => ({ id: p.main.id, level: p.main.data.level, title: smart(p.main.data.short ?? p.main.data.title) }))
+const navLabel = (e: Level) => `${e.data.level}. ${smart(e.data.short ?? e.data.title)}`
+const index = await levelIndex()
+// glossarySkip: terms that mean something else on this page (e.g. “shape” = a drawn shape) are not underlined here
+const skip = new Set((Astro.props.glossarySkip ?? []).map((t: string) => t.toLowerCase()))
+// test-out: the frontmatter list, or the checkpoint plus up to two section-ending questions
+const types = Object.fromEntries(Object.entries(loadExercises(slug)).map(([id, ex]) => [id, ex.type]))
+const testOutIds = Astro.props.testOut ?? defaultTestOut(here?.body ?? '', types, checkpoint)
+const recap = Astro.props.recap
+const glossary = (await loadGlossary()).filter((t) => t.mark !== false && (!t.only || t.only.includes(slug)) && !skip.has(t.term.toLowerCase()) && !skip.has(t.id))
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title={`${level}. ${title} · LLM by Hand`} description={levelDescription(here)} type="article" image={`/og/${slug}.png`} imageAlt={`${levelLabel(here)}: ${title}`} markdown={`/learn/${slug}.md`}
+      jsonLd={[levelLd(here, i + 1), breadcrumbLd([['LLM by Hand', '/'], [`${level}. ${title}`, `/learn/${slug}/`]])]}
+      page={{ kind: 'level', slug, level, branch: here.data.branch, checkpoint, boss: !!boss }} />
+    <script is:inline set:html={settingsBootScript} />
+  </head>
+  <body>
+    <a class="skip-link" href="#lesson">Skip to the lesson</a>
+    <div class="shell">
+      <nav class="side">
+        <div class="side-top">
+          <h1><a href="/">LLM by Hand</a></h1>
+          <div class="side-tools">
+            <button type="button" class="nav-btn" aria-expanded="false" aria-controls="side-scroll">All levels</button>
+            <Search client:idle />
+            <Settings client:idle />
+          </div>
+        </div>
+        <div class="side-scroll" id="side-scroll">
+          {groups.map((g) => (
+            <details class="part" open={g.here} data-part-ids={g.ids.join(' ')}>
+              <summary>
+                <span class="p-name">{g.name}</span>
+                <span class="p-count" data-part-count>{g.ids.length} levels</span>
+                <span class="p-bar" aria-hidden="true"><i data-part-bar></i></span>
+              </summary>
+              <ol class="lvls">
+                {g.rows.map(({ main: e, trips }) => (
+                  <>
+                    <li>
+                      <a href={`/learn/${e.id}/`} class:list={[{ on: e.id === slug, 'is-boss-level': e.data.boss }]} data-level={e.id} aria-current={e.id === slug ? 'page' : undefined} title={e.data.boss ? 'Boss level: a bigger challenge' : undefined}>
+                        <span class="lv">{e.data.level}</span><span class="tt">{e.data.short ?? e.data.title}{e.data.boss && <span class="sr-only"> (boss level)</span>}</span>
+                      </a>
+                    </li>
+                    {trips.map((b) => b.levels.length === 1 ? (
+                      <li class="trip-row">
+                        <div class="trip-solo">
+                          <a href={`/learn/${b.levels[0].id}/`} class:list={[{ on: b.levels[0].id === slug, 'is-boss-level': b.levels[0].data.boss }]} data-level={b.levels[0].id} aria-current={b.levels[0].id === slug ? 'page' : undefined} title={`Side trip (${b.name}): opens after level ${e.data.level}`}>
+                            <span class="lv">{b.levels[0].data.level}</span><span class="tt">{b.levels[0].data.short ?? b.levels[0].data.title}</span><span class="b-after">after {e.data.level}</span>
+                          </a>
+                        </div>
+                      </li>
+                    ) : (
+                      <li class="trip-row">
+                        <details class="branch" open={b.levels.some((x) => x.id === slug)}>
+                          <summary title={`Side trip: opens after level ${e.data.level}`}><span>{b.name}</span><span class="b-after">after {e.data.level}</span></summary>
+                          <ol class="lvls">
+                            {b.levels.map((x) => (
+                              <li>
+                                <a href={`/learn/${x.id}/`} class:list={[{ on: x.id === slug, 'is-boss-level': x.data.boss }]} data-level={x.id} aria-current={x.id === slug ? 'page' : undefined} title={x.data.boss ? 'Boss level: a bigger challenge' : undefined}>
+                                  <span class="lv">{x.data.level}</span><span class="tt">{x.data.short ?? x.data.title}{x.data.boss && <span class="sr-only"> (boss level)</span>}</span>
+                                </a>
+                              </li>
+                            ))}
+                          </ol>
+                        </details>
+                      </li>
+                    ))}
+                  </>
+                ))}
+              </ol>
+            </details>
+          ))}
+        </div>
+        <div class="side-foot">
+          <a class="review-link" href="/review/">Mistakes<span class="miss-count" data-miss-count hidden></span></a>
+          <a class="review-link" href="/glossary/">Glossary</a>
+          <a class="review-link" href="/setup/">Run locally</a>
+        </div>
+      </nav>
+
+      <main id="lesson" tabindex="-1">
+        <div class="head">
+          <div class="meta-row">
+            <div class="meta">{[`Level ${level}`, metaSection, ...RUN_NAME[run].split(' · ')].map((t, k) => (<>{k > 0 && ' '}<span class="meta-seg">{k > 0 && '· '}{t}</span></>))}</div>
+            <Share client:idle slug={slug} level={level} title={title} question={question} />
+          </div>
+          <h1>{title}</h1>
+          <p class="question">{question}</p>
+          {isBranch && home && (
+            <p class="lvl-after">Side trip · best after <a href={`/learn/${home.id}/`}>level {home.data.level} · {smart(home.data.short ?? home.data.title)}</a></p>
+          )}
+        </div>
+
+        <TestOut slug={slug} ids={testOutIds} />
+        <Warmup slug={slug} />
+
+        {boss && (
+          <div class="boss">
+            <div class="boss-tag">Boss level</div>
+            <p set:html={inlineMath(boss)} />
+          </div>
+        )}
+
+        <slot />
+
+        {import.meta.env.DEV && (
+          <div class="debug-panel" aria-label="Debug switches (local only)">
+            <span class="debug-tag">local debug</span>
+            <label><input type="checkbox" data-debug="open" /> Show hidden content</label>
+            <label class="minor"><input type="checkbox" data-debug="answers" /> answers</label>
+          </div>
+        )}
+
+        {recap && <Recap recap={recap} />}
+
+        <!-- the end of the level: one card when it is cleared (stars, what next, share) -->
+        <section class="lvl-done" data-done hidden aria-label="Level result">
+          <div class="cleared" data-checkpoint={`${slug}/${checkpoint}`} hidden>✓ Level {level} cleared</div>
+          <div class="score" data-score={slug} hidden></div>
+          <div class="lvl-done-row">
+            {next && <a class="lvl-next" data-next href={`/learn/${next.id}/`}><span data-next-label>{nb.nextIsBack ? `Back to level ${next.data.level} · ${smart(next.data.short ?? next.data.title)}` : nb.nextIsContinue ? `Continue: level ${next.data.level} · ${smart(next.data.short ?? next.data.title)}` : `Next: level ${next.data.level} · ${smart(next.data.short ?? next.data.title)}`}</span> →</a>}
+            {isLast && <a class="lvl-next" href="/#map">Course map →</a>}
+            {afterCourse.map((t) => <a class="lvl-alt" data-after-course={t.id} hidden href={`/learn/${t.id}/`}>or side trip {t.data.level} · {smart(t.data.short ?? t.data.title)}</a>)}
+            {recTrip && <a class="lvl-alt" data-rec-trip={recTrip.id} href={`/learn/${recTrip.id}/`}>or side trip {recTrip.data.level} · {smart(recTrip.data.short ?? recTrip.data.title)}</a>}
+            <span class="share-cleared" data-checkpoint={`${slug}/${checkpoint}`} hidden>
+              <Share client:idle slug={slug} level={level} title={title} question={question} compact />
+            </span>
+          </div>
+        </section>
+
+        {tripsHere.length > 0 && (
+          <div class="lvl-trips">
+            <span class="lvl-trips-k">Side trips after this level</span>
+            <ul>
+              {tripGroups(nav, slug).map((g) => (
+                <li><span class="lvl-trips-b">{BRANCH_NAME[g.branch as keyof typeof BRANCH_NAME]}</span>{g.levels.map((t, k) => (<>{k > 0 && <span class="lvl-trips-sep" aria-hidden="true"> · </span>}<a href={`/learn/${t.id}/`}><span class="lvl-trips-n">{t.data.level}</span> {smart(t.data.short ?? t.data.title)}{t.data.boss && ' (boss)'}</a>{RECOMMENDED[t.id] && <span class="lvl-trips-d"><span class="lvl-trips-c">: </span>{RECOMMENDED[t.id]}</span>}</>))}</li>
+              ))}
+            </ul>
+            <span class="lvl-trips-note">Optional; the next level does not need them.</span>
+          </div>
+        )}
+
+        <div class="foot">
+          <span>{prev && <a data-nav="prev" data-prev href={`/learn/${prev.id}/`}>‹ <span data-prev-label>{nb.prevIsBack ? `Back to level ${prev.data.level} · ${smart(prev.data.short ?? prev.data.title)}` : navLabel(prev)}</span></a>}</span>
+          <span>{next && <a data-nav="next" data-next href={`/learn/${next.id}/`}><span data-next-label>{nb.nextIsBack ? `Back to level ${next.data.level} · ${smart(next.data.short ?? next.data.title)}` : nb.nextIsContinue ? `Continue: level ${next.data.level} · ${smart(next.data.short ?? next.data.title)}` : navLabel(next)}</span> ›</a>}{isLast && <a data-nav="next" href="/#map">Course map ›</a>}</span>
+        </div>
+        <p class="kbd-hint">Press <kbd>?</kbd> for keyboard shortcuts</p>
+      </main>
+    </div>
+
+    <div class="reading-pill" role="status">
+      <span><b>Reading mode</b><span class="rp-note"> · every part open, no stars</span></span>
+      <button type="button" data-reading-off>Turn off</button>
+    </div>
+
+    <div class="shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" hidden>
+      <div class="shortcuts-box">
+        <h2>Keyboard shortcuts</h2>
+        <dl>
+          <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous / next level</dd>
+          <dt><kbd>N</kbd></dt><dd>Jump to the next question you haven’t solved</dd>
+          <dt><kbd>Enter</kbd></dt><dd>Check your answer (in a box)</dd>
+          <dt><kbd>/</kbd></dt><dd>Search the course</dd>
+          <dt><kbd>?</kbd></dt><dd>Show or hide this list</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Close</dd>
+        </dl>
+        <button type="button" data-close-shortcuts>Close</button>
+      </div>
+    </div>
+
+    <script type="application/json" id="level-index" set:html={toJsonScript(index)} />
+    <script type="application/json" id="nav-data" set:html={toJsonScript({ mains: mainData, here: slug, branch: isBranch, home: home?.id, prevIsBack: nb.prevIsBack, nextIsBack: nb.nextIsBack, nextIsContinue: nb.nextIsContinue, nextOpensAfter: nb.nextOpensAfter?.id, branchPrev: nb.branchPrev && { id: nb.branchPrev.id, label: navLabel(nb.branchPrev) } })} />
+    <script type="application/json" id="glossary-data" set:html={toJsonScript(glossary)} />
+
+    <script>
+      // Glossary: underline the first use of each term in the lesson prose; hover, focus or tap shows a card.
+      import { firstUses, type TermInfo } from '@lib/glossary'
+      const terms: TermInfo[] = JSON.parse(document.getElementById('glossary-data')?.textContent || '[]')
+      const SKIP = 'h1,h2,h3,h4,h5,h6,code,pre,kbd,.katex,astro-island,a,button,summary,label,input,textarea,.head,.boss,.debug-panel,.gate > .locked,.lvl-done,.lvl-trips,.foot,.kbd-hint,.gl-term,svg,.testout,.warmup,.recap'
+      const main = document.querySelector('main')
+      if (main && terms.length) {
+        const nodes: Text[] = []
+        const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, {
+          acceptNode(n) {
+            const el = n.parentElement
+            if (!el || !n.textContent?.trim()) return NodeFilter.FILTER_REJECT
+            if (!el.closest('p, li, td, dd')) return NodeFilter.FILTER_REJECT
+            if (el.closest(SKIP)) return NodeFilter.FILTER_REJECT
+            return NodeFilter.FILTER_ACCEPT
+          },
+        })
+        while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+        // at most one underlined term per sentence (adjacent underlines read as one long, confusing link)
+        const texts = nodes.map((n) => n.textContent ?? '')
+        const sentenceOf = (chunk: number, at: number) => `${chunk}:${(texts[chunk].slice(0, at).match(/[.!?](\s|$)/g) ?? []).length}`
+        const seenSentence = new Set<string>()
+        const hits = firstUses(texts, terms)
+          .sort((a, b) => a.chunk - b.chunk || a.start - b.start)
+          .filter((h) => {
+            const k = sentenceOf(h.chunk, h.start)
+            if (seenSentence.has(k)) return false
+            seenSentence.add(k)
+            return true
+          })
+        // wrap from the end of each node backward so earlier offsets stay valid
+        hits.sort((a, b) => a.chunk - b.chunk || b.start - a.start)
+        for (const h of hits) {
+          const node = nodes[h.chunk]
+          const t = terms[h.term]
+          const mid = node.splitText(h.start)
+          mid.splitText(h.end - h.start)
+          const span = document.createElement('span')
+          span.className = 'gl-term'
+          span.tabIndex = 0
+          span.dataset.term = String(h.term)
+          span.setAttribute('aria-describedby', 'gl-card')
+          mid.replaceWith(span)
+          span.append(mid)
+          void t
+        }
+
+        const card = document.createElement('div')
+        card.id = 'gl-card'
+        card.className = 'gl-card'
+        card.setAttribute('role', 'tooltip')
+        card.hidden = true
+        document.body.append(card)
+        let current: HTMLElement | null = null
+        let pinned = false
+        const here = location.pathname.split('/').filter(Boolean).pop()
+        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        function show(el: HTMLElement) {
+          const t = terms[Number(el.dataset.term)]
+          if (!t) return
+          current = el
+          const where = t.level === here
+            ? `<span class="gl-where">Taught here, in level ${esc(t.levelNum)}</span>`
+            : `<a class="gl-where" href="/learn/${t.level}/">Taught in level ${esc(t.levelNum)}: ${esc(t.levelTitle)} →</a>`
+          card.innerHTML = `<button type="button" class="gl-x" aria-label="Close">×</button><b>${esc(t.term)}</b><p>${esc(t.def)}</p>${where}<a class="gl-all" href="/glossary/#${t.id}">All terms</a>`
+          card.querySelector<HTMLButtonElement>('.gl-x')!.addEventListener('click', () => { pinned = false; hide(); el.focus() })
+          card.hidden = false
+          const r = el.getBoundingClientRect()
+          const w = Math.min(320, window.innerWidth - 24)
+          card.style.width = w + 'px'
+          const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2))
+          card.style.left = left + scrollX + 'px'
+          // the arrow points at the term, even when the card is pushed sideways by the screen edge
+          card.style.setProperty('--ax', `${Math.max(14, Math.min(w - 14, r.left + r.width / 2 - left))}px`)
+          const h = card.offsetHeight
+          const roomBelow = window.innerHeight - r.bottom - 12
+          const above = h > roomBelow && r.top - 12 > roomBelow
+          card.classList.toggle('above', above)
+          card.style.top = (above ? r.top - h - 10 : r.bottom + 10) + scrollY + 'px'
+        }
+        function hide() {
+          if (pinned) return
+          card.hidden = true
+          current = null
+        }
+        let hideTimer = 0
+        const later = () => { hideTimer = window.setTimeout(hide, 180) }
+        const keep = () => window.clearTimeout(hideTimer)
+        document.querySelectorAll<HTMLElement>('.gl-term').forEach((el) => {
+          el.addEventListener('mouseenter', () => { keep(); if (!pinned) show(el) })
+          el.addEventListener('mouseleave', later)
+          el.addEventListener('focus', () => { keep(); show(el) })
+          el.addEventListener('blur', () => { if (!card.contains(document.activeElement)) later() })
+          el.addEventListener('click', (e) => {
+            e.preventDefault()
+            if (pinned && current === el) { pinned = false; hide(); return }
+            pinned = true
+            show(el)
+          })
+          el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pinned = true; show(el) }
+            if (e.key === 'Escape') { pinned = false; hide() }
+          })
+        })
+        card.addEventListener('mouseenter', keep)
+        card.addEventListener('mouseleave', later)
+        document.addEventListener('pointerdown', (e) => {
+          const t = e.target as HTMLElement
+          if (!card.hidden && !card.contains(t) && !t.closest('.gl-term')) { pinned = false; hide() }
+        })
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !card.hidden) { pinned = false; hide(); current?.focus() } })
+      }
+    </script>
+
+    <script>
+      import { debugOn, readingMode, setDebug, setReadingMode, subscribe } from '@lib/progress'
+      import { endCardText, markLevels, mistakeCount, readLevelIndex, scoreOf, starText } from '@lib/marks'
+      import { cameFromOutsideLevels, stepTrip, type Trip } from '@lib/nav'
+      // local debug switches (only rendered by the dev server)
+      document.querySelectorAll<HTMLInputElement>('[data-debug]').forEach((box) => {
+        const flag = box.dataset.debug as 'open' | 'answers'
+        box.checked = debugOn(flag)
+        box.addEventListener('change', () => setDebug(flag, box.checked))
+      })
+      // the path: remember the last main level, so a side trip can lead back to it
+      const navData = JSON.parse(document.getElementById('nav-data')!.textContent!) as {
+        mains: { id: string; level: string; title: string }[]; here: string; branch: boolean; home?: string
+        prevIsBack?: boolean; nextIsBack?: boolean; nextIsContinue?: boolean; nextOpensAfter?: string
+        branchPrev?: { id: string; label: string }
+      }
+      // the build-time Prev/Next links, so the path can be worked out again when the page comes back from the back/forward cache
+      const navLinks = [...document.querySelectorAll<HTMLAnchorElement>('a[data-prev], a[data-next]')].map((a) => {
+        const t = a.querySelector<HTMLElement>('[data-prev-label], [data-next-label]')
+        return { a, href: a.getAttribute('href')!, t, label: t?.textContent ?? '' }
+      })
+      function applyPath(restored: boolean) {
+        for (const l of navLinks) { l.a.setAttribute('href', l.href); if (l.t) l.t.textContent = l.label }
+        // the trip: the side-trip levels visited since the last main level, in this tab, and the main level it started
+        // from (lib/nav.ts, "Prev is the reverse of Next", and stepTrip)
+        let trip: Trip | null = null
+        let lastMain: string | null = null
+        try { lastMain = localStorage.getItem('llmbh-from') } catch { /* storage blocked */ }
+        try {
+          // a page restored by Back/Forward keeps its first referrer: only a fresh load may start the trip over
+          const fresh = !restored && cameFromOutsideLevels(document.referrer, location.origin)
+          trip = stepTrip(sessionStorage.getItem('llmbh-trip'), navData.here, navData.branch, lastMain, navData.home, fresh)
+          if (trip) sessionStorage.setItem('llmbh-trip', JSON.stringify(trip))
+          else sessionStorage.removeItem('llmbh-trip')
+        } catch { trip = navData.branch ? { from: lastMain ?? navData.home, levels: [navData.here] } : null }
+        try { if (!navData.branch) localStorage.setItem('llmbh-from', navData.here) } catch { /* storage blocked */ }
+        if (!navData.branch || !trip) return
+        const tripFrom = trip.from, walked = trip.levels
+        const mains = navData.mains
+        const from = mains.find((m) => m.id === tripFrom) ?? mains.find((m) => m.id === navData.home)
+        const at = (id?: string) => mains.findIndex((m) => m.id === id)
+        if (!from) return
+        const point = (sel: string, labelSel: string, to = from, label = `Back to level ${from.level} · ${from.title}`) =>
+          document.querySelectorAll<HTMLAnchorElement>(sel).forEach((a) => {
+            a.href = to.id ? `/learn/${to.id}/` : '/#map'
+            const t = a.querySelector<HTMLElement>(labelSel)
+            if (t) t.textContent = label
+          })
+        // Prev: the side-trip level before, if this trip came through it; otherwise back to the level you came from
+        const bp = navData.branchPrev
+        if (navData.prevIsBack && bp && walked.includes(bp.id)) point('a[data-prev]', '[data-prev-label]', { id: bp.id, level: '', title: '' }, bp.label)
+        else if (navData.prevIsBack) point('a[data-prev]', '[data-prev-label]')
+        // the last side-trip level: continue the main line after the level you came from (Prev already leads back to it)
+        // ... and also when the next side-trip level needs a main level you have not reached yet
+        const after = mains[at(from.id) + 1]
+        if (navData.nextIsContinue || navData.nextIsBack || at(navData.nextOpensAfter) > at(from.id)) {
+          // after the last main level there is nothing to continue, and Prev already leads back: Next is the map
+          if (after) point('a[data-next]', '[data-next-label]', after, `Continue: level ${after.level} · ${after.title}`)
+          else point('a[data-next]', '[data-next-label]', { id: '', level: '', title: '' }, 'Course map')
+        }
+      }
+      applyPath(false)
+      // Back/Forward may show this page from the browser's cache without running this script again: work the path out again
+      addEventListener('pageshow', (e) => { if (e.persisted) applyPath(true) })
+      // reading mode indicator: "Turn off"
+      document.querySelector<HTMLButtonElement>('[data-reading-off]')!.addEventListener('click', () => setReadingMode(false))
+      // phone: the level list is folded behind a button
+      const btn = document.querySelector<HTMLButtonElement>('.nav-btn')!
+      const side = document.querySelector<HTMLElement>('nav.side')!
+      const setDrawer = (open: boolean) => {
+        side.classList.toggle('open', open)
+        btn.setAttribute('aria-expanded', String(open))
+        // open: focus moves to the current level; closed: back to the button
+        if (open) { const cur = side.querySelector<HTMLElement>('a.on'); cur?.scrollIntoView({ block: 'nearest' }); cur?.focus() }
+        else btn.focus()
+      }
+      btn.addEventListener('click', () => setDrawer(!side.classList.contains('open')))
+      side.addEventListener('keydown', (e) => { if (e.key === 'Escape' && side.classList.contains('open')) { e.stopPropagation(); setDrawer(false) } })
+      // keep the current level in view inside the sidebar's own scroll area
+      document.querySelector<HTMLElement>('nav.side a.on')?.scrollIntoView({ block: 'center' })
+      function sync() {
+        // sidebar: stars per cleared level
+        markLevels(document.querySelector('nav.side')!)
+        // part headers: cleared count and a thin progress bar
+        document.querySelectorAll<HTMLElement>('details.part[data-part-ids]').forEach((d) => {
+          const ids = d.dataset.partIds!.split(' ')
+          const done = d.querySelectorAll('a[data-level].done').length
+          d.querySelector('[data-part-count]')!.textContent = `${done} / ${ids.length}`
+          d.querySelector<HTMLElement>('[data-part-bar]')!.style.width = `${(100 * done) / ids.length}%`
+        })
+        // this level: the "cleared" box and its score
+        const box = document.querySelector<HTMLElement>('[data-score]')!
+        const sc = scoreOf(box.dataset.score!)
+        // cleared by its checkpoint or by a test-out
+        document.querySelectorAll<HTMLElement>('.cleared[data-checkpoint], .share-cleared[data-checkpoint]').forEach((el) => (el.hidden = !sc?.cleared))
+        // the end card's side-trip link goes once that side trip is cleared
+        document.querySelectorAll<HTMLElement>('[data-rec-trip]').forEach((el) => (el.hidden = !!scoreOf(el.dataset.recTrip!)?.cleared))
+        // the last main level: only the first side trip not yet cleared (none when both are)
+        let offered = false
+        document.querySelectorAll<HTMLElement>('[data-after-course]').forEach((el) => {
+          el.hidden = offered || !!scoreOf(el.dataset.afterCourse!)?.cleared
+          if (!el.hidden) offered = true
+        })
+        const reading = readingMode()
+        // checkpoint solved but a mustSolve boss part still open: the card says which part is missing
+        const waiting = !!sc && !sc.cleared && sc.checkpointDone && sc.missing.length > 0
+        box.hidden = !sc?.cleared && !waiting && !reading
+        // the end card shows once the level is cleared (or in reading mode, where it says why there are no stars)
+        document.querySelector<HTMLElement>('[data-done]')!.hidden = !sc?.cleared && !waiting && !reading
+        // the recap opens by itself when the level is cleared (before that it waits, folded)
+        const rc = document.querySelector<HTMLDetailsElement>('details.recap')
+        if (rc && (sc?.cleared || reading || debugOn('open')) && !rc.dataset.auto) { rc.dataset.auto = '1'; rc.open = true }
+        if (reading) {
+          delete box.dataset.grade
+          box.innerHTML = `<span class="note">Reading mode is on. Turn it off to earn stars.</span>`
+        } else if (sc?.cleared || waiting) {
+          const t = endCardText(sc!, readLevelIndex()[box.dataset.score!]?.mustWhere)
+          t.note = t.note.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          const nums = t.nums.replace(/: (\d+)/g, ': <b>$1</b>')
+          if (waiting) {
+            delete box.dataset.grade
+            box.innerHTML = `<span class="note">${t.note}</span><span class="nums">${nums}</span>`
+          } else {
+            box.dataset.grade = String(sc!.stars)
+            box.innerHTML = `<span class="stars" aria-label="${sc!.stars} of 3 stars">${starText(sc!.stars)}</span>
+            <span class="note">${t.note}</span>
+            <span class="nums">${nums}</span>`
+          }
+        }
+        // mistakes link
+        const n = mistakeCount()
+        const c = document.querySelector<HTMLElement>('[data-miss-count]')!
+        c.hidden = n === 0
+        c.textContent = String(n)
+      }
+      subscribe(sync)
+      sync()
+
+      // prose tables that scroll sideways (phones): fade the right edge while there is more to see
+      const wideTables = document.querySelectorAll<HTMLElement>('main > table, .gate > .content > table, details .body > table')
+      const fadeTable = (t: HTMLElement) => {
+        t.classList.toggle('t-scrolls', t.scrollWidth > t.clientWidth + 1)
+        t.classList.toggle('t-at-end', t.scrollLeft + t.clientWidth >= t.scrollWidth - 2)
+      }
+      wideTables.forEach((t) => { fadeTable(t); t.addEventListener('scroll', () => fadeTable(t), { passive: true }) })
+      // tables inside a gate or a fold get their width when they open
+      const ro = new ResizeObserver((es) => es.forEach((e) => fadeTable(e.target as HTMLElement)))
+      wideTables.forEach((t) => ro.observe(t))
+
+      // keyboard shortcuts (not while typing; "/" is left free for search)
+      const overlay = document.querySelector<HTMLElement>('.shortcuts')!
+      const toggleHelp = (show = overlay.hidden) => {
+        overlay.hidden = !show
+        if (show) overlay.querySelector<HTMLElement>('[data-close-shortcuts]')!.focus()
+      }
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || (e.target instanceof Element && e.target.closest('[data-close-shortcuts]'))) toggleHelp(false)
+      })
+      function nextUnsolved(): HTMLElement | null {
+        const all = [...document.querySelectorAll<HTMLElement>('main .blank:not(.done), main .code:not(.done), main .predict:not(.revealed)')]
+        // the warm-up and the test-out panel are optional; N walks the lesson itself
+        return all.find((el) => !el.closest('.gate.is-locked > .content, .warmup, .testout')) ?? null
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return
+        const t = e.target
+        if (t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]')) return
+        if (e.key === 'Escape' && !overlay.hidden) return toggleHelp(false)
+        if (e.key === '?') { e.preventDefault(); return toggleHelp() }
+        if (!overlay.hidden) return
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          const a = document.querySelector<HTMLAnchorElement>(`[data-nav="${e.key === 'ArrowLeft' ? 'prev' : 'next'}"]`)
+          if (a) location.href = a.href
+          return
+        }
+        if (e.key === 'n' || e.key === 'N') {
+          const q = nextUnsolved()
+          if (!q) return
+          e.preventDefault()
+          q.scrollIntoView({ behavior: document.documentElement.dataset.motion === 'reduce' ? 'auto' : 'smooth', block: 'center' })
+          q.querySelector<HTMLElement>('input:not([disabled]), textarea, button:not([disabled])')?.focus({ preventScroll: true })
+        }
+      })
+    </script>
+  </body>
+</html>
+
+<style>
+  /* the end card's second link: a recommended side trip, quieter than Next */
+  .lvl-alt { display: inline-flex; align-items: center; min-height: 2.5rem; color: var(--fg); font-size: 0.9rem;
+    text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  .lvl-alt:hover { text-decoration-color: currentColor; }
+  /* half a line on what a recommended side trip is */
+  .lvl-trips-d { color: var(--dim); }
+  /* phone: the note is its own grey line under the link, so no line starts with ":" */
+  @media (max-width: 560px) { .lvl-trips-d { display: block; font-size: 0.82rem; } .lvl-trips-c { display: none; } }
+  .lvl-alt[hidden] { display: none; }
+  /* a prose table wider than the screen: the right edge fades until it is scrolled to the end */
+  :global(table.t-scrolls:not(.t-at-end)) { mask-image: linear-gradient(to right, #000 85%, transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); }
+</style>

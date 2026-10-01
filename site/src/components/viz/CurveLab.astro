@@ -1,0 +1,6 @@
+---
+import Lab from './CurveLab.svelte'
+interface Props { dropout?: boolean }
+const { dropout = false } = Astro.props
+---
+<Lab client:visible dropout={dropout} />

@@ -1,0 +1,138 @@
+---
+/**
+ * The content opens once the `requires` exercise is answered.
+ * While locked, the reader still sees what is coming: the section headings in the lock bar,
+ * and a blurred, non-interactive peek of the first lines. Stuck readers can "Skip for now".
+ * Only the first locked gate shows all that; later locked gates fold into its "Then N more parts" line.
+ */
+interface Props { requires: string }
+const { requires } = Astro.props
+---
+<div class="gate is-locked" data-gate={requires}>
+  <div class="locked">
+    <div class="msg">
+      <span class="why">🔒 <span data-why>Answer the question above to unlock</span></span>
+      <span class="next" data-next></span>
+      <span class="more" data-more hidden></span>
+    </div>
+    <button type="button" data-gate-skip>Skip for now</button>
+  </div>
+  <div class="content" inert><slot /></div>
+</div>
+
+<script>
+  import { has, recordSkip, subscribe } from '@lib/progress'
+  import { reducedMotion } from '@lib/settings'
+
+  const gates = [...document.querySelectorAll<HTMLElement>('.gate[data-gate]')]
+
+  // a short name for each gate: its own headings, or else what it holds, or else the start of its first question
+  const names = new Map<HTMLElement, string>() // headings only (used in the 'more parts' summary)
+  for (const g of gates) {
+    const content = g.querySelector<HTMLElement>(':scope > .content')!
+    const heads = [...content.querySelectorAll('h2, h3')]
+      .filter((h) => h.closest('.gate') === g) // skip headings that belong to a nested gate
+      .map((h) => h.textContent!.trim())
+    names.set(g, heads.join(' · '))
+    let name = heads.join(' · ')
+    if (!name) {
+      // no heading: name it by what is inside ("Hidden layer lab + 1 question"), never by a cut-off formula
+      const own = (sel: string) => [...content.querySelectorAll<HTMLElement>(sel)].filter((el) => el.closest('.gate') === g)
+      const qs = own('.blank, .code, .predict').length
+      const lab = own('.lf-title')[0]?.textContent?.trim()
+      name = [lab, qs ? (qs === 1 ? '1 question' : `${qs} questions`) : ''].filter(Boolean).join(' + ')
+    }
+    if (!name) {
+      const q = content.querySelector('.prompt')?.textContent?.trim().replace(/^(Fill in|Number|Shape|Code|Choose|Predict first)\s*/, '') ?? ''
+      name = q ? q.split(/\s+/).slice(0, 7).join(' ') + (q.split(/\s+/).length > 7 ? '…' : '') : ''
+    }
+    g.querySelector<HTMLElement>('[data-next]')!.textContent = name
+  }
+
+  const wasOpen = new Map<HTMLElement, boolean>()
+  let first = true
+  function sync() {
+    // Only the first locked gate shows its bar, preview and Skip. All later locked gates fold into one
+    // summary line under it (no Skip: skipping out of order would scramble the page).
+    const isOpen = (g: HTMLElement) => g.dataset.skipped === '1' || has(g.dataset.gate!)
+    const insideLocked = (g: HTMLElement) => {
+      for (let p = g.parentElement?.closest<HTMLElement>('.gate'); p; p = p.parentElement?.closest<HTMLElement>('.gate'))
+        if (!isOpen(p)) return true
+      return false
+    }
+    let lead: HTMLElement | null = null
+    const rest: HTMLElement[] = []
+    for (const g of gates) {
+      const open = isOpen(g)
+      g.classList.toggle('is-locked', !open)
+      g.querySelector<HTMLElement>(':scope > .content')!.inert = !open
+      g.querySelector<HTMLElement>(':scope > .locked')!.hidden = open
+      g.classList.remove('lead', 'folded')
+      if (!open && !insideLocked(g)) {
+        if (!lead) lead = g
+        else rest.push(g)
+      }
+      // a short, visible sign that something just opened
+      if (!first && open && wasOpen.get(g) === false && !reducedMotion()) {
+        g.classList.add('just-opened')
+        setTimeout(() => g.classList.remove('just-opened'), 1600)
+      }
+      wasOpen.set(g, open)
+    }
+    if (lead) {
+      lead.classList.add('lead')
+      const more = lead.querySelector<HTMLElement>('[data-more]')!
+      const list = rest.map((g) => names.get(g)).filter(Boolean)
+      more.hidden = rest.length === 0
+      more.textContent = rest.length ? `Then ${rest.length} more ${rest.length === 1 ? 'part' : 'parts'}${list.length ? ': ' + list.join(' · ') : ''}` : ''
+    }
+    rest.forEach((g) => g.classList.add('folded'))
+    first = false
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-gate-skip]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const g = b.closest<HTMLElement>('.gate')!
+      g.dataset.skipped = '1'
+      recordSkip(g.dataset.gate!) // counts against the level's stars until that question is solved
+      sync()
+    }),
+  )
+
+  subscribe(sync)
+  sync()
+</script>
+
+<style>
+  .gate { margin: 1.2rem 0; }
+  [hidden] { display: none !important; }
+  .locked {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    border: 1px dashed var(--line); border-radius: 6px;
+    padding: 0.7rem 1rem; font-size: 0.9rem;
+  }
+  .msg { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+  .why { color: var(--dim); }
+  .next { color: var(--fg); font-weight: 600; }
+  .next:empty { display: none; }
+  .locked button {
+    flex: none; font: inherit; font-size: 0.82rem; padding: 0.2rem 0.6rem;
+    border: 1px solid var(--line); border-radius: 4px;
+    background: transparent; color: var(--dim); cursor: pointer;
+  }
+  /* the peek: a few blurred lines, fading out, not clickable */
+  .gate.is-locked > .content {
+    max-height: 7.5rem; overflow: hidden; margin-top: 0.4rem;
+    filter: blur(3px); opacity: 0.5; user-select: none; pointer-events: none;
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+  }
+  .more { color: var(--dim); font-size: 0.82rem; }
+  /* later locked parts are folded into the lead gate's "Then N more parts" line */
+  .gate.folded { display: none; }
+  .locked button:hover, .locked button:focus-visible { color: var(--fg); border-color: var(--fg); }
+  @media (max-width: 760px) { .locked { flex-direction: column; align-items: stretch; } .locked button { min-height: 40px; } }
+  /* a part that just opened: its left edge glows briefly */
+  .gate.just-opened > .content { box-shadow: -3px 0 0 var(--accent); animation: opened 1.6s ease-out forwards; }
+  @keyframes opened { from { box-shadow: -3px 0 0 var(--accent); } to { box-shadow: -3px 0 0 transparent; } }
+</style>

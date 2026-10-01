@@ -1,0 +1,9 @@
+---
+import Lab from './ArchLab.svelte'
+interface Props {
+  which: 'backprop' | 'mlp' | 'conv' | 'rnn' | 'seq2seq' | 'autoencoder' | 'encdec' | 'full'
+  hide?: { params?: string[] }
+}
+const { which, hide } = Astro.props
+---
+<Lab client:visible which={which} hide={hide} />

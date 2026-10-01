@@ -1,0 +1,6 @@
+---
+import Lab from './AttentionLab.svelte'
+interface Props { hide?: { score?: string; outX?: string; unscaledSelf?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

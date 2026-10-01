@@ -1,0 +1,246 @@
+conv-00:
+  type: number
+  prompt: "The picture is 5×5 with 1s in column 2 and 0s everywhere else. The filter is [[−1, 0, 1], [−1, 0, 1], [−1, 0, 1]]. What is out[0][0], the output for the top-left 3×3 window?"
+  answer: 3
+  tol: 0
+  after: "The window covers columns 0–2. Column 2 holds the three 1s, and the filter’s right column is +1: 1×1 + 1×1 + 1×1 = 3. All the other products are 0."
+  hints:
+    - when: { equals: -3 }
+      say: "Right size, wrong sign. The 1s sit in the window’s right column, and the filter’s right column is +1."
+    - when: { equals: 0 }
+      say: "The top-left window covers columns 0, 1 and 2, so it does include the stroke in column 2."
+    - when: { equals: 1 }
+      say: "That counts one row. The window is 3 rows tall, and each row adds 1×1."
+    - when: { any: true }
+      say: ["Lay the 3×3 filter on rows 0–2, columns 0–2.", "Multiply each pixel by the filter number on top of it and add the 9 products. Only column 2 has 1s."]
+
+conv-shift:
+  type: number
+  prompt: "The picture is 5×5 with 1s in column 1 and 0s everywhere else. The filter is [[−1, 0, 1], [−1, 0, 1], [−1, 0, 1]], no padding, stride 1. What is out[0][1]?"
+  answer: -3
+  tol: 0
+  after: "The window for out[0][1] covers columns 1–3. The stroke is in its left column, where the filter is −1: three times 1×(−1) = −3."
+  hints:
+    - when: { equals: 3 }
+      say: "The window for out[0][1] starts at column 1, so the stroke is in its left column. What is the filter there?"
+    - when: { equals: 0 }
+      say: "out[0][1] reads columns 1, 2 and 3. Column 1 holds the stroke."
+    - when: { any: true }
+      say: ["Output column j reads picture columns j, j+1 and j+2.", "Find where the 1s land inside that window, and what the filter is there."]
+
+h-edge:
+  type: predict
+  prompt: "A 5×5 picture has 1s in column 2 and 0s everywhere else. With the horizontal-edge filter [[−1, −1, −1], [0, 0, 0], [1, 1, 1]], no padding and stride 1, what does the 3×3 output look like?"
+  options: ["The same as before: 3, 0, −3 in every row", "All zeros", "3, 0, −3 down every column"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "This filter compares rows, not columns. Down a vertical stroke, is the row below any different from the row above?"
+    - when: { equals: 2 }
+      say: "For a number to appear, the row below must differ from the row above. Does it, anywhere along a vertical stroke?"
+  reveal: "All zeros. This filter compares the row below with the row above. Down a vertical stroke, every row looks the same, so the difference is always 0. A filter only answers its own question."
+
+size-24:
+  type: number
+  prompt: "A 28×28 picture, a 5×5 filter, no padding, stride 1. How many pixels wide is the output?"
+  answer: 24
+  tol: 0
+  after: "(28 − 5 + 0) / 1 + 1 = 24. The filter needs 5 pixels of space, so it can start at 24 positions."
+  hints:
+    - when: { equals: 23 }
+      say: "Don’t forget the + 1: the first position counts too."
+    - when: { equals: 26 }
+      say: "26 is for a 3×3 filter. This one is 5×5."
+    - when: { any: true }
+      say: ["Use the output-size formula ⌊(n − k + 2p) / s⌋ + 1.", "n = 28, k = 5, p = 0, s = 1. The first part is 28 − 5 = 23."]
+
+size-32:
+  type: number
+  prompt: "A 32×32 picture, a 3×3 filter, padding 1, stride 2. How many pixels wide is the output?"
+  answer: 16
+  tol: 0
+  after: "⌊(32 − 3 + 2) / 2⌋ + 1 = ⌊15.5⌋ + 1 = 16. Padding 1 keeps the size, and stride 2 halves it."
+  hints:
+    - when: { equals: 15 }
+      say: "Close. ⌊31 / 2⌋ = 15, then add 1."
+    - when: { equals: 32 }
+      say: "That would be stride 1. Stride 2 moves two pixels each step."
+    - when: { equals: 17 }
+      say: "Round down before adding 1: ⌊15.5⌋ = 15."
+    - when: { any: true }
+      say: ["Use the output-size formula with n = 32, k = 3, p = 1, s = 2.", "Compute 32 − 3 + 2 first, then divide by 2 and round down. Then add 1."]
+
+dense-weights:
+  type: number
+  prompt: "A 6×6 picture and a 3×3 filter give a 4×4 output. A dense layer that makes the same 4×4 output connects every one of the 36 pixels to every one of the 16 output cells. How many weights does it have (no biases)?"
+  answer: 576
+  tol: 0
+  after: "36 × 16 = 576 weights, one per (pixel, output cell) pair. The 3×3 filter makes the same-sized output with 9."
+  hints:
+    - when: { equals: 36 }
+      say: "That is the number of inputs. Each one connects to every output cell."
+    - when: { equals: 16 }
+      say: "That is the number of output cells. Each one connects to every pixel."
+    - when: { equals: 52 }
+      say: "You added. Every pixel connects to every output cell: that is a product."
+    - when: { equals: 9 }
+      say: "That is the filter. The dense layer gives every (pixel, output cell) pair its own weight."
+    - when: { any: true }
+      say: ["How many pixels, and how many output cells? Every pair gets one weight.", "36 pixels, 16 output cells: multiply them."]
+
+cnn-vs-mlp:
+  type: predict
+  prompt: "Two networks train on 60,000 handwritten digits for the same 1,500 steps. A convolutional network has 5,258 weights. An MLP has 50,890. Which scores higher on 10,000 digits it has never seen?"
+  options: ["The MLP: ten times more weights", "The convolutional network", "About the same"]
+  reveal: "The convolutional network: 98.0% against the MLP’s 96.2%, with a tenth of the weights. Sharing one filter across the picture is a good guess about pictures, so fewer weights are enough. demo.py prints both numbers."
+
+ch-params:
+  type: number
+  prompt: "A 3×3 convolution layer reads 8 input channels and makes 16 output channels. How many numbers does it learn, weights plus biases?"
+  answer: 1168
+  tol: 0
+  after: "3 · 3 · 8 · 16 = 1,152 weights, plus 16 biases = 1,168. Each of the 16 filters is 8×3×3 = 72 weights."
+  hints:
+    - when: { equals: 1152 }
+      say: "Those are the weights. Each of the 16 filters also has one bias."
+    - when: { equals: 144 }
+      say: "That is one filter per output channel with only one input channel. Each filter reads all 8 input channels."
+    - when: { equals: 160 }
+      say: "Each filter is 8×3×3, not 3×3: it has one 3×3 slice for every input channel."
+    - when: { equals: 72 }
+      say: "That is one filter. The layer has 16 of them, each with a bias."
+    - when: { any: true }
+      say: ["Weights first: k · k · Cᵢₙ · Cₒᵤₜ. Then add one bias per output channel.", "The weights are 3 · 3 · 8 · 16 = 1,152. How many biases?"]
+
+rf-2:
+  type: number
+  prompt: "Two 3×3 layers are stacked, stride 1, no pooling. One output pixel of the second layer depends on a square patch of the picture. How many pixels wide is that patch?"
+  answer: 5
+  tol: 0
+  after: "The second layer reads a 3×3 block of first-layer outputs. Their windows overlap and together cover 5×5 pixels. Each extra 3×3 layer adds 2."
+  hints:
+    - when: { equals: 6 }
+      say: "The windows overlap. Neighboring first-layer outputs read windows that start one pixel apart."
+    - when: { equals: 9 }
+      say: "3 × 3 multiplies the sizes. The windows overlap, so the sizes add instead: each layer adds 2."
+    - when: { any: true }
+      say: ["Start with 1 pixel and grow it one layer at a time.", "A 3×3 layer adds 1 pixel on each side of the patch. Do that twice."]
+
+pool-max:
+  type: number
+  prompt: "2×2 max pooling of [[1, 3, 0, 2], [4, 2, 1, 1], [0, 0, 5, 6], [1, 2, 7, 0]] gives a 2×2 result. What is its bottom-right number?"
+  answer: 7
+  tol: 0
+  after: "The bottom-right 2×2 block is [[5, 6], [7, 0]], and its largest number is 7. The full result is [[4, 2], [2, 7]]."
+  hints:
+    - when: { equals: 6 }
+      say: "Look at all four numbers of the block, including the bottom row: 7 and 0."
+    - when: { equals: 18 }
+      say: "That is the sum. Max pooling keeps the largest number."
+    - when: { any: true }
+      say: ["Split the 4×4 grid into four 2×2 blocks.", "The bottom-right block is rows 2–3, columns 2–3. Keep its largest number."]
+
+rf-pool:
+  type: number
+  prompt: "Track the patch width and the gap layer by layer. A k×k conv adds (k − 1) × gap to the width. A 2×2 pool adds 1 × gap to the width, then doubles the gap. After a 3×3 conv and a 2×2 pool, the width is 4 and the gap is 2. Add a second 3×3 conv, then a second 2×2 pool. How many pixels wide is the patch one final output sees?"
+  answer: 10
+  tol: 0
+  after: "3×3 conv: 4 + 2 × 2 = 8 (gap stays 2). 2×2 pool: 8 + 1 × 2 = 10, and the gap becomes 4."
+  hints:
+    - when: { equals: 6 }
+      wrong: "4 + (3 - 1)*1"
+      say: "That is the conv with a gap of 1, and no second pool. The gap is now 2, not 1, and the pool adds 1 × gap more."
+    - when: { equals: 8 }
+      say: "That is after the second conv. The second pool adds 1 × gap more."
+    - when: { equals: 9 }
+      say: "The pool adds 1 × gap, and the gap is 2 at that point."
+    - when: { equals: 7 }
+      say: "After a pool the gap is 2. Use it for both the next conv and the next pool."
+    - when: { any: true }
+      say: ["Start from width 4, gap 2. Apply the conv rule, then the pool rule.", "The conv adds (3 − 1) × 2 = 4, so the width becomes 8. The gap is still 2."]
+
+conv-loop:
+  type: code
+  prompt: "Write one line: the output at (i, j) is the 3×3 window starting at (i, j), times the filter, summed."
+  template: |
+    def conv2d(x, k):
+        oh, ow = x.shape[0] - 2, x.shape[1] - 2
+        out = np.zeros((oh, ow))
+        for i in range(oh):
+            for j in range(ow):
+                out[i, j] = ____
+        return out
+
+    img = np.zeros((5, 5)); img[:, 2] = 1
+    k = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])
+    print(conv2d(img, k))
+  solution: "(x[i:i+3, j:j+3] * k).sum()"
+  after: "x[i:i+3, j:j+3] has the same shape as k, so * pairs each pixel with the filter number on top of it. .sum() adds the 9 products into one number. The output is 2 smaller than the picture because a 3×3 window fits in only n − 2 positions."
+  tests:
+    - setup: "img = np.zeros((5, 5)); img[:, 2] = 1; kk = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])"
+      expr: "conv2d(img, kk)"
+      expect: [[3, 0, -3], [3, 0, -3], [3, 0, -3]]
+      say: "the vertical stroke gives 3, 0, −3 in every row"
+    - setup: "a = np.arange(16.0).reshape(4, 4); kk = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1.]])"
+      expr: "conv2d(a, kk)"
+      expect: [[15, 18], [27, 30]]
+      say: "a diagonal filter adds the three diagonal pixels of each window"
+  hints:
+    - when: { error: "operands could not be broadcast|matmul|core dimension" }
+      say: "The window must be exactly 3×3, the same shape as k. Check both slices: the rows and the columns."
+    - when: { error: "matmul|shapes .* not aligned" }
+      say: "Use * (number by number), not @. A convolution multiplies matching cells, then adds them up."
+    - when: { testFailed: 0 }
+      say: ["Is your window 3×3? Print it for i = 0, j = 0.", "Cut the window with one pair of brackets and a comma, as shown at the start of section 7. Then multiply by k cell by cell and add everything."]
+    - when: { any: true }
+      say: ["Three steps: cut the 3×3 window at (i, j), multiply it by k cell by cell, add the 9 products.", "The window starts at row i and column j and is 3 wide in both directions. Use one pair of brackets with a comma.", "For i = 0, j = 0 the window is rows 0–2 and columns 0–2. For the stroke picture its products add to 3."]
+
+conv-stride:
+  type: code
+  prompt: "Write a convolution for any square filter and any stride, no padding. Set the output side m, make out, and fill every out[i, j]. Replace ____ with as many lines as you need."
+  template: |
+    def conv2d(x, k, s):
+        n, f = x.shape[0], k.shape[0]   # picture side n, filter side f
+        ____
+        return out
+
+    img = np.arange(25.0).reshape(5, 5)
+    print(conv2d(img, np.ones((3, 3)), 2))
+  solution: |-
+    m = (n - f) // s + 1
+        out = np.zeros((m, m))
+        for i in range(m):
+            for j in range(m):
+                out[i, j] = (x[i*s:i*s+f, j*s:j*s+f] * k).sum()
+  after: "Stride only changes where each window starts: output cell i starts at row i·s, not at row i. The window is still f wide. The output side comes from the formula ⌊(n − f) / s⌋ + 1, so the last window ends inside the picture."
+  tests:
+    - setup: "img = np.zeros((5, 5)); img[:, 2] = 1; kk = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1.]])"
+      expr: "conv2d(img, kk, 1)"
+      expect: [[3, 0, -3], [3, 0, -3], [3, 0, -3]]
+      say: "stride 1 is the convolution you wrote above"
+    - setup: "a = np.arange(25.0).reshape(5, 5)"
+      expr: "conv2d(a, np.ones((3, 3)), 2)"
+      expect: [[54, 72], [144, 162]]
+      say: "5×5 picture, 3×3 filter of 1s, stride 2: windows start at rows 0, 2 and columns 0, 2"
+    - setup: "a = np.arange(36.0).reshape(6, 6); kk = np.array([[1, 0], [0, 0.]])"
+      expr: "conv2d(a, kk, 2)"
+      expect: [[0, 2, 4], [12, 14, 16], [24, 26, 28]]
+      say: "a 2×2 filter that keeps the top-left pixel of each window, stride 2"
+    - expr: "conv2d(np.ones((7, 7)), np.ones((3, 3)), 2)"
+      expect: [[9, 9, 9], [9, 9, 9], [9, 9, 9]]
+      say: "7×7, 3×3, stride 2: (7 − 3) // 2 + 1 = 3"
+  hints:
+    - when: { error: "is not defined" }
+      say: "Set every name before you use it: m first, then out, then the loops that fill it."
+    - when: { error: "float|integer" }
+      say: "The output side must be a whole number. Use // (divide and round down), not /."
+    - when: { error: "operands could not be broadcast|matmul|core dimension" }
+      say: ["The window must be f×f. Check both slices.", "A window that starts at row i*s ends before row i*s+f."]
+    - when: { error: "out of bounds" }
+      say: "The output is too big. Check the output-side formula from section 2 with p = 0."
+    - when: { testFailed: 0 }
+      say: ["With s = 1, your code should give the same result as conv-loop. Print the window for i = 0, j = 0.", "Use f, not 3, for the window size."]
+    - when: { testFailed: 1 }
+      say: ["With stride 2, output cell (0, 1) starts at column 2, not column 1.", "Multiply i and j by s where the window starts.", "Check the output side m too: for n = 5, f = 3, s = 2, subtract, divide by s, round down, then add 1."]
+    - when: { any: true }
+      say: ["Three parts: the output side m, an array out of zeros with shape (m, m), then two loops that fill out[i, j].", "m is the output-size formula with p = 0, using // to round down. The window for (i, j) starts at row i*s and column j*s.", "For n = 5, f = 3, s = 2: m = 2, and out[0, 1] reads rows 0–2 and columns 2–4."]

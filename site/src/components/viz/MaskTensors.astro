@@ -1,0 +1,23 @@
+---
+/** Level 1, section 6: a (2,1,4) padding mask broadcast against (2,4,4) attention scores. Faded cells are the stretched copies. */
+import TensorsLab from './TensorsLab.svelte'
+const one = { from: [0, 0, 0], to: [0, 3, 3], tone: 'accent' }
+const tensors = [
+  { name: 'scores', shape: [2, 4, 4], axes: ['batch', 'words', 'words'], highlight: [one] },
+  '+',
+  {
+    shape: [2, 4, 4], title: 'mask (2, 1, 4) → (2, 4, 4)', axes: ['batch', 'words', 'words'],
+    highlight: [{ from: [0, 0, 0], to: [0, 0, 3], tone: 'cat-3' }, { from: [1, 0, 0], to: [1, 0, 3], tone: 'cat-3' }],
+    ghost: [{ from: [0, 1, 0], to: [1, 3, 3] }],
+  },
+  '=',
+  { name: 'result', shape: [2, 4, 4], axes: ['batch', 'words', 'words'], highlight: [one] },
+]
+const keys = [
+  { label: 'the one mask row each sentence stores', tone: 'cat-3' },
+  { label: 'copies broadcasting reads instead of storing', tone: 'ghost' },
+  { label: 'the first sentence', tone: 'accent' },
+]
+---
+<TensorsLab client:visible title="One stored mask row, read four times" hint="The mask keeps one row per sentence. Broadcasting reuses it for every row of the scores."
+  tensors={tensors} keys={keys} ariaLabel="Scores (2, 4, 4) plus a mask stored as (2, 1, 4), stretched to (2, 4, 4)" />

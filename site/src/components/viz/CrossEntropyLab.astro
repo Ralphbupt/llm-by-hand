@@ -1,0 +1,6 @@
+---
+import Lab from './CrossEntropyLab.svelte'
+interface Props { hide?: { loss?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

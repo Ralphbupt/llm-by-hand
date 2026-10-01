@@ -1,0 +1,261 @@
+---
+title: Feeding data to a model
+short: Feeding data
+level: "U4"
+order: 6.4
+part: foundations
+branch: internals
+question: How do examples get from a list on disk into the model, one batch at a time?
+run: browser
+checkpoint: collate-code
+glossarySkip: [padding]
+testOut: [n-batches, heldout-steps, collate-code]
+recap:
+  can:
+    - "Count the batches and the steps in an epoch, including the short last batch."
+    - "Shuffle with a seeded random generator, and separate a held-out set once."
+    - "Pad sequences of different lengths into one rectangle and build its padding mask."
+  keys:
+    - "batches per epoch = ⌈N / batch size⌉; steps = epochs × batches"
+    - "`idx = rng.permutation(n)`, then `idx[i:i + batch_size]`"
+    - "Same seed, same code, same machine → the same numbers"
+    - "`X` and `mask` are both `(B, L_max)`; `True` = PAD = blocked"
+  mistakes:
+    - "Shuffling the inputs and the labels with two different random orders."
+    - "Letting PAD count in the loss or in attention."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import EpochLab from '@viz/EpochLab.astro'
+import PadLab from '@viz/PadLab.astro'
+
+This level uses epochs from level 7 and PyTorch from level 9. It is recommended before level 21.
+
+Every training loop so far started with the data already in one array. Real data is a long list of examples
+of different sizes. Before the model sees anything, some code has to pick the examples, group them into batches,
+and make every batch a full rectangle of numbers (every row the same length). That code is the **data pipeline**.
+
+In PyTorch it has two parts. A **`Dataset`** knows how many examples there are and how to get example `i`.
+A **`DataLoader`** asks the dataset for examples, groups them into batches, and hands one batch to the training loop at a time.
+This level builds both by hand in NumPy, then shows the PyTorch names.
+
+## 1. A dataset and its batches
+
+A dataset is anything with two methods. `__len__` says how many examples there are; `len(ds)` calls it.
+`__getitem__` returns example `i`; `ds[i]` calls it.
+
+```python
+class Dataset:
+    def __init__(self, xs, ys):
+        self.xs, self.ys = xs, ys
+    def __len__(self):
+        return len(self.xs)
+    def __getitem__(self, i):
+        return self.xs[i], self.ys[i]      # one input and its label, together
+```
+
+Take 10 examples and a batch size of 4. The loader cuts the list into pieces of 4, starting at 0, 4 and 8.
+The last piece gets whatever is left. One pass over all the examples is an **epoch** (level 7).
+
+<EpochLab hide={{ batches: "n-batches" }} />
+
+<Blank id="n-batches" />
+
+<Gate requires="n-batches">
+
+<Blank id="last-batch" />
+
+A short last batch is normal. Its loss is still an average, so it has the same scale as the others,
+but it is noisier, because fewer examples go into it. If you do not want it, PyTorch can skip it: `drop_last=True` leaves 2 batches of 4.
+
+Each batch is one **step**: one forward pass, one backward pass, one update of the weights.
+So the number of steps is epochs × batches per epoch.
+
+<Blank id="steps-epochs" />
+
+</Gate>
+
+<Gate requires="steps-epochs">
+
+## 2. Shuffling each epoch
+
+The 10 examples are stored **sorted by class**: examples 0–4 are class 0, examples 5–9 are class 1.
+That happens all the time: one file per class, or data collected one source after another.
+
+<Predict id="pred-sorted" />
+
+</Gate>
+
+<Gate requires="pred-sorted">
+
+The fix is to shuffle: a new random order of the examples **every epoch**. Each example is still used exactly once
+per epoch, but each batch now holds a mix, so its gradient is a fair sample of the whole dataset.
+In the lab, check **Shuffle each epoch** and press **Next epoch** a few times.
+
+NumPy gives you a random order of `0, 1, …, n−1` with `rng.permutation(n)`. Here `rng = np.random.default_rng(0)` is a
+**random generator**: an object that makes random numbers, starting from a number called the **seed** (here 0).
+For example, `np.random.default_rng(0).permutation(10)` is `[4, 6, 2, 7, 3, 5, 9, 0, 8, 1]`.
+
+Then you cut that order into batches with slices. `idx[4:8]` is items 4, 5, 6 and 7 of `idx`. A slice that runs past the end
+stops at the end: `idx[8:12]` of 10 items gives the last 2.
+
+<CodeBlank id="code-batches" />
+
+<Stuck q="I shuffle the inputs and then the labels. Why does my model learn nothing?">
+
+Two calls to a random generator give two **different** orders. After that, input 4 sits next to the label of some other
+example, so the labels are just noise. Shuffle **indices** once, then use the same `idx` for both:
+`xs[idx]`, `ys[idx]`. A `Dataset` that returns the input and its label together, as above, cannot make this mistake.
+
+</Stuck>
+
+<TryIt>
+
+In the lab, set the batch size to 5 and turn shuffling off. Press **Next epoch** a few times. Every batch is one solid color.
+Now turn shuffling on. How often do you see a batch that is still all one class?
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="code-batches">
+
+## 3. A held-out set and seeds
+
+Level 8 kept some examples aside, never trained on, to measure how well the model does on data it hasn’t seen.
+That **held-out set** is separated **once**, before any training, and it never changes.
+
+<Blank id="heldout-steps" />
+
+</Gate>
+
+<Gate requires="heldout-steps">
+
+A teammate suggests a change: draw a fresh random split at the start of every epoch, “so the held-out score is fairer”.
+
+<Predict id="pred-resplit" />
+
+</Gate>
+
+<Gate requires="pred-resplit">
+
+### Why two runs give different numbers
+
+Run the same training script twice, and the loss curves are usually a little different. Randomness enters in several places:
+
+1. the starting weights (level 7),
+2. the order of the batches,
+3. the held-out split,
+4. dropout (level 8).
+
+All of them come from random generators, and a generator started from the same seed gives the same numbers every time.
+`np.random.default_rng(0).permutation(10)` is `[4, 6, 2, 7, 3, 5, 9, 0, 8, 1]` today, tomorrow and on your friend’s computer.
+Seed 1 gives `[8, 4, 7, 0, 1, 2, 5, 9, 6, 3]`. In PyTorch, `torch.manual_seed(0)` at the top of a script fixes the seed for
+weights, dropout and shuffling at once (level 21 uses it).
+
+<Predict id="pred-seed" />
+
+</Gate>
+
+<Gate requires="pred-seed">
+
+## 4. Padding and the collate function
+
+Text examples have different lengths. A batch must be a rectangle, an array of shape `(B, L)`.
+So the shorter sequences get extra **PAD** tokens (here the number 0) at the end, until they are as long as the longest one.
+The function that turns a list of examples into one batch array is called the **collate function**.
+
+Take three sequences: `[5, 3, 8]`, `[2, 9]` and `[7]`.
+
+<PadLab hide={{ shape: "pad-shape", count: "pad-count" }} />
+
+<Blank id="pad-shape" />
+
+</Gate>
+
+<Gate requires="pad-shape">
+
+<Blank id="pad-count" />
+
+The PAD tokens carry no meaning. Two places must ignore them, and both need to know where they are:
+
+- **attention**: no word may look at a PAD token. That is the padding mask of level 15.
+- **the loss**: the model is never asked to predict PAD. That is `ignore_index` in level 17.
+
+So the collate function returns a second array next to the batch: the **padding mask**, with the same shape, `True` where
+a cell is PAD. `True` means blocked, as everywhere in this course.
+
+</Gate>
+
+<Gate requires="pad-count">
+
+How much of a batch is padding depends on which sequences are put in the same batch.
+
+<Blank id="pad-cells" />
+
+<Deeper title="Sorting by length wastes less">
+
+Half of that batch is padding, and the model still computes every PAD cell. Group sequences of similar length instead.
+Sort the four lengths, 1, 2, 3, 6, and make batches of two: `[1, 2]` pads to length 2 (4 cells) and `[3, 6]` pads to 6 (12 cells).
+That is 16 cells instead of 24, and only 4 of them are PAD.
+
+Real loaders do this with **buckets**: they sort roughly by length, cut batches, then shuffle the order of the batches,
+so training still sees a random order of batches. For a large model, this saves real training time.
+
+</Deeper>
+
+Now write the collate function. NumPy pieces you need:
+
+- `np.full((2, 3), 0)` is a `(2, 3)` array of zeros; `np.ones((2, 3), dtype=bool)` is all `True`.
+- `X[i, :k] = s` writes the list `s` (of length `k`) into the first `k` cells of row `i`.
+- `for i, s in enumerate(seqs)` gives each sequence `s` with its row number `i`.
+
+<CodeBlank id="collate-code" />
+
+<Stuck q="Why put PAD at the end and not at the start?">
+
+With PAD at the end, position 0 is always a real token, and position `t` means the same thing in every row.
+That keeps positions and the causal mask simple. Some generation code pads at the start instead, so that the last
+column is always the newest real token. Both work, as long as the mask says where the PAD cells are.
+
+</Stuck>
+
+<Deeper title="The same thing in PyTorch">
+
+```python
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split
+
+class Pairs(Dataset):                       # __len__ and __getitem__, as in section 1
+    def __init__(self, seqs): self.seqs = seqs
+    def __len__(self): return len(self.seqs)
+    def __getitem__(self, i): return self.seqs[i]
+
+def collate(seqs, pad=0):                   # your function from section 4, in torch
+    L = max(len(s) for s in seqs)
+    X = torch.full((len(seqs), L), pad)
+    for i, s in enumerate(seqs):
+        X[i, :len(s)] = torch.tensor(s)
+    return X, X == pad                      # the padding mask (if 0 is never a real token)
+
+g = torch.Generator().manual_seed(0)        # a seeded random generator
+# split once
+train_set, held_set = random_split(Pairs(data), [0.8, 0.2], generator=g)
+loader = DataLoader(train_set, batch_size=4, shuffle=True,
+                    collate_fn=collate, generator=g)
+for epoch in range(3):
+    for X, mask in loader:                  # a new order every epoch
+        ...                                 # forward, loss, backward, step
+```
+
+`shuffle=True` draws a new permutation at the start of every epoch, exactly like your `batches` function.
+`num_workers=4` would prepare the next batches in other processes while the model trains on this one.
+
+</Deeper>
+
+</Gate>

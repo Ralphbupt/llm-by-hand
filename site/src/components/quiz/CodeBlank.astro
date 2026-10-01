@@ -1,0 +1,15 @@
+---
+import CodeIsland from './CodeBlank.svelte'
+import { getExercise, loadExercises } from '@lib/quiz'
+// page: load another page's exercise (the mistake book); its progress id is then "<page>/<id>"
+// short: the test-out panel, which shows `promptShort` (when there is one) instead of the prompt
+interface Props { id: string; page?: string; short?: boolean }
+const { id, page, short } = Astro.props
+const found = page ? loadExercises(page)[id] ?? null : getExercise(Astro.url.pathname, id)
+const ex = found && short && found.promptShort ? { ...found, prompt: found.promptShort } : found
+const qid = page ? `${page}/${id}` : id
+---
+{!ex ? <p class="missing">Missing exercise: {id}</p>
+  : page ? <CodeIsland id={qid} ex={ex as any} practice client:visible />
+  : <CodeIsland id={qid} ex={ex as any} client:visible />}
+<style>.missing { color: #c2410c; font-family: monospace; }</style>

@@ -1,0 +1,6 @@
+---
+import Lab from './ConvLab.svelte'
+interface Props { hide?: { id: string; i: number; j: number } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

@@ -1,0 +1,372 @@
+p-mat:
+  type: number
+  prompt: "The scores are mat 2.0, sofa 1.0, roof 0.5, moon −1.0. Rounded, e^score is 7.4, 2.7, 1.6 and 0.4, which add up to 12.1. What probability does “mat” get? (2 decimals)"
+  answer: 0.61
+  tol: 0.01
+  after: "7.4 / 12.1 ≈ 0.61. mat has the highest score, so it gets the biggest part. Sampling 1000 times gives roughly 600 mats."
+  hints:
+    - when: { equals: 2 }
+      say: "2.0 is the score, not the probability. Divide mat’s e^score by the total of all four."
+    - when: { equals: 7.4 }
+      say: "7.4 is mat’s e^score. Now divide it by the total so the four probabilities add up to 1."
+    - when: { any: true }
+      say: ["A probability here is one word’s e^score divided by the total of all four.", "mat’s e^score is 7.4 and the total is 12.1. Divide."]
+
+softmax-2-0:
+  type: number
+  prompt: "Scores [2, 0], with e² ≈ 7.39 and e⁰ = 1. What probability does the first word get? (2 decimals)"
+  answer: 0.88
+  tol: 0.01
+  after: "e² / (e² + e⁰) = 7.39 / 8.39 ≈ 0.88. The second word gets 1 / 8.39 ≈ 0.12."
+  hints:
+    - when: { equals: 1 }
+      say: "That is 2 / (2 + 0). Take e to the power of each score first."
+    - when: { equals: 0.5 }
+      say: "The scores are different, so the probabilities can’t be equal. Use e² ≈ 7.39 and e⁰ = 1."
+    - when: { any: true }
+      say: ["Softmax: take e to the power of each score, then divide by the total.", "e² ≈ 7.39 and e⁰ = 1, so the total is 8.39."]
+
+add-ten:
+  type: predict
+  prompt: "Scores [2, 0] give the probabilities 0.88 and 0.12. Add 10 to both scores: [12, 10]. What happens to the probabilities?"
+  options: ["They stay exactly the same", "The first word gets even more likely", "They get closer to 50/50"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "Both scores went up by the same amount. Does the gap between them change?"
+    - when: { equals: 2 }
+      say: "12 and 10 are bigger numbers, but softmax only sees e^12 / (e^12 + e^10). Write e^12 as e^2 × e^10."
+  reveal: "They stay exactly the same: about 0.88 and 0.12. e^(s+10) = e^s × e^10, and the e^10 cancels when you divide by the total. softmax only cares about the differences between scores."
+
+t-small:
+  type: predict
+  prompt: "The scores are mat 2.0, sofa 1.0, roof 0.5, moon −1.0. At T = 1, sampling 1000 words gives about 600 mat. Temperature divides every score by T. At temperature 0.1, what will sampling 1000 words give?"
+  options: ["About 600 mat, like at T = 1", "Almost all 1000 are mat", "Each of the four words is picked about equally often"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Divide the scores by 0.1 first: [20, 10, 5, −10]. The gaps between the scores are now 10 times bigger."
+    - when: { equals: 2 }
+      say: "A temperature below 1 makes the differences bigger, not smaller. Divide the scores by 0.1 and compare the gaps."
+  reveal: "Almost all mat. Divided by 0.1 the scores are [20, 10, 5, −10]. A gap of 10 in score means e^10 ≈ 22000 times more likely, so mat gets probability 0.99995."
+
+temp-2:
+  type: number
+  prompt: "Scores [2, 0] at temperature T = 2, with e¹ ≈ 2.72. What probability does the first word get? (2 decimals)"
+  answer: 0.73
+  tol: 0.01
+  after: "[2, 0] / 2 = [1, 0]. e / (e + 1) = 2.72 / 3.72 ≈ 0.73. Down from 0.88 at T = 1: a higher temperature flattens the distribution."
+  hints:
+    - when: { equals: 0.88 }
+      say: "That is the T = 1 answer. Divide both scores by 2 first."
+    - when: { equals: 0.98 }
+      say: "That is what you get when you multiply by 2. Temperature divides."
+    - when: { any: true }
+      say: ["Temperature divides every score before softmax.", "[2, 0] / 2 = [1, 0]. Softmax that: e¹ and e⁰."]
+
+probs-T:
+  type: code
+  prompt: "Write the line that applies the temperature. scores arrives as a Python list, and a list can’t be divided by a number, so make it a float array first."
+  template: |
+    def probs(scores, T):
+        z = ____
+        e = np.exp(z - z.max())     # subtract the max so exp never overflows
+        return e / e.sum()
+
+    print(probs([2, 1, 0.5, -1], 1))
+    print(probs([2, 0], 2))
+  solution: "np.array(scores, dtype=float) / T"
+  tests:
+    - expr: "probs([2, 1, 0.5, -1], 1)"
+      expect: [0.609, 0.224, 0.136, 0.030]
+      tol: 0.001
+      say: "T = 1 leaves the scores unchanged"
+    - expr: "probs([2, 0], 2)"
+      expect: [0.731, 0.269]
+      tol: 0.001
+      say: "[2, 0] / 2 = [1, 0]"
+    - expr: "probs([2, 0], 0.5)"
+      expect: [0.982, 0.018]
+      tol: 0.001
+      say: "a small T sharpens"
+  hints:
+    - when: { error: "unsupported operand|has no attribute 'max'" }
+      say: ["scores is a Python list, and a list can’t be divided by a number.", "Which NumPy function turns a list into an array? Use it with dtype=float first, then apply the temperature."]
+    - when: { testFailed: 1 }
+      say: "T = 1 works but T = 2 doesn’t. Are you dividing by T, not multiplying?"
+    - when: { any: true }
+      say: ["Temperature divides every score by T.", "scores is a Python list, and a list can’t be divided by a number. Which NumPy function turns a list into an array?"]
+  after: "A list can’t be divided by a number, so np.array turns it into floats first. Dividing every score by T changes the gaps between scores: T < 1 makes them bigger, T > 1 smaller. T = 1 leaves them as they are."
+
+ce-01:
+  type: number
+  prompt: "The model gave the correct word p = 0.1. What is the loss −ln p? Use ln 10 ≈ 2.30. (2 decimals)"
+  answer: 2.30
+  tol: 0.01
+  after: "−ln 0.1 = ln 10 ≈ 2.30. At p = 0.01 it would be 4.61: ten times less likely costs another 2.3."
+  hints:
+    - when: { equals: 1 }
+      say: "That is −log₁₀ 0.1. Use the natural log (ln), the one with base e."
+    - when: { equals: 0.9 }
+      say: "That is 1 − p. The loss is −ln p."
+    - when: { equals: -2.3 }
+      say: "Check the sign: ln 0.1 is negative, and the loss is minus that."
+    - when: { any: true }
+      say: ["The loss is −ln of the probability of the right word.", "0.1 = 1/10, and −ln(1/x) = ln x."]
+
+ce-09:
+  type: number
+  prompt: "The model gave the correct word p = 0.5. What is the loss? Use ln 2 ≈ 0.69. (2 decimals)"
+  answer: 0.69
+  tol: 0.01
+  after: "−ln 0.5 = ln 2 ≈ 0.69. Smaller than the 2.30 for p = 0.1, but not zero: the loss only reaches 0 when p = 1."
+  hints:
+    - when: { equals: 0.5 }
+      say: "That is 1 − p. The loss is −ln p, and 0.5 = 1/2."
+    - when: { equals: -0.69 }
+      say: "Check the sign: ln 0.5 is negative, and the loss is minus that."
+    - when: { any: true }
+      say: ["The loss is −ln p.", "0.5 = 1/2, and −ln(1/x) = ln x."]
+
+ce-code:
+  type: code
+  prompt: "Return the cross-entropy loss: softmax the scores, take the correct one, then −log."
+  template: |
+    def loss(scores, correct):
+        p = softmax(np.array(scores, dtype=float))
+        return ____
+
+    print(loss([2.0, 1.0, 0.1], 0))   # correct answer: cat
+    print(loss([2.0, 1.0, 0.1], 2))   # correct answer: car
+  solution: "-np.log(p[correct])"
+  tests:
+    - expr: "loss([2.0, 1.0, 0.1], 0)"
+      expect: 0.417
+      tol: 0.001
+      say: "p(cat) = 0.659, −ln 0.659 = 0.417"
+    - expr: "loss([2.0, 1.0, 0.1], 2)"
+      expect: 2.317
+      tol: 0.001
+      say: "p(car) = 0.099, so the loss is big"
+  hints:
+    - when: { error: "only integers|index" }
+      say: "correct is the index of the right word. Use p[correct]."
+    - when: { testFailed: 0 }
+      say: ["Check two things: the sign, and which log you used.", "np.log is ln. The loss is minus the ln of the right word’s probability."]
+    - when: { any: true }
+      say: ["The loss is −ln of one number: the probability of the correct word.", "correct is the index of the right word in p. np.log is ln. Check the sign: the loss is positive."]
+  after: "p[correct] picks the probability of the right word, and −np.log turns it into a loss. A probability is at most 1, so its ln is at most 0, and the minus sign makes the loss positive. The other words only count through softmax."
+
+grad-dog:
+  type: number
+  prompt: "p = [0.7, 0.2, 0.1] for cat, dog, car, and the correct word is dog, so y = [0, 1, 0]. What is ∂L/∂s for dog, p − y?"
+  answer: -0.8
+  tol: 0.001
+  after: "0.2 − 1 = −0.8. Negative means: raise dog’s score to lower the loss. cat and car get +0.7 and +0.1: lower their scores, cat the most, because it took the most probability."
+  hints:
+    - when: { equals: 0.2 }
+      say: "That is p for dog. Subtract y, which is 1 for the correct word."
+    - when: { equals: 0.8 }
+      say: "Check the sign: p − y = 0.2 − 1."
+    - when: { any: true }
+      say: ["The gradient for each word is its p minus its y.", "For dog, p = 0.2 and y = 1."]
+
+grad-step:
+  type: predict
+  prompt: "Gradient descent moves every score against its gradient: s ← s − lr × (p − y). With p − y = [0.7, −0.8, 0.1] for cat, dog, car, which score goes up?"
+  options: ["cat’s: it has the biggest number", "dog’s", "All three go down a little"]
+  answer: 1
+  reveal: "dog’s. Its gradient is negative, so subtracting it raises the score. cat and car have positive gradients, so their scores drop, cat’s the most. After the step dog takes probability from both."
+  hints:
+    - when: { equals: 0 }
+      say: "The step subtracts the gradient. A big positive gradient makes a score go down."
+    - when: { equals: 2 }
+      say: "One of the three gradients is negative. What does subtracting a negative number do?"
+
+grad-code:
+  type: code
+  prompt: "Return the gradient of the loss with respect to the scores: p minus the one-hot target."
+  template: |
+    def grad(scores, correct):
+        p = softmax(np.array(scores, dtype=float))
+        g = p.copy()
+        g[correct] = ____
+        return g
+
+    print(grad([2.0, 1.0, 0.1], 1))
+  solution: "g[correct] - 1"
+  tests:
+    - expr: "grad([2.0, 1.0, 0.1], 1)"
+      expect: [0.659, -0.758, 0.099]
+      tol: 0.001
+      say: "p = [0.659, 0.242, 0.099]; dog is correct, so its entry becomes 0.242 − 1"
+    - expr: "float(grad([0.0, 0.0], 0).sum())"
+      expect: 0
+      tol: 0.000001
+      say: "the gradients always add up to 0"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Only the correct word changes: its y is 1, the others’ y is 0.", "g already holds p. For the correct word you still have to subtract its y. What is that y?"]
+    - when: { any: true }
+      say: ["Only the correct word changes: its y is 1, the others’ y is 0.", "g already holds p. For the correct word you still have to subtract its y. What is that y?"]
+  after: "The gradient is p − y, and y is 1 only at the correct word. g starts as a copy of p, so only that one entry changes: g[correct] − 1. The entries always add up to 0, because p adds up to 1 and y adds up to 1."
+
+ppl-uniform:
+  type: number
+  prompt: "A model always splits its guess evenly over 4 words, p = 0.25 each, and the right word is always one of them. What is its perplexity?"
+  answer: 4
+  tol: 0.01
+  after: "Every surprise is −ln 0.25 = 1.386, so the average is 1.386, and e^1.386 = 4. As unsure as choosing among 4 words, because it is choosing among 4 words."
+  hints:
+    - when: { equals: 0.25 }
+      say: "0.25 is p. Perplexity is e to the power of the average surprise, −ln p."
+    - when: { equals: 1.386 }
+      say: "1.386 is the average surprise. Undo the log: e^1.386."
+    - when: { any: true }
+      say: ["Perplexity = e to the power of the average surprise.", "Every word has surprise −ln 0.25 = ln 4 ≈ 1.386, so the average is 1.386 too."]
+
+two-models:
+  type: predict
+  prompt: "Ten words. Model A gives the right word p = 0.9 nine times and p = 0.001 once. Model B gives it p = 0.5 every time. Which has the lower perplexity?"
+  options: ["A: it is right with 0.9 almost every time", "B: it is never very sure, but never badly wrong", "They are about equal"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Look at the one miss: p = 0.001 means a surprise of −ln 0.001 ≈ 6.9. How much does that one word add to A’s average?"
+    - when: { equals: 2 }
+      say: "Average the surprises. A: nine of 0.105 and one of 6.9. B: ten of 0.69."
+  reveal: "B. A’s average surprise is (9 × 0.105 + 6.908) / 10 = 0.786, so its perplexity is e^0.786 = 2.19. B’s is ln 2 = 0.693, perplexity 2.00. One confident miss (p = 0.001, surprise 6.9) adds more to A’s average than nine good guesses take away. A model that gives the right word almost zero probability gets a very large loss, and that one word moves the whole average."
+
+ppl-sentence:
+  type: number
+  prompt: "For “the cat sat on the mat” the model gave the right next words p = 0.5, 0.25, 0.125, 0.25, 0.25. The surprises −ln p add up to 6.93, and ln 4 ≈ 1.386. What is its perplexity?"
+  answer: 4
+  tol: 0.01
+  after: "Average surprise = 6.93 / 5 = 1.386 = ln 4, so perplexity = e^(ln 4) = 4. Or with 1/p: 2 × 4 × 8 × 4 × 4 = 1024 = 4⁵, so the fifth root is 4. As unsure as a choice among 4 words."
+  hints:
+    - when: { equals: 1.386 }
+      say: "1.386 is the average surprise. Undo the ln with e^x. What number has ln equal to 1.386?"
+    - when: { equals: 0.275 }
+      say: "That is the average p. Average the surprises −ln p instead, then take e^ of the result."
+    - when: { any: true }
+      say: ["Perplexity = e to the power of the average surprise.", "The average surprise is 6.93 / 5. Compare it with ln 4."]
+
+ppl-code:
+  type: code
+  prompt: "Return the perplexity of a list of probabilities (the p the model gave each right word)."
+  template: |
+    def perplexity(p):
+        p = np.array(p, dtype=float)
+        return np.exp(____)
+
+    print(perplexity([0.5, 0.25, 0.125, 0.25, 0.25]))
+  solution: "-np.mean(np.log(p))"
+  tests:
+    - expr: "perplexity([0.25, 0.25, 0.25, 0.25])"
+      expect: 4
+      tol: 0.001
+      say: "even split over 4 words → 4"
+    - expr: "perplexity([0.5, 0.25, 0.125, 0.25, 0.25])"
+      expect: 4
+      tol: 0.001
+      say: "the sentence from the table → 4"
+    - expr: "perplexity([1.0, 1.0])"
+      expect: 1
+      tol: 0.001
+      say: "always sure and right → 1"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Inside the exp goes the average surprise. Each surprise is −ln p.", "np.log works on the whole array at once, and np.mean averages. Check the sign: a surprise is positive."]
+    - when: { any: true }
+      say: ["Inside the exp goes the average surprise.", "A surprise is minus the ln of a probability. NumPy has functions for ln and for the average."]
+  after: "The average surprise is −np.mean(np.log(p)), and perplexity is e to that power. np.log works on every p at once. If every p is 1, the surprise is 0 and the perplexity is 1."
+
+gauss-x:
+  optional: true
+  type: number
+  prompt: "One noisy number is x = mean + std × z, where z comes from a standard normal. mean = 3, std = 2, and z = −1.5. What is x?"
+  answer: 0
+  tol: 0.01
+  after: "x = 3 + 2 × (−1.5) = 0. z = −1.5 means “1.5 standard deviations below the mean”."
+  hints:
+    - when: { equals: 1.5 }
+      say: "That is 3 + (−1.5). Multiply z by the std first."
+    - when: { equals: 6 }
+      say: "z is negative: 2 × (−1.5) = −3."
+    - when: { any: true }
+      say: ["Multiply std by z first, then add the mean.", "std × z = 2 × (−1.5) = −3. Now add the mean."]
+
+noise-shape:
+  optional: true
+  type: shape
+  prompt: "What is the shape of `rng.standard_normal((1000, 2))` * 2 + 3?"
+  answer: [1000, 2]
+  after: "Multiplying by a number and adding a number keep the shape. You get 1000 points, each with an x and a y, centered at (3, 3)."
+  hints:
+    - when: { shape: [2, 1000] }
+      say: "Look again at the tuple you passed to `standard_normal`. Which number comes first?"
+    - when: { any: true }
+      say: ["Which shape did you pass to `standard_normal`? Do * 2 and + 3 change a shape?", "* 2 and + 3 act on every number one at a time. They never add or remove numbers."]
+
+softmax-twice:
+  type: predict
+  prompt: "Scores [2, 0]. Softmax gives [0.88, 0.12]. If you pass these probabilities to `F.cross_entropy` as if they were scores, it applies softmax again. What happens to training?"
+  options: ["Nothing changes: softmax of a softmax is the same", "It runs without errors, but learns badly: the second softmax squeezes the probabilities back toward equal", "PyTorch raises an error because the numbers are not raw scores"]
+  answer: 1
+  reveal: "It runs and learns badly. Softmax of [0.88, 0.12] is about [0.68, 0.32]: inputs between 0 and 1 can never be far apart, so the second softmax keeps everything close to equal, the loss can’t get near 0, and the gradients are small. Give `F.cross_entropy` the raw scores."
+  hints:
+    - when: { equals: 0 }
+      say: "Try it: the second softmax sees [0.88, 0.12] as scores. Their difference is only 0.76."
+    - when: { equals: 2 }
+      say: "PyTorch can’t distinguish scores from probabilities: both are just numbers. Nothing checks this."
+
+ce-from-scores:
+  type: code
+  prompt: "Write `mean_loss` for a batch: for each row of scores, divide by T, take a safe softmax (subtract the max before np.exp), and take −ln of the probability of that row's right word. Return the mean of these losses over the rows. Several lines."
+  template: |
+    def mean_loss(rows, correct, T=1.0):
+        # rows: B lists of scores, one per example.
+        # correct: B ids, the right word of each row.
+        ____
+
+    print(mean_loss([[2.0, 1.0, 0.1]], [0]))                    # one row: about 0.417
+    # no overflow on the score 1000
+    print(mean_loss([[2.0, 1.0, 0.1], [1000.0, 0.0]], [0, 0]))
+    print(mean_loss([[2.0, 0.0], [0.0, 2.0]], [0, 0], T=2.0))
+  solution: "losses = []\n    for scores, c in zip(rows, correct):\n        z = np.array(scores, dtype=float) / T\n        e = np.exp(z - z.max())\n        p = e / e.sum()\n        losses.append(-np.log(p[c]))\n    return np.mean(losses)"
+  tests:
+    - expr: "mean_loss([[2.0, 1.0, 0.1]], [0])"
+      expect: 0.417
+      tol: 0.001
+      say: "one row: p(cat) = 0.659, so the loss is −ln 0.659 = 0.417"
+    - expr: "mean_loss([[2.0, 1.0, 0.1], [2.0, 1.0, 0.1]], [0, 1])"
+      expect: 0.917
+      tol: 0.001
+      say: "two rows with different right words: (0.417 + 1.417) / 2 = 0.917"
+    - expr: "mean_loss([[2.0, 1.0, 0.1], [1000.0, 0.0]], [0, 0])"
+      expect: 0.2085
+      tol: 0.001
+      say: "the score 1000 must not overflow: (0.417 + 0) / 2"
+    - expr: "mean_loss([[2.0, 0.0], [0.0, 2.0]], [0, 0], T=2.0)"
+      expect: 0.8133
+      tol: 0.001
+      say: "T = 2: the rows become [1, 0] and [0, 1], losses 0.313 and 1.313"
+  hints:
+    - when: { error: "NameError|not defined" }
+      say: ["Every name must be created before it is used. Inside the loop: z, then e, then p.", "Each row needs its own z: np.array(scores, dtype=float) / T."]
+    - when: { error: "IndentationError|unexpected indent|expected an indented" }
+      say: ["Indent your first line by 4 spaces, like ____. Lines inside the for get 4 more spaces."]
+    - when: { equals: 1.8340600325556670 }
+      say: "That is the sum of the two losses. The batch loss is the mean: divide by the number of rows."
+    - when: { testFailed: 0 }
+      say: ["One row should give 0.417. Check the safe softmax: e from the shifted scores, then p = e divided by its total.", "The loss of a row is −ln of the probability of its right word."]
+    - when: { testFailed: 1 }
+      wrong: "losses = []\n    for scores in rows:\n        z = np.array(scores, dtype=float) / T\n        e = np.exp(z - z.max())\n        p = e / e.sum()\n        losses.append(-np.log(p[correct[0]]))\n    return np.mean(losses)"
+      say: ["The first row works, but two rows don't. Does each row use its own right word, and is the result the mean of the row losses?", "zip(rows, correct) walks the rows and their right words together."]
+    - when: { testFailed: 2 }
+      say: ["The score 1000 breaks it: np.exp(1000) is too big for a float.", "Subtract the largest value of each row before np.exp. The probabilities do not change."]
+    - when: { testFailed: 3 }
+      say: "Divide each row of scores by T before the softmax."
+    - when: { any: true }
+      say: ["For each row: scores / T, safe softmax, −ln p of the right word. Then the mean over the rows.", "Collect one loss per row in a list, then return np.mean of the list."]
+  after: "Subtracting the row's max does not change its probabilities, because the same e^max cancels on the top and the bottom, and it keeps np.exp from overflowing. Each row gets its own −ln p of its own right word, and the batch loss is their mean, so it does not grow with the batch size. Later levels compute the same thing for a whole (B, V) array at once, without the loop."

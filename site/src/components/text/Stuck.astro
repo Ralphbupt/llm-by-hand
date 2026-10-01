@@ -1,0 +1,9 @@
+---
+/** "I got stuck here": a real question a learner asked, and its answer. */
+interface Props { q: string }
+import { smart } from '@lib/typo'
+const q = smart(Astro.props.q)
+// `code` in the q shows as code (odd pieces of the split are the code spans)
+const parts = q.split(/`([^`]+)`/)
+---
+<details class="stuck"><summary><span class="k">I got stuck here</span> {parts.map((p, i) => (i % 2 ? <code>{p}</code> : p))}</summary><div class="body"><slot /></div></details>

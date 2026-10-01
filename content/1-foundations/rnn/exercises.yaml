@@ -1,0 +1,154 @@
+h1:
+  type: number
+  prompt: "wₓ = 1, wₕ = 0.5, b = 0, h₀ = 0 and x₁ = 1. Use tanh(1) ≈ 0.76. What is h₁ = tanh(wₓ·x₁ + wₕ·h₀ + b)? (2 decimals)"
+  answer: 0.76
+  tol: 0.01
+  after: "z = 1×1 + 0.5×0 + 0 = 1, and tanh(1) ≈ 0.76."
+  hints:
+    - when: { equals: 1 }
+      say: "That is z. h is tanh(z)."
+    - when: { any: true }
+      say: ["First compute z = wₓ·x₁ + wₕ·h₀ + b.", "z = 1×1 + 0.5×0 + 0. Then h = tanh(z)."]
+
+h2:
+  type: number
+  prompt: "wₓ = 1, wₕ = 0.5, b = 0. h₁ = 0.76 and x₂ = 0. Use tanh(0.38) ≈ 0.36. What is h₂ = tanh(wₓ·x₂ + wₕ·h₁ + b)? (2 decimals)"
+  answer: 0.36
+  tol: 0.01
+  after: "z = 1×0 + 0.5×0.76 = 0.38, and tanh(0.38) ≈ 0.36."
+  hints:
+    - when: { equals: 0.38 }
+      say: "That is z. Now apply tanh to it."
+    - when: { equals: 0 }
+      say: "The input is 0, but the hidden state isn’t: wₕ·h₁ = 0.5 × 0.76."
+    - when: { any: true }
+      say: ["The input part is 0 this time. What is left inside tanh?", "Only wₕ·h₁ = 0.5 × 0.76 is left. Compute it, then take tanh."]
+
+weights:
+  type: number
+  prompt: "This RNN has a one-number hidden state: hₜ = tanh(wₓ·xₜ + wₕ·hₜ₋₁ + b). It reads a sequence of 1,000 inputs. How many learned numbers (weights and biases) does it have?"
+  answer: 3
+  tol: 0
+  after: "Three: wₓ, wₕ and b, used again at every one of the 1,000 steps."
+  hints:
+    - when: { equals: 3000 }
+      say: "The steps share their weights. There is no new wₓ for step 2."
+    - when: { equals: 2 }
+      say: "wₓ and wₕ, yes. The question counts the bias b too."
+    - when: { equals: 2000 }
+      say: "The steps share their weights and the bias. There is no new wₓ for step 2."
+    - when: { any: true }
+      say: ["Which letters in the formula are learned, and which change at every step?", "x and h change at every step. The other letters are learned once and shared by all 1,000 steps."]
+
+grad-4:
+  type: predict
+  prompt: "wₕ = 0.5. Going back one step multiplies the gradient by wₕ·(1 − h²). Ignoring tanh, three steps back would give 0.5³ = 0.125. With tanh, ∂h₄/∂h₁ is…"
+  options: ["bigger than 0.125", "exactly 0.125", "smaller than 0.125"]
+  answer: 2
+  hints:
+    - when: { any: true }
+      say: "Each factor is 0.5 × (1 − h²). Is 1 − h² bigger or smaller than 1 when h is not 0?"
+  reveal: "Smaller. Each factor is 0.5 × (1 − h²), and 1 − h² is below 1 whenever h isn’t 0. Here the three factors are 0.434, 0.484 and 0.496, so ∂h₄/∂h₁ = 0.104: tanh makes the gradient shrink even faster."
+
+explode:
+  type: predict
+  prompt: "No activation, wₕ = 1.5. After 30 steps the gradient is a product of 29 factors of 1.5. About how big is it?"
+  options: ["About 45", "About 1,000", "About 128,000"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "45 is 1.5 × 29, which adds 1.5 twenty-nine times. Here the 29 factors multiply: 1.5 × 1.5 × 1.5 × …"
+    - when: { equals: 1 }
+      say: "1.5¹⁰ is already about 58. Multiply by 1.5 nineteen more times."
+  reveal: "1.5²⁹ ≈ 127,834. Repeated multiplication grows fast: 29 factors of 1.5 make a number about 128,000 times too large. With wₕ = 0.5 it is 0.5²⁹ ≈ 0.000000002."
+
+k40:
+  type: predict
+  prompt: "An RNN with a 32-number hidden state learns “remember the first symbol” perfectly for k = 20. Now k = 40: same rule, 1,500 training steps. What accuracy will it reach?"
+  options: ["About 100%", "About 75%", "About 50%, guessing"]
+  answer: 2
+  hints:
+    - when: { any: true }
+      say: "The signal from the last step back to step 1 is a product of 39 factors, each below 1. How much of it arrives?"
+  reveal: "49.5%: guessing. The rule is easy, but the training signal has to cross 39 steps, and it vanishes on the way. demo.py trains k = 5 and k = 40 and prints both."
+
+rnn-step:
+  type: code
+  prompt: "Write the update inside the loop: h becomes tanh of (x times Wₓ, plus h times Wₕ, plus b)."
+  template: |
+    def rnn(xs, Wx, Wh, b):
+        h = np.zeros(Wh.shape[0])
+        for x in xs:
+            h = ____
+        return h
+
+    Wx = np.array([[1, 0], [0, 1], [0, 0.]])   # (D, H) = (3, 2)
+    Wh = np.array([[0.5, 0], [0, 0.5]])         # (H, H)
+    print(rnn(np.eye(3), Wx, Wh, np.zeros(2)))
+  solution: "np.tanh(x @ Wx + h @ Wh + b)"
+  after: "The same Wx, Wh and b are used at every step; only x and h change. h on the right is the old hidden state, and the new one replaces it. That is how earlier inputs reach later steps."
+  tests:
+    - setup: "Wx = np.array([[1, 0], [0, 1], [0, 0.]]); Wh = np.array([[0.5, 0], [0, 0.5]])"
+      expr: "rnn(np.eye(3), Wx, Wh, np.zeros(2))"
+      expect: [0.1797, 0.3634]
+      tol: 0.0001
+      say: "one-hot inputs 0, 1, 2"
+    - setup: "Wx = np.array([[1, 0], [0, 1], [0, 0.]]); Wh = np.array([[0, 1], [1, 0.]])"
+      expr: "rnn(np.array([[1, 0, 0], [0, 0, 1.]]), Wx, Wh, np.full(2, 0.1))"
+      expect: [0.1971, 0.7165]
+      tol: 0.0001
+      say: "a Wₕ that swaps the two hidden-state numbers, and b = 0.1"
+  hints:
+    - when: { error: "shapes .* not aligned|matmul|mismatch" }
+      say: "Check the order. Vectors are rows: x (D) @ Wx (D, H) gives H numbers, and h (H) @ Wh (H, H) gives H numbers."
+    - when: { testFailed: 1 }
+      say: "Did you forget b? The second test has b = 0.1."
+    - when: { any: true }
+      say: ["Three parts inside one tanh: the input part, the hidden-state part, and b.", "Vectors are rows, so each part is a vector @ its weight matrix: the input first, then the hidden state.", "At the first step of test 1, h is still zeros, so only the input part and b remain. Their sum is [1, 0]."]
+
+rnn-all:
+  type: code
+  prompt: "Write `rnn_all`: run the same loop, but keep every hidden state, so the result has one row per step, shape (L, H). Replace ____ with as many lines as you need."
+  template: |
+    def rnn_all(xs, Wx, Wh, b):
+        h = np.zeros(Wh.shape[0])
+        ____
+        return np.stack(hs)
+
+    Wx = np.array([[1, 0], [0, 1], [0, 0.]])   # (D, H) = (3, 2)
+    Wh = np.array([[0.5, 0], [0, 0.5]])         # (H, H)
+    print(rnn_all(np.eye(3), Wx, Wh, np.zeros(2)).round(4))
+  solution: |-
+    hs = []
+        for x in xs:
+            h = np.tanh(x @ Wx + h @ Wh + b)
+            hs.append(h)
+  after: "Appending after the update stores h₁ … `h_L`, one per input, and never the starting zeros. np.stack turns the list of L vectors of length H into one (L, H) array. Later models read every row of it, not only the last one."
+  tests:
+    - setup: "Wx = np.array([[1, 0], [0, 1], [0, 0.]]); Wh = np.array([[0.5, 0], [0, 0.5]])"
+      expr: "rnn_all(np.eye(3), Wx, Wh, np.zeros(2))"
+      expect: [[0.7616, 0], [0.3634, 0.7616], [0.1797, 0.3634]]
+      tol: 0.0001
+      say: "one-hot inputs 0, 1, 2: three rows, and the last row is the h from rnn-step"
+    - setup: "Wx = np.array([[1, 0], [0, 1], [0, 0.]]); Wh = np.array([[0, 1], [1, 0.]])"
+      expr: "rnn_all(np.array([[1, 0, 0], [0, 0, 1.]]), Wx, Wh, np.full(2, 0.1))"
+      expect: [[0.8005, 0.0997], [0.1971, 0.7165]]
+      tol: 0.0001
+      say: "a Wₕ that swaps the two hidden-state numbers, and b = 0.1"
+    - setup: "rng = np.random.default_rng(1); Wx = rng.normal(0, 0.5, (3, 4)); Wh = rng.normal(0, 0.5, (4, 4))"
+      expr: "rnn_all(rng.normal(size=(5, 3)), Wx, Wh, np.zeros(4)).shape"
+      expect: [5, 4]
+      say: "L = 5 steps, H = 4: shape (5, 4)"
+  hints:
+    - when: { error: "hs.*not defined|name 'hs'" }
+      say: "Start an empty list before the loop: hs = []."
+    - when: { error: "need at least one array" }
+      say: "hs is still empty at the end. Append h inside the loop, after you update it."
+    - when: { error: "shapes .* not aligned|matmul|mismatch" }
+      say: "Vectors are rows: x @ Wx and h @ Wh, in that order."
+    - when: { testFailed: 0 }
+      say: ["Print hs: does it hold the new h of every step?", "Append h after the update, not before it. The first row should be tanh of the first step, not zeros.", "One row per step: append once per input, inside the loop."]
+    - when: { testFailed: 1 }
+      say: "Did you forget b? The second test has b = 0.1."
+    - when: { any: true }
+      say: ["Three parts: an empty list, the loop from the previous exercise, and one line that appends h.", "Inside the loop, first update h, then add it to the list. Order matters."]

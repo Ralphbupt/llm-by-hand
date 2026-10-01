@@ -1,0 +1,276 @@
+dLda:
+  type: number
+  prompt: "a = 0.5 and y = 1. What is the local gradient ∂L/∂a = 2(a − y)?"
+  answer: -1
+  tol: 0.001
+  after: "2 × (0.5 − 1) = −1. Negative: raising a would lower the loss."
+  hints:
+    - when: { equals: 1 }
+      say: "Check the sign. a − y = 0.5 − 1 is negative."
+    - when: { equals: -0.5 }
+      say: "That is a − y. The local gradient of a square is 2 × (a − y)."
+    - when: { any: true }
+      say: ["Use the formula in the question with a = 0.5 and y = 1.", "First compute a − y, then multiply by 2."]
+
+dLdz:
+  type: number
+  prompt: "A neuron computes a = sigmoid(z), and the loss is L = (a − y)². Going back, ∂L/∂a = −1 and ∂a/∂z = a(1 − a) = 0.5 × 0.5 = 0.25. Use the chain rule: what is ∂L/∂z?"
+  answer: -0.25
+  tol: 0.001
+  after: "∂L/∂z = ∂L/∂a × ∂a/∂z = −1 × 0.25 = −0.25. Each box adds one multiplication on the way back."
+  hints:
+    - when: { equals: 0.25 }
+      say: "That is only the local gradient of sigmoid, or you lost the sign. Multiply it by the gradient that arrived from L, −1."
+    - when: { equals: -0.75 }
+      say: "You added. The chain rule multiplies the gradients along the path."
+    - when: { any: true }
+      say: ["The chain rule multiplies the gradients along the path.", "Multiply the gradient that came back from L by sigmoid’s local gradient. Keep the sign."]
+
+dLdw:
+  type: number
+  prompt: "A neuron computes z = w·x + b with x = 2. Going back, ∂L/∂z = −0.25, and the local gradient is ∂z/∂w = x = 2. What is ∂L/∂w?"
+  answer: -0.5
+  tol: 0.001
+  after: "−0.25 × 2 = −0.5. And ∂L/∂b = −0.25 × 1 = −0.25: one multiplication each."
+  hints:
+    - when: { equals: -0.125 }
+      wrong: "-0.25 / 2"
+      say: "You divided by x. The chain rule multiplies: the gradient at z times the local gradient x."
+    - when: { equals: 0.5 }
+      say: "Keep the sign of ∂L/∂z: it is −0.25."
+    - when: { any: true }
+      say: ["One more multiplication: the gradient at z times the local gradient of z with respect to w.", "∂z/∂w is x, the number that w multiplies. Multiply it by ∂L/∂z and keep the sign."]
+
+numeric:
+  type: number
+  prompt: "Check on an easy function: L(w) = w². At w = 3 with ε = 0.1, what is (L(w + ε) − L(w − ε)) / (2ε)?"
+  answer: 6
+  tol: 0.0001
+  after: "(3.1² − 2.9²) / 0.2 = (9.61 − 8.41) / 0.2 = 6.0. The exact derivative 2w is also 6."
+  hints:
+    - when: { equals: 12 }
+      say: "Divide by 2ε = 0.2, not by ε."
+    - when: { equals: 6.1 }
+      say: "That is the one-sided version, (L(w + ε) − L(w)) / ε. Use both sides: L(3.1) and L(2.9)."
+    - when: { equals: 0.06 }
+      say: "You read it as / 2 × ε. The denominator is (2ε) = 0.2 as a whole."
+    - when: { any: true }
+      say: ["Compute L(3.1) and L(2.9) first: square each.", "9.61 − 8.41 = 1.2. Now divide by 2ε = 0.2."]
+
+tiny-eps:
+  type: predict
+  prompt: "In the gradient check, slide ε down to 1e−12. Compared with ε = 1e−5, the difference from the chain-rule answer will be…"
+  options: ["Even smaller: a smaller step is more exact", "About the same", "Much larger"]
+  reveal: "Much larger, about 4e−5 instead of about 2e−11. A computer keeps only about 16 digits of each number. With ε = 1e−12 the two losses are equal in almost all of those digits, so their difference is mostly rounding error. A large ε is wrong for another reason: the curve is not straight over that distance. About 1e−5 works best. Try every ε in the lab."
+
+dW-hand:
+  type: number
+  prompt: "Two examples: X = [[1, 2], [3, 1]] and dz = [[0.5], [−1]]. What is dW[0][0], the first entry of X.T @ dz?"
+  answer: -2.5
+  tol: 0.001
+  after: "Weight 0 sees input 0 of each example: 1 × 0.5 + 3 × (−1) = −2.5. That is the first column of X dotted with dz."
+  hints:
+    - when: { equals: 0.5 }
+      say: "That is example 0 alone. The gradient adds up over both examples."
+    - when: { equals: -3 }
+      say: "That is example 1 alone. Add example 0’s part, 1 × 0.5."
+    - when: { any: true }
+      say: ["dW[0][0] collects input 0 times dz, over every example.", "Input 0 is 1 in example 0 and 3 in example 1. Multiply each by its dz and add."]
+
+dW1-shape:
+  type: shape
+  prompt: "X is (4, 2). The gradient at the hidden layer, dz1, is (4, 6). What is the shape of dW1 = X.T @ dz1?"
+  answer: [2, 6]
+  after: "(2, 4) @ (4, 6) → (2, 6), the same shape as W1. Every weight gets exactly one gradient."
+  hints:
+    - when: { shape: [4, 6] }
+      say: "That is the shape of dz1. X.T is (2, 4), so the 4 disappears."
+    - when: { shape: [4, 4] }
+      say: "(4, 4) would come from multiplying over the 2 inputs. Here the transpose comes first: X.T is (2, 4), so the 4 examples disappear."
+    - when: { any: true }
+      say: ["First find the shape of X.T, then use the rule (n, k) @ (k, m) → (n, m).", "X.T is (2, 4). The inner 4s disappear. Which numbers are left?"]
+
+dz-back-shape:
+  type: shape
+  prompt: "Rule 3 for the XOR network: dz2 is (4, 1), one number per example, and W2 is (6, 1). What is the shape of dz2 @ W2.T?"
+  answer: [4, 6]
+  after: "(4, 1) @ (1, 6) → (4, 6): one number per example and per hidden neuron, the same shape as the hidden layer. That is the shape dz1 must have."
+  hints:
+    - when: { shape: [6, 4] }
+      say: "The transpose is on W2, not on dz2. Write the two shapes side by side: dz2 first, then W2.T."
+    - when: { any: true }
+      say: ["First find the shape of W2.T, then use the rule (n, k) @ (k, m) → (n, m).", "W2.T is (1, 6). The inner numbers must match and disappear. Which numbers are left?"]
+
+dz1-hand:
+  type: number
+  prompt: "One example, a hidden layer of 2 tanh neurons, one output. dz2 = [[0.5]], W2 = [[2], [−1]] (so W2.T = [[2, −1]]), and the hidden outputs are a1 = [[0.5, 0]]. The slope of tanh at a neuron is 1 − a², where a is that neuron's output. Use rule 3 from section 3. What is the first number of dz1?"
+  answer: 0.75
+  tol: 0.001
+  after: "dz2 @ W2.T = [[1.0, −0.5]]. The tanh slopes are 1 − 0.5² = 0.75 and 1 − 0² = 1. Element-wise: [[1.0 × 0.75, −0.5 × 1]] = [[0.75, −0.5]]. The first number is 0.75."
+  hints:
+    - when: { equals: 1 }
+      say: "That is dz2 @ W2.T before the second step. Rule 3 still multiplies by the tanh slope of that neuron."
+    - when: { equals: 0.5 }
+      say: "Check the slope: it is 1 − a², not a. For the first neuron a = 0.5."
+    - when: { any: true }
+      say: ["Two steps. First the @: 0.5 times each number of W2.T. Then the *: each result times its own neuron's slope 1 − a².", "The first neuron has weight 2 and output a = 0.5. What is 0.5 × 2, and what is 1 − 0.5²?"]
+
+backward:
+  type: code
+  prompt: "Write the whole backward pass: every gradient the training step needs, from dz2 at the output down to dW1 and db1. Several lines."
+  template: |
+    def forward(X, W1, b1, W2, b2):
+        z1 = X @ W1 + b1            # (4, 6)
+        a1 = np.tanh(z1)            # (4, 6)
+        z2 = a1 @ W2 + b2           # (4, 1)
+        p = 1 / (1 + np.exp(-z2))   # (4, 1)
+        return z1, a1, p
+
+    def backward(X, y, W1, b1, W2, b2):
+        z1, a1, p = forward(X, W1, b1, W2, b2)
+        n = len(X)
+        # 1. output: dz2   2. dW2, db2   3. back through W2 and tanh: dz1   4. dW1, db1
+        ____
+        return dW1, db1, dW2, db2
+
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+    y = np.array([[0], [1], [1], [0]], dtype=float)
+    rng = np.random.default_rng(0)
+    W1, b1 = rng.normal(size=(2, 6)), np.zeros(6)
+    W2, b2 = rng.normal(size=(6, 1)), np.zeros(1)
+    dW1, db1, dW2, db2 = backward(X, y, W1, b1, W2, b2)
+    print("dW1 =\n", dW1.round(4))
+  reference: "dz2 = (p - y) / n\n    dW2 = a1.T @ dz2\n    db2 = dz2.sum(axis=0)\n    dz1 = (dz2 @ W2.T) * (1 - a1 ** 2)\n    dW1 = X.T @ dz1\n    db1 = dz1.sum(axis=0)"
+  tests:
+    - setup: |
+        rng = np.random.default_rng(1)
+        Xc = rng.normal(size=(4, 2)); yc = np.array([[0], [1], [1], [0]], dtype=float)
+        P = [rng.normal(size=(2, 6)), rng.normal(size=6), rng.normal(size=(6, 1)), rng.normal(size=1)]
+        def _loss(P):
+            p = forward(Xc, *P)[2]
+            return float(-np.mean(yc * np.log(p) + (1 - yc) * np.log(1 - p)))
+        def _num(P, i, h=1e-5):
+            g = np.zeros_like(P[i])
+            for idx in np.ndindex(P[i].shape):
+                old = P[i][idx]
+                P[i][idx] = old + h; lp = _loss(P)
+                P[i][idx] = old - h; lm = _loss(P)
+                P[i][idx] = old
+                g[idx] = (lp - lm) / (2 * h)
+            return g
+      expr: "float(np.max(np.abs(backward(Xc, yc, *P)[0] - _num(P, 0))))"
+      expect: 0
+      tol: 0.000001
+      say: "gradient check on dW1: the largest gap from the numeric gradient"
+    - expr: "float(np.max(np.abs(backward(Xc, yc, *P)[1] - _num(P, 1))))"
+      expect: 0
+      tol: 0.000001
+      say: "gradient check on db1"
+    - expr: "float(np.max(np.abs(backward(Xc, yc, *P)[2] - _num(P, 2))))"
+      expect: 0
+      tol: 0.000001
+      say: "gradient check on dW2"
+    - expr: "float(np.max(np.abs(backward(Xc, yc, *P)[3] - _num(P, 3))))"
+      expect: 0
+      tol: 0.000001
+      say: "gradient check on db2"
+    - expr: "backward(Xc, yc, *P)[0].shape"
+      expect: [2, 6]
+      say: "dW1 has the same shape as W1"
+  hints:
+    - when: { error: "unsupported operand type.*\\^|bitwise_xor" }
+      say: "Python writes a power as **, not ^. For example x ** 2 squares x."
+    - when: { error: "not aligned|mismatch|broadcast" }
+      say: "Check where you used @ and where *. The step through tanh is element-wise: two (4, 6) arrays multiplied number by number."
+    - when: { error: "is not defined" }
+      say: "Compute each gradient before you use it, in the order of the comment: dz2, dW2, db2, dz1, dW1, db1."
+    - when: { testFailed: 2 }
+      say: ["dW2 is wrong. Rule 1: the input of the output layer, transposed, times its dz. What is the input of the output layer?", "Check dz2 too: (p − y) / n, with n = len(X)."]
+    - when: { testFailed: 0 }
+      say: ["dW1 is wrong, so dz1 probably is. dz1 needs two steps: back through W2, then through tanh (rule 3).", "The tanh slope is 1 − a1², multiplied element by element."]
+    - when: { testFailed: 1 }
+      wrong: "dz2 = (p - y) / n\n    dW2 = a1.T @ dz2\n    db2 = dz2.mean(axis=0)\n    dz1 = (dz2 @ W2.T) * (1 - a1 ** 2)\n    dW1 = X.T @ dz1\n    db1 = dz1.mean(axis=0)"
+      say: ["A bias gradient is wrong. Rule 2: a bias gets the sum of its dz over the examples.", "Sum down the rows, as in level 1, section 7: one number per neuron."]
+    - when: { any: true }
+      say: ["Follow the three rules in section 3, in this order: dz2, then dW2 and db2, then step back through W2 and tanh to dz1, then dW1 and db1.", "The output layer's input is a1. Use it in rule 1 for dW2."]
+  after: "dz2 starts the chain. dW = input.T @ dz and db = dz summed over examples, once per layer. Going back through W2 uses @ W2.T, and going back through tanh multiplies element by element by its slope 1 − a1²."
+
+train-xor:
+  type: code
+  prompt: "Write the update, then run 1000 steps of gradient descent on XOR."
+  template: |
+    def forward(X, W1, b1, W2, b2):
+        a1 = np.tanh(X @ W1 + b1)
+        p = 1 / (1 + np.exp(-(a1 @ W2 + b2)))
+        return a1, p
+
+    def loss_of(X, y, params):
+        p = forward(X, *params)[1]
+        return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+
+    def gradients(X, y, W1, b1, W2, b2, h=1e-5):
+        # numeric gradients (move each number a little up and down),
+        # so this cell doesn't show the boss's backward.
+        # They match your backward to about 6 decimals; your backward is just much faster.
+        params, grads = [W1, b1, W2, b2], []
+        for P in params:
+            g = np.zeros_like(P)
+            for i in np.ndindex(P.shape):
+                old = P[i]
+                P[i] = old + h; up = loss_of(X, y, params)
+                P[i] = old - h; down = loss_of(X, y, params)
+                P[i] = old
+                g[i] = (up - down) / (2 * h)
+            grads.append(g)
+        return grads
+
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+    y = np.array([[0], [1], [1], [0]], dtype=float)
+    rng = np.random.default_rng(0)
+    W1, b1 = rng.normal(size=(2, 6)), np.zeros(6)
+    W2, b2 = rng.normal(size=(6, 1)), np.zeros(1)
+    lr = 1.0
+
+    for step in range(1000):
+        grads = gradients(X, y, W1, b1, W2, b2)
+        for param, grad in zip((W1, b1, W2, b2), grads):
+            param -= ____               # one step downhill, in place
+        if step % 200 == 0:
+            p = forward(X, W1, b1, W2, b2)[1]
+            loss = -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+            print(f"step {step:4d}  loss {loss:.4f}")
+
+    p = forward(X, W1, b1, W2, b2)[1]
+    print("outputs:", p.ravel().round(3))
+  solution: "lr * grad"
+  tests:
+    - expr: "float(np.mean((p > 0.5) == (y > 0.5)))"
+      expect: 1
+      say: "all four XOR points correct"
+    - expr: "bool(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)) < 0.02)"
+      expect: true
+      say: "the final loss is below 0.02"
+  hints:
+    - when: { error: "UFunc|Cannot cast|did not contain a loop" }
+      wrong: ["'lr * grad'", "None"]
+      say: "The update has the wrong type. It must be a float array with the shape of param. Use the learning rate and this parameter’s gradient, as in level 2."
+    - when: { testFailed: 0 }
+      say: ["The loss should fall. Check the direction: a step moves against the gradient, as in level 2.", "`param -= …` already subtracts. If you also wrote a minus sign, the two cancel and each step increases the loss."]
+    - when: { any: true }
+      say: ["Same update as level 2: new = old − lr × gradient.", "`param -= …` already subtracts. Which two names in the loop hold the learning rate and this parameter’s gradient?"]
+  after: "Each parameter moves a small step against its own gradient: param − lr × grad. `-=` changes the array in place, so W1, b1, W2 and b2 really change. If you write a minus sign inside too, the two minus signs cancel and the loss grows."
+
+db-hand:
+  type: number
+  prompt: "Two examples have dz = [[0.5], [−1]]. The layer has one output neuron with one bias. What is db = dz.sum(axis=0)?"
+  answer: -0.5
+  tol: 0
+  after: "0.5 + (−1) = −0.5. The bias acts like a weight whose input is 1 for every example, so its gradient is just the sum of dz."
+  hints:
+    - when: { equals: -0.25 }
+      say: "That is the mean. The bias gradient adds dz over the examples (the 1/n is already inside dz)."
+    - when: { equals: 1.5 }
+      say: "Keep the sign of the second dz: it is −1."
+    - when: { any: true }
+      say: ["A bias is like a weight whose input is always 1. So its gradient adds dz over the examples.", "dz.sum(axis=0) adds down the rows: the column [0.5, −1]. Keep the sign of −1."]
+

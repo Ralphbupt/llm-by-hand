@@ -1,0 +1,239 @@
+why-decoder-only:
+  type: predict
+  prompt: "Why would one stack beat an encoder plus a decoder for a general-purpose model?"
+  options: ["Without cross-attention each layer is smaller, so the same number of weights allows more layers", "Any task can be written as “text in, more text out”, so one stack trained on plain text learns them all", "An encoder can only read short inputs"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Size is not the main reason. Think about what the model learns from: which kinds of tasks can be written as plain text?"
+    - when: { equals: 2 }
+      say: "An encoder can read long inputs too. Think about how translation, questions and arithmetic can all be written."
+  reveal: "One stack, one objective: predict the next token of any text. Translation, questions, code and arithmetic all become “continue this text”. Every token of training text is used, and nothing has to be designed per task. Cross-attention is not wrong; it is just not needed."
+
+postnorm-count:
+  type: number
+  prompt: "A post-norm stack has 12 layers, each x = LayerNorm(x + f(x)). How many LayerNorms sit on the straight residual path from the input to the output?"
+  answer: 12
+  tol: 0
+  after: "12, one per layer. A pre-norm stack of 12 layers has just 1 on that path: the final one."
+  hints:
+    - when: { equals: 1 }
+      say: "1 is pre-norm. In post-norm a LayerNorm sits on the residual path after every addition."
+    - when: { equals: 24 }
+      wrong: "2*12"
+      say: "In this question each layer has one sublayer wrapped once. Count one LayerNorm per layer."
+    - when: { any: true }
+      say: "Each layer ends with LayerNorm(x + f(x)), and x is the residual path itself. How many layers?"
+
+rms-value:
+  type: number
+  prompt: "x = [1, 1, 3, 5]. The root mean square is √((1² + 1² + 3² + 5²) / 4). What is it?"
+  answer: 3
+  tol: 0.001
+  after: "1 + 1 + 9 + 25 = 36, / 4 = 9, √9 = 3. Compare LayerNorm’s std: 1.6583, measured around the mean 2.5."
+  hints:
+    - when: { equals: 9 }
+      wrong: "(1+1+9+25)/4"
+      say: "That is the mean of the squares. Take its square root."
+    - when: { equals: 36 }
+      wrong: "1+1+9+25"
+      say: "That is the sum of the squares. Divide by 4, then take the square root."
+    - when: { any: true }
+      say: ["Square each number, average the four squares, take the square root.", "The squares are 1, 1, 9 and 25."]
+
+rms-out0:
+  type: number
+  prompt: "x = [1, 1, 3, 5] and its root mean square is 3. What is the last number of RMSNorm(x)? (2 decimals)"
+  answer: 1.67
+  tol: 0.01
+  after: "5 / 3 = 1.67. The whole output is [0.33, 0.33, 1, 1.67]: same direction as x, just rescaled. LayerNorm would give [−0.90, −0.90, 0.30, 1.51]."
+  hints:
+    - when: { equals: 1.51 }
+      wrong: "round((5 - 2.5)/√(2.75), 2)"
+      say: "That is LayerNorm’s last number, which subtracts the mean 2.5 first. RMSNorm only divides."
+    - when: { equals: 0.33 }
+      wrong: "round(1/3, 2)"
+      say: "That is the first number. The question asks for the last one: 5 / 3."
+    - when: { any: true }
+      say: ["RMSNorm divides every number by the rms. Nothing is subtracted.", "Take the last number of x and divide it by the rms you found."]
+
+rmsnorm-code:
+  type: code
+  prompt: "Write RMSNorm for the last axis (eps keeps it safe when x is all zeros)."
+  template: |
+    def rmsnorm(x, eps=1e-6):
+        return x / ____
+
+    print(np.round(rmsnorm(np.array([1.0, 1.0, 3.0, 5.0])), 4))
+  solution: "np.sqrt(np.mean(x ** 2, axis=-1, keepdims=True) + eps)"
+  tests:
+    - expr: "np.round(rmsnorm(np.array([1.0, 1.0, 3.0, 5.0])), 4)"
+      expect: [0.3333, 0.3333, 1.0, 1.6667]
+      tol: 0.0002
+      say: "x = [1, 1, 3, 5]"
+    - expr: "np.round(rmsnorm(np.array([[3.0, 4.0], [1.0, 1.0]])), 4)"
+      expect: [[0.8485, 1.1314], [1.0, 1.0]]
+      tol: 0.0002
+      say: "two rows, each normalized on its own"
+    - expr: "np.round(rmsnorm(np.array([0.001, 0.001])), 4)"
+      expect: [0.7071, 0.7071]
+      tol: 0.0002
+      say: "x = [0.001, 0.001]: the average square is 0.000001, the same size as eps"
+  hints:
+    - when: { testFailed: 1 }
+      say: "The first row works but two rows don’t: take the mean along the last axis only, with axis=-1 and keepdims=True."
+    - when: { testFailed: 2 }
+      say: ["For [0.001, 0.001] the average square is 0.000001, the same size as eps. So where eps goes changes the answer.", "eps is added to the average of the squares, before the square root is taken."]
+    - when: { testFailed: 0 }
+      say: ["Square, average, square root. No mean is subtracted.", "Check the order: eps goes inside the square root, added to the average of the squares."]
+    - when: { any: true }
+      say: ["Square, average, square root, in that order, along the last axis.", "Square every number, then average each row. Keep the last axis, so the result still divides each row.", "eps goes inside the square root, not outside."]
+  after: "RMSNorm only rescales: no mean is subtracted, so [1, 1, 3, 5] keeps its direction. keepdims=True keeps one rms per row, shape (rows, 1), so each row is divided by its own rms. eps keeps the square root above 0 when x is all zeros."
+
+rope-qx:
+  type: number
+  prompt: "θ = 0.5 radians per position. q sits at position 2. By how many radians is q rotated?"
+  answer: 1
+  tol: 0.001
+  after: "2 × 0.5 = 1 radian. Rotating [1, 0] by 1 radian gives [cos 1, sin 1] ≈ [0.54, 0.84]: same length 1, new direction."
+  hints:
+    - when: { equals: 0.5 }
+      say: "0.5 is θ, the angle per position. q is at position 2."
+    - when: { any: true }
+      say: "The angle is position × θ."
+
+rope-shift:
+  type: predict
+  prompt: "q sits at position 2 and k at position 0, and their score is some number s. Now move both 10 positions later (12 and 10). The score…"
+  options: ["stays exactly s", "gets smaller, because they are further into the text", "changes, because both vectors point somewhere new"]
+  answer: 0
+  hints:
+    - when: { any: true }
+      say: "Both vectors turn by the same extra angle. Does the angle between them change?"
+  reveal: "Stays exactly s. Both are rotated by an extra 10 × 0.5 = 5 radians, so the angle between them does not change, and neither does the dot product."
+
+rope-score:
+  type: number
+  prompt: "q = [1, 0] at position 2 and k = [0, 1] at position 0, θ = 0.5. After rotating, q = [cos 1, sin 1] ≈ [0.54, 0.84] and k stays [0, 1]. What is the score q·k? (2 decimals)"
+  answer: 0.84
+  tol: 0.01
+  after: "0.54 × 0 + 0.84 × 1 = 0.84. At positions (5, 3) or (12, 10) it is the same 0.84. At (0, 2) it is −0.84: the direction of the distance matters too."
+  hints:
+    - when: { equals: 0 }
+      say: "0 is the score without rotation. Use the rotated q."
+    - when: { equals: 0.54 }
+      say: "0.54 is q’s first number. k = [0, 1], so only q’s second number counts."
+    - when: { any: true }
+      say: ["A dot product: multiply q and k number by number, then add.", "k = [0, 1], so only q’s second number counts."]
+
+rope-code:
+  type: code
+  prompt: "Rotate a pair v by pos × theta radians (counter-clockwise)."
+  template: |
+    def rotate(v, pos, theta=0.5):
+        a = pos * theta
+        c, s = np.cos(a), np.sin(a)
+        return ____
+
+    q, k = np.array([1.0, 2.0]), np.array([3.0, -1.0])
+    # same distance, same score
+    print(rotate(q, 5) @ rotate(k, 2), rotate(q, 13) @ rotate(k, 10))
+  solution: "np.array([c * v[0] - s * v[1], s * v[0] + c * v[1]])"
+  tests:
+    - expr: "np.round(rotate(np.array([1.0, 0.0]), 2), 4)"
+      expect: [0.5403, 0.8415]
+      tol: 0.0002
+      say: "[1, 0] by 1 radian → [cos 1, sin 1]"
+    - expr: "np.round(rotate(np.array([0.0, 1.0]), 1), 4)"
+      expect: [-0.4794, 0.8776]
+      tol: 0.0002
+      say: "[0, 1] by 0.5 radian → [−sin 0.5, cos 0.5]"
+    - expr: "round(float(rotate(np.array([1.0, 2.0]), 5) @ rotate(np.array([3.0, -1.0]), 2) - rotate(np.array([1.0, 2.0]), 13) @ rotate(np.array([3.0, -1.0]), 10)), 9)"
+      expect: 0
+      tol: 0.000001
+      say: "same distance, same score"
+  hints:
+    - when: { testFailed: 1 }
+      say: ["[1, 0] works but [0, 1] doesn’t: both new numbers must use v[1].", "In the rotation formula, each new number uses both x and y. Check the signs too."]
+    - when: { any: true }
+      say: ["Use the rotation formula from the text, with x = v[0], y = v[1], cos a = c and sin a = s.", "Return np.array([new x, new y]). Write each new number with c, s, v[0] and v[1]."]
+  after: "Each new number mixes both old numbers, so the length stays the same. q turns by m × θ at position m and k by n × θ at position n, so the angle between them changes by (m − n) × θ. That is why the score depends only on the distance."
+
+silu-1:
+  type: number
+  prompt: "SiLU(z) = z × sigmoid(z) = z / (1 + e^−z). Use e^−1 ≈ 0.37. What is SiLU(1)? (2 decimals)"
+  answer: 0.73
+  tol: 0.01
+  after: "1 / (1 + 0.37) = 1 / 1.37 ≈ 0.73. With value u = 3, that unit outputs 0.73 × 3 ≈ 2.19. ReLU would give 1."
+  hints:
+    - when: { equals: 1 }
+      say: "That is ReLU(1). SiLU multiplies 1 by sigmoid(1), which is below 1."
+    - when: { any: true }
+      say: ["SiLU(z) = z × sigmoid(z). Start with sigmoid(1).", "sigmoid(1) = 1 / (1 + e^−1), and you are given e^−1 ≈ 0.37."]
+
+swiglu-hidden:
+  type: number
+  prompt: "A plain FFN has 2 matrices of `d_model` × `d_ff`. A SwiGLU FFN has 3 matrices of `d_model` × `d_ff`′. For the same number of weights, what is `d_ff`′ / `d_ff`? (2 decimals)"
+  answer: 0.67
+  tol: 0.01
+  after: "3 × `d_model` × `d_ff`′ = 2 × `d_model` × `d_ff`, so `d_ff`′ = 2/3 of `d_ff` ≈ 0.67. With `d_ff` = 2048 that is about 1365; real models round it to a size that GPUs handle fast, such as 1408 (a multiple of 64)."
+  hints:
+    - when: { equals: 1.5 }
+      say: "That is the opposite: 3/2 is how many more weights three full-size matrices would have. `d_ff`′ must be smaller."
+    - when: { equals: 0.33 }
+      wrong: "round(1 - 2/3, 2)"
+      say: "Close: the two FFNs have 2 and 3 matrices. Set 3 × `d_ff`′ equal to 2 × `d_ff`."
+    - when: { any: true }
+      say: ["Write the two weight counts and set them equal; `d_model` cancels.", "3 × `d_ff`′ = 2 × `d_ff`. Divide both sides by 3 × `d_ff`."]
+
+swiglu-code:
+  type: code
+  prompt: "Write the SwiGLU FFN of section 5 for a batch of word rows x of shape (L, `d_model`), with the weights `W_gate`, `W_up` and `W_down`. Return one row of `d_model` numbers per word."
+  template: |
+    def silu(z):
+        return z / (1 + np.exp(-z))                        # z · sigmoid(z)
+
+    def swiglu_ffn(x, W_gate, W_up, W_down):
+        ____
+
+    x = np.array([[1.0, -1.0]])                            # one word, d_model = 2
+    W_gate = np.array([[2.0, 0.0, 1.0], [0.0, 2.0, 1.0]])   # (2, 3): d_ff = 3
+    W_up   = np.array([[1.0, 1.0, 0.0], [0.0, 1.0, 1.0]])   # (2, 3)
+    W_down = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]) # (3, 2)
+    print(swiglu_ffn(x, W_gate, W_up, W_down).round(4))
+  solution: |-
+    gate = silu(x @ W_gate)                  # (L, d_ff)
+        value = x @ W_up                         # (L, d_ff)
+        print("gate:", gate.round(4), " value:", value)
+        return (gate * value) @ W_down           # (L, d_model)
+  tests:
+    - expr: "swiglu_ffn(np.array([[1.0, -1.0], [0.0, 0.0]]), W_gate, W_up, W_down).shape"
+      expect: [2, 2]
+      say: "two words in, two rows of `d_model` = 2 out"
+    - expr: "swiglu_ffn(x, W_gate, W_up, W_down).round(4)"
+      expect: [[1.7616, 0.0]]
+      tol: 0.0002
+      say: "gate [1.7616, −0.2384, 0] × value [1, 0, −1] = [1.7616, 0, 0], then @ `W_down`"
+    - expr: "swiglu_ffn(np.array([[0.0, 1.0]]), W_gate, W_up, W_down).round(4)"
+      expect: [[0.7311, 2.4927]]
+      tol: 0.0002
+      say: "x = [0, 1]: gate [0, 1.7616, 0.7311], value [0, 1, 1]"
+    - expr: "swiglu_ffn(np.array([[2.0, 1.0]]), W_gate, W_up, W_down).round(4)"
+      expect: [[10.7138, 8.1425]]
+      tol: 0.0002
+      say: "x = [2, 1]: gate SiLU([4, 2, 3]), value [2, 3, 1]"
+  hints:
+    - when: { error: "not aligned|shape|broadcast|matmul|core dimension" }
+      say: ["Check each shape: x is (L, 2), `W_gate` and `W_up` are (2, 3), `W_down` is (3, 2).", "Multiply gate and value with *, number by number. Only `W_down` uses @."]
+    - when: { testFailed: 0 }
+      say: ["Two words in must give two rows of `d_model` = 2 numbers. Is each row still `d_ff` = 3 numbers wide?", "The last step multiplies by `W_down`, which turns each row back into `d_model` numbers."]
+      wrong: "return silu(x @ W_gate) * (x @ W_up)"
+    - when: { testFailed: 1 }
+      say: ["For x = [1, −1] the gate must be SiLU([2, −2, 0]) = [1.7616, −0.2384, 0]. Use the `silu` function above: it is z·σ(z), not max(0, z).", "SiLU goes on x @ `W_gate` only. The value is the plain product x @ `W_up`."]
+      wrong: "return (np.maximum(0, x @ W_gate) * (x @ W_up)) @ W_down"
+    - when: { testFailed: 3 }
+      say: ["For x = [2, 1] the gate products are [4, 2, 3]. Where does SiLU act in your code?", "SiLU works on the gate alone, before gate and value are multiplied."]
+      wrong: "return silu((x @ W_gate) * (x @ W_up)) @ W_down"
+    - when: { any: true }
+      say: ["Follow the formula from the inside: two matrix products, SiLU on one of them, a number-by-number product, then `W_down`.", "SiLU goes on the product with `W_gate`. The value is the plain product with `W_up`. Both are (L, 3).", "Multiply gate and value number by number, then turn the result into `d_model` numbers with `W_down`."]
+  after: "Both products widen each word to `d_ff` = 3. SiLU on the gate sets how much of each value unit passes, so the two are multiplied number by number (*, not @). `W_down` then turns each word into `d_model` = 2 numbers again."

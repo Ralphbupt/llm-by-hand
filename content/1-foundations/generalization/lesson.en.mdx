@@ -1,0 +1,164 @@
+---
+title: Generalization
+level: "8"
+order: 8
+part: foundations
+question: How do you train a network that also works on data it has never seen?
+run: browser
+checkpoint: dropout-code
+testOut: [params, decay-w, decay-code, dropout-unit, dropout-code]
+recap:
+  can:
+    - "Spot overfitting: the training loss keeps falling while the held-out loss rises."
+    - "Compute one gradient step with weight decay, by hand and in code."
+    - "Apply inverted dropout to a layer with a given keep mask."
+  keys:
+    - "A polynomial of degree $d$ has $d + 1$ parameters"
+    - "Weight decay: $\\text{loss} + \\lambda w^2$, so every weight gets an extra gradient $2\\lambda w$"
+    - "Dropout in training: `h * keep / (1 - p)`; at test time nothing is dropped"
+    - "Early stopping keeps the weights from the step with the lowest held-out loss"
+  mistakes:
+    - "Reading a low training loss as a good model: only the held-out loss shows how it does on new data."
+    - "Forgetting the 2 in the penalty’s gradient $2\\lambda w$, or writing `/ 1 - p` instead of `/ (1 - p)`."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import CapacityLab from '@viz/CapacityLab.astro'
+import CurveLab from '@viz/CurveLab.astro'
+
+Level 7 made training fast and stable. A low training loss is still not the goal: the model has to work on
+data it has never seen. That is called **generalization**. This level adds two habits:
+
+1. **A held-out set**: check the model on data it never trained on.
+2. **Regularization**: stop the model from memorizing the noise.
+
+## 1. Overfitting
+
+A model can do well on its training data and badly on everything else. Here are 10 noisy points from the curve
+y = sin(πx) (a smooth wave; see the [math page](/math/#sin-poly)), and 40 more points from the same curve that the model never trains on: the **held-out set**.
+
+The model is a polynomial, $c_0 + c_1 x + c_2 x^2 + \dots + c_d x^d$: a sum of powers of x, each times a number (a coefficient). Its degree $d$ is the biggest power. Each coefficient is one parameter.
+
+<Blank id="params" />
+
+<Gate requires="params">
+
+<Predict id="capacity-curve" />
+
+</Gate>
+
+<Gate requires="capacity-curve">
+
+Slide the degree. Each curve is the one with the smallest squared error on the training points, computed directly
+instead of by gradient descent, so what you see is the best each degree can do.
+
+<CapacityLab />
+
+Degree 3 has train loss 0.0382 and held-out loss 0.1579. Degree 9 passes through every training point (train loss 0.0000)
+and swings wildly between them: held-out loss 0.8275. The model learned the noise, not the curve. That is **overfitting**.
+
+How complicated a curve a model can draw is called its **capacity**. More parameters give more capacity.
+Too little capacity misses the pattern (degree 0 or 1). Too much, with only 10 points, fits the noise (degree 9).
+
+The same thing happens over time while training. Here is a network with 32 hidden units (97 parameters) trained on the same 10 points:
+
+<CurveLab />
+
+The train loss keeps falling. The held-out loss falls, reaches its lowest point, then slowly rises again. **Early stopping** keeps the weights
+from the step where the held-out loss was lowest.
+
+<Stuck q="My training loss keeps going down, but the held-out loss went up. Is training broken?">
+
+No. Training is doing exactly what you asked: lower the loss on the training points. Past some point the only way left
+to lower it is to bend toward each point's noise. That makes the curve worse everywhere else.
+
+The training loss alone does not show that this is happening. That is the whole reason to keep a held-out set.
+
+</Stuck>
+
+<Stuck q="If I choose the stopping step by looking at the held-out loss, isn’t the held-out set now part of training?">
+
+A little, yes. Every decision you make by looking at it (when to stop, which degree, how much regularization) fits it a bit.
+So in practice there are two sets kept out of training: a **validation set** you use for those decisions,
+and a **test set** you look at once, at the very end, to report how good the model is.
+
+The one rule with no exceptions: the model's weights never train on either of them.
+
+</Stuck>
+
+## 2. Regularization
+
+Besides stopping early, you can make memorizing harder.
+
+**Weight decay** adds a penalty for big weights to the loss: $\text{loss} + \lambda w^2$, where $\lambda$ ("lambda") is a small number such as 0.1 that sets how strong the penalty is. Its gradient, $2 \lambda w$, pulls every weight a little toward 0 on every step.
+
+<Blank id="decay-w" />
+
+</Gate>
+
+<Gate requires="decay-w">
+
+In code, one step adds the penalty’s gradient to the data’s gradient, then steps downhill as usual. The same two lines work
+for one weight and for a whole array of weights.
+
+<CodeBlank id="decay-code" />
+
+<Deeper title="Weight decay with Adam: AdamW">
+
+With plain SGD, adding λw² to the loss and shrinking every weight a little on each step are the same thing.
+With Adam they are not: the penalty's gradient gets divided by $\sqrt{\hat v}$ like every other gradient, so weights with
+big gradients are barely decayed. **AdamW** fixes this by skipping the loss and shrinking the weights directly after
+each Adam step: $w \leftarrow w - \text{lr}\cdot\lambda\, w$. Most language models are trained with AdamW.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="decay-code">
+
+Here is the degree-9 polynomial again, now with weight decay on c1 … c9. Slide it up from 0.
+
+<CapacityLab decay />
+
+A tiny decay, 0.0001, takes the held-out loss from 0.8275 down to 0.1727: the wild swings are gone.
+Too much, 0.1, and the curve is too flat to follow the data: train 0.1380, held-out 0.3005.
+
+**Dropout** works differently. During training, each hidden unit is set to 0 at random with probability p.
+The network can't depend on any single unit, so it has to store what it learns in many units. To keep the total the same size,
+the units that stay on are divided by 1 − p. At test time nothing is dropped.
+Dropping units and dividing the kept ones by 1 − p is called **inverted dropout**; it is the usual way to write dropout.
+
+<Blank id="dropout-unit" />
+
+</Gate>
+
+<Gate requires="dropout-unit">
+
+Train the 32-unit network again, with dropout p = 0.3 on its hidden units:
+
+<CurveLab dropout />
+
+<TryIt>
+
+Train the network once without dropout and once with it. Compare the held-out loss at step 3000, and how far it climbs
+after its lowest point. Then go back to the polynomial and find the weight decay with the lowest held-out loss.
+
+</TryIt>
+
+The GPT you write in level 21 uses the first habit: it keeps 1,500 of its 10,000 problems out of training: 500 for validation (to pick the best epoch) and 1,000 for the final test.
+Larger models also use dropout and weight decay.
+
+Last, write a whole dropout layer yourself. The random part is done for you: `u` holds one random number between 0
+and 1 per unit, and a unit is dropped when its number is below p, which happens with probability p.
+A comparison on an array gives one True or False per number: `np.array([0.9, 0.1]) >= 0.5` is `[True, False]`.
+When you multiply, NumPy treats True as 1 and False as 0.
+The layer also needs to know whether it is training: at test time it must return h unchanged.
+
+<CodeBlank id="dropout-code" />
+
+</Gate>

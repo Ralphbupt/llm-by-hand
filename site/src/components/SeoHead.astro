@@ -1,0 +1,68 @@
+---
+/**
+ * Everything a page's <head> needs besides charset, viewport and its own styles: title, description, canonical URL,
+ * Open Graph and Twitter cards, theme-color, icons, structured data (JSON-LD), the Markdown alternate of a level,
+ * and the analytics consent bar (only when the site is built with PUBLIC_GA4_ID).
+ * One include per layout or page: <SeoHead title=… description=… />
+ */
+import { SITE_NAME, THEME_COLOR, GA4_ID, abs } from '../config/site'
+import { toJsonScript } from '@lib/score'
+import Consent from './Consent.astro'
+import bricolage from '@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2?url'
+import type { PageInfo } from '@lib/analytics'
+
+interface Props {
+  /** the full <title> */
+  title: string
+  description: string
+  /** Open Graph image path on this site (default: the site-wide card) */
+  image?: string
+  imageAlt?: string
+  type?: 'website' | 'article'
+  /** one JSON-LD object or several */
+  jsonLd?: object | object[]
+  /** the level's Markdown version, e.g. /learn/attention.md */
+  markdown?: string
+  /** keep this page out of search results (404, the mistakes book) */
+  noindex?: boolean
+  /** preload the display font (pages whose first screen uses it) */
+  preloadDisplayFont?: boolean
+  /** facts for analytics events (slug, level, …) */
+  page?: PageInfo
+}
+const { title, description, image = '/og/site.png', imageAlt = `${SITE_NAME}: build your own GPT, by hand`, type = 'website', jsonLd, markdown, noindex = false, preloadDisplayFont = false, page = {} } = Astro.props
+const canonical = abs(Astro.url.pathname)
+const img = abs(image)
+const ld = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []
+---
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical} />
+{noindex && <meta name="robots" content="noindex" />}
+<meta name="theme-color" media="(prefers-color-scheme: light)" content={THEME_COLOR.light} />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content={THEME_COLOR.dark} />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon.ico" sizes="32x32" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+{preloadDisplayFont && <link rel="preload" href={bricolage} as="font" type="font/woff2" crossorigin />}
+{markdown && <link rel="alternate" type="text/markdown" href={markdown} title="This level as Markdown" />}
+
+<meta property="og:site_name" content={SITE_NAME} />
+<meta property="og:type" content={type} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:image" content={img} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content={imageAlt} />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={img} />
+<meta name="twitter:image:alt" content={imageAlt} />
+
+{ld.map((o) => <script type="application/ld+json" set:html={toJsonScript(o)} />)}
+<script type="application/json" id="seo-page" set:html={toJsonScript(page)} />
+{GA4_ID && <Consent />}

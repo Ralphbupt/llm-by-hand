@@ -1,0 +1,6 @@
+---
+import Lab from './RopeLab.svelte'
+interface Props { hide?: { qx?: string; score?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

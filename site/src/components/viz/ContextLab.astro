@@ -1,0 +1,6 @@
+---
+import Lab from './ContextLab.svelte'
+interface Props { hide?: { mix?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

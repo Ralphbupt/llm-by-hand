@@ -1,0 +1,201 @@
+compress:
+  type: number
+  prompt: "A 28×28 picture has 784 numbers. The code has 2. How many times fewer numbers is the code?"
+  answer: 392
+  tol: 0
+  after: "784 ÷ 2 = 392. The decoder has to rebuild 784 numbers from just 2."
+  hints:
+    - when: { equals: 782 }
+      say: "That is how many fewer numbers. The question asks how many times fewer: divide."
+    - when: { equals: 1568 }
+      say: "That multiplies. Fewer means divide 784 by 2."
+    - when: { any: true }
+      say: ["How many numbers in, how many in the code?", "“How many times fewer” is a division: the bigger count divided by the smaller one."]
+
+code-shape:
+  type: shape
+  prompt: "A batch of 32 pictures has shape (32, 784). The encoder maps each picture to a 2-number code. What shape is the batch of codes?"
+  answer: [32, 2]
+  after: "(32, 2): one row per picture, 2 numbers per row. The decoder turns it back into (32, 784)."
+  hints:
+    - when: { shape: [2, 32] }
+      say: "Right numbers, swapped. Each picture keeps its own row."
+    - when: { shape: [32, 784] }
+      say: "That is the input. The encoder shrinks each row to the code size."
+    - when: { any: true }
+      say: ["How many rows (pictures) are there, and how many numbers in each code?"]
+
+recon:
+  type: number
+  prompt: "A 4-pixel picture x = [1, 0, 1, 1] is rebuilt as x̂ = [0.5, 0, 1, 0.5]. What is the mean squared error?"
+  answer: 0.125
+  tol: 0.001
+  after: "Differences 0.5, 0, 0, 0.5 → squares 0.25, 0, 0, 0.25 → sum 0.5 → mean 0.5 ÷ 4 = 0.125."
+  hints:
+    - when: { equals: 0.5 }
+      say: "That is the sum of the squares. Mean means divide by the 4 pixels."
+    - when: { equals: 0.25 }
+      say: "Check the count: there are 4 pixels, and two of them differ by 0.5."
+    - when: { any: true }
+      say: ["Subtract pixel by pixel first: x − x̂.", "The differences are 0.5, 0, 0, 0.5. Square each one next."]
+
+recon-code:
+  type: code
+  prompt: "Write the mean squared error between a picture x and its rebuild xₕₐₜ (both NumPy arrays of the same shape)."
+  template: |
+    def rebuild_loss(x, x_hat):
+        return ____
+
+    x = np.array([1., 0, 1, 1])
+    x_hat = np.array([0.5, 0, 1, 0.5])
+    print(rebuild_loss(x, x_hat))
+  solution: "np.mean((x - x_hat) ** 2)"
+  tests:
+    - expr: "rebuild_loss(np.array([1., 0, 1, 1]), np.array([0.5, 0, 1, 0.5]))"
+      expect: 0.125
+      tol: 0.0001
+      say: "the example on the page gives 0.125"
+    - expr: "rebuild_loss(np.array([[0., 1], [1, 0]]), np.array([[0., 1], [1, 0]]))"
+      expect: 0
+      say: "a perfect rebuild has loss 0"
+    - expr: "rebuild_loss(np.array([0., 0]), np.array([2., 0]))"
+      expect: 2
+      say: "[0, 0] vs [2, 0]: squares 4 and 0, mean 2"
+  after: "x − xₕₐₜ works pixel by pixel on the whole array, so the same line handles any shape. Squaring comes before the mean: it makes every difference count as positive, so errors of opposite sign cannot cancel."
+  hints:
+    - when: { error: "unsupported operand type.*\\^|bitwise_xor" }
+      say: "Python writes a power as **, not ^. For example x ** 2 squares x."
+    - when: { testFailed: 0 }
+      say: ["Is each difference squared before averaging?", "First square, then average. Python writes a square as ** 2."]
+    - when: { any: true }
+      say: ["Three steps: subtract, square, average.", "Square the whole array of differences at once, then take its mean. For the page example the squares add to 0.5."]
+
+holes:
+  type: predict
+  prompt: "Guess before you look: you draw 1,000 random codes with the same mean and std as the real digits’ codes. How many land far from every real digit’s code?"
+  options: ["None: real codes fill the map", "About 1 in 10", "Nearly all of them"]
+  reveal: "About 1 in 10: 11% in demo.py, which compares with 4,000 real codes. The lab below keeps only 400, so there you will see about a third. The codes cluster by digit and leave gaps, because the loss only asks for close rebuilds, not for a filled-in map."
+
+reparam:
+  type: number
+  prompt: "A VAE’s encoder gives μ = 1 and σ = 0.5 for one code number. The random draw is ε = −2. What is the code z = μ + σ·ε?"
+  answer: 0
+  tol: 0.001
+  after: "z = 1 + 0.5 × (−2) = 1 − 1 = 0. Another draw of ε gives another z near 1."
+  hints:
+    - when: { equals: 2 }
+      say: "Check the sign: ε = −2, so σ·ε is negative."
+    - when: { equals: -1 }
+      say: "That is σ·ε alone. Add μ."
+    - when: { equals: -0.5 }
+      say: "Multiply σ by ε first: 0.5 × (−2) = −1, then add μ = 1."
+    - when: { any: true }
+      say: ["First σ·ε, then add μ.", "σ·ε = 0.5 × (−2) = −1."]
+
+kl-two:
+  type: number
+  prompt: "Use KL = ½(μ² + σ² − 1 − ln σ²). For one code number, μ = 2 and σ = 1 (so ln σ² = ln 1 = 0). What is the KL term?"
+  answer: 2
+  tol: 0.001
+  after: "½(4 + 1 − 1 − 0) = ½ × 4 = 2. A code centered at 2 instead of 0 costs 2; a code at μ = 0, σ = 1 costs nothing."
+  hints:
+    - when: { equals: 4 }
+      say: "Don’t forget the ½ in front."
+    - when: { equals: 2.5 }
+      say: "Check the − 1 inside the bracket: 4 + 1 − 1 − 0."
+    - when: { any: true }
+      say: ["μ² = 4 and σ² = 1. Use those numbers.", "The bracket is 4 + 1 − 1 − 0 = 4."]
+
+vae-holes:
+  type: predict
+  prompt: "In demo.py, the plain autoencoder’s random codes landed far from every real code 11% of the time (about a third in the lab, which keeps fewer codes). A VAE draws random codes from N(0, 1). How often do they land far from every real code?"
+  options: ["More often: the KL term mixes all the codes together", "About the same, 11%", "Much less often"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "The KL term pulls every picture’s codes toward N(0, 1). Where do the random codes come from?"
+    - when: { equals: 1 }
+      say: "The VAE was trained so that real codes cover exactly the region random codes come from."
+  reveal: "Much less often: 1% in demo.py, against 11% (in the lab, about 1 in 7 against about a third). Real codes are packed around 0 with a std of about 1, exactly where N(0, 1) picks its samples."
+
+kl-wins:
+  type: predict
+  prompt: "Someone writes the VAE loss as the rebuild error AVERAGED over the 784 pixels (instead of summed), plus the KL term. What happens in training?"
+  options: ["Nothing important: it is only a scale", "The KL term wins: the codes stop carrying the picture, and every code decodes to nearly the same unclear digit", "The rebuild wins: the gaps in the code space come back"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Only one of the two parts is divided by 784. What does that do to the balance between them?"
+    - when: { equals: 2 }
+      say: "Averaging makes the rebuild error 784 times smaller. Which part is now the big one?"
+  reveal: "The KL term wins. Averaging divides the rebuild error by 784, so the cheapest way to lower the loss is to make every code exactly N(0, 1), whatever the picture. The decoder then gets no information and draws an average digit. That is why demo.py sums the rebuild error over the pixels."
+
+sample-code:
+  type: code
+  prompt: "Write the VAE’s sampling step: given arrays mu, sigma and a standard normal draw eps (all the same shape), return the codes."
+  template: |
+    def sample(mu, sigma, eps):
+        return ____
+
+    print(sample(np.array([1., 0]), np.array([0.5, 1]), np.array([-2., 0.3])))
+  solution: "mu + sigma * eps"
+  after: "eps carries all the randomness, and sigma only scales it, so with σ = 0 the code is exactly μ. Written this way, the code has a slope with respect to μ and σ, and backpropagation can train the encoder."
+  tests:
+    - expr: "sample(np.array([3., -1]), np.array([0., 0]), np.array([5., 5]))"
+      expect: [3, -1]
+      say: "with σ = 0 the code is exactly μ"
+    - expr: "sample(np.array([1.]), np.array([0.5]), np.array([-2.]))"
+      expect: [0]
+      tol: 0.0001
+      say: "μ = 1, σ = 0.5, ε = −2 gives 0"
+    - expr: "sample(np.array([1., 0]), np.array([0.5, 1]), np.array([-2., 0.3]))"
+      expect: [0, 0.3]
+      tol: 0.0001
+      say: "it must work number by number on arrays"
+  hints:
+    - when: { testFailed: 0 }
+      wrong: "mu + eps"
+      say: "With σ = 0 the randomness should vanish, and the code should be exactly μ, here [3, −1]. Which array should multiply ε?"
+    - when: { any: true }
+      say: ["Use the sampling formula of the VAE: the code is the mean, moved by a random amount.", "Which array sets the center of the code, and which one scales eps?", "For μ = 1, σ = 0.5, ε = −2 the code is 0."]
+
+vae-loss:
+  type: code
+  prompt: "Write the VAE loss for one picture: the binary cross-entropy of every pixel, summed, plus the KL term of every code number, summed."
+  template: |
+    def vae_loss(x, x_hat, mu, sigma):
+        # x, x_hat: pixels between 0 and 1 (x_hat never exactly 0 or 1).
+        # mu, sigma: one entry per code number.
+        ____
+        return rebuild + kl
+
+    x, x_hat = np.array([1., 0]), np.array([0.5, 0.5])
+    print(vae_loss(x, x_hat, np.zeros(2), np.ones(2)))
+  solution: |-
+    rebuild = -(x * np.log(x_hat) + (1 - x) * np.log(1 - x_hat)).sum()
+        kl = 0.5 * (mu ** 2 + sigma ** 2 - 1 - np.log(sigma ** 2)).sum()
+  tests:
+    - expr: "vae_loss(np.array([1., 0]), np.array([0.5, 0.5]), np.zeros(2), np.ones(2))"
+      expect: 1.3863
+      tol: 0.0001
+      say: "two pixels each guessed at 0.5: ln 2 + ln 2 ≈ 1.3863; μ = 0, σ = 1 adds no KL"
+    - expr: "vae_loss(np.array([1., 0]), np.array([0.9, 0.1]), np.array([2., 0]), np.ones(2))"
+      expect: 2.2107
+      tol: 0.0001
+      say: "a good rebuild (2 × −ln 0.9 ≈ 0.2107) plus KL 2 for the code number at μ = 2"
+    - expr: "vae_loss(np.array([1., 0, 1, 1]), np.array([0.9, 0.1, 0.9, 0.9]), np.zeros(2), np.ones(2))"
+      expect: 0.4214
+      tol: 0.0001
+      say: "4 pixels: the rebuild error is SUMMED, 4 × 0.1054, not averaged"
+  after: "Both parts are sums, so the rebuild error over 784 pixels is in the hundreds and the KL term is a few units. Averaging the rebuild part would make the KL term win, and the codes would stop carrying the picture."
+  hints:
+    - when: { error: "unsupported operand type.*\\^|bitwise_xor" }
+      say: "Python writes a power as **, not ^. For example x ** 2 squares x."
+    - when: { error: "is not defined" }
+      say: "Set both names the template returns, rebuild and kl, inside the function."
+    - when: { testFailed: 1 }
+      say: ["The rebuild part is right; the KL part is not. Check it against the KL formula in section 4.", "KL = ½(μ² + σ² − 1 − ln σ²), summed over the code numbers."]
+    - when: { testFailed: 0 }
+      say: ["Start with the rebuild part: for each pixel, −(x ln x̂ + (1 − x) ln(1 − x̂)).", "With x = [1, 0] and x̂ = [0.5, 0.5] each pixel costs ln 2 ≈ 0.693, so the sum is 1.386. If you got 0.693, you took a mean: the VAE loss sums over the pixels."]
+    - when: { any: true }
+      say: ["Two lines: rebuild, then kl. Each is a formula from this page, summed.", "rebuild: the binary cross-entropy of each pixel, summed. kl: the section-4 formula, summed."]

@@ -1,0 +1,224 @@
+decode-6:
+  type: number
+  prompt: "A float16 number has the bits 0 10001 1000000000: sign 0, exponent 10001 (that is 17), mantissa 1000000000 (that is 512). float16 has 10 mantissa bits and bias 15. What number is it?"
+  answer: 6
+  tol: 0
+  after: "(1 + 512/1024) × 2^(17 − 15) = 1.5 × 4 = 6. The sign bit 0 makes it positive."
+  hints:
+    - when: { equals: 1.5 }
+      say: "1.5 is only the mantissa part. Multiply by 2^(exponent − bias)."
+    - when: { equals: 4 }
+      say: "4 is 2^(17 − 15). Multiply by the mantissa part, 1 + 512/1024."
+    - when: { equals: 3 }
+      say: "3 would be 1.5 × 2. The power is 17 − 15 = 2, so 2² = 4."
+    - when: { any: true }
+      say: ["Use (1 + mant/1024) × 2^(exp − 15).", "mant/1024 = 512/1024 = 0.5, and exp − 15 = 2."]
+
+count-bf16:
+  type: number
+  prompt: "bfloat16 has 7 mantissa bits. How many different bfloat16 numbers are there from 1 up to 2 (1 included, 2 not included)?"
+  answer: 128
+  tol: 0
+  after: "7 bits give 2⁷ = 128 patterns, so 128 numbers: 1, 1 + 1/128, 1 + 2/128, … up to 1 + 127/128. The gap between neighbors is 1/128 ≈ 0.0078."
+  hints:
+    - when: { equals: 7 }
+      say: "7 is the number of bits. How many different patterns can 7 bits make?"
+    - when: { equals: 14 }
+      say: "Each bit doubles the number of patterns: 2 × 2 × … seven times."
+    - when: { equals: 256 }
+      say: "256 = 2⁸ would need 8 mantissa bits. bfloat16 has 7."
+    - when: { any: true }
+      say: ["Between 1 and 2 the exponent is fixed. Only the mantissa changes.", "n bits make 2ⁿ patterns."]
+
+gap-256:
+  type: number
+  prompt: "In bfloat16 there are 128 numbers from 1 up to 2, so neighbors are 1/128 apart. The numbers from 256 up to 512 use the same 128 mantissa patterns, scaled by 256. How far apart are neighbors there?"
+  answer: 2
+  tol: 0
+  after: "256 × 1/128 = 2. The bfloat16 numbers there are 256, 258, 260, … A bfloat16 cannot store 257."
+  hints:
+    - when: { equals: 0.0078 }
+      say: "That is the gap between 1 and 2. Every number from 256 to 512 is 256 times bigger, and so is the gap."
+    - when: { equals: 256 }
+      say: "256 is the length of the whole range [256, 512). It holds 128 numbers."
+    - when: { any: true }
+      say: ["Same 128 patterns, but the range is now 256 wide instead of 1.", "From 1 to 2 the gap was 1/128. Every number here is 256 times bigger, and so is the gap."]
+
+pred-bf16-add:
+  type: predict
+  prompt: "In bfloat16, neighbors from 256 to 512 are 2 apart. What is 256 + 0.75, stored in bfloat16?"
+  options: ["256.75", "256", "258"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Is 256.75 one of the bfloat16 numbers 256, 258, 260, …?"
+    - when: { equals: 2 }
+      say: "Which neighbor is nearer to 256.75: 256 (0.75 away) or 258 (1.25 away)?"
+  reveal: "256. The result rounds to the nearest bfloat16 number, and 256.75 is nearer to 256 than to 258. Adding 0.75 changed nothing. This is why a small update to a big weight can disappear."
+
+pred-overflow:
+  type: predict
+  prompt: "The largest float16 is 65504. What is np.float16(300) * np.float16(300)?"
+  options: ["90000", "65504", "inf"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "90000 is the true answer. Can float16 store a number above 65504?"
+    - when: { equals: 1 }
+      say: "NumPy does not stop at the largest number. A result too big for the format becomes infinity."
+  reveal: "inf. 300 × 300 = 90,000 is bigger than 65504, so it overflows to infinity. In float32 the same product is fine: its largest number is about 3.4 × 10³⁸."
+
+exp-limit:
+  type: number
+  prompt: "e¹¹ ≈ 59 874 and e¹² ≈ 162 755. The largest float16 is 65504. What is the largest whole number z for which np.exp(np.float16(z)) is not inf?"
+  answer: 11
+  tol: 0
+  after: "e¹¹ ≈ 59 874 still fits under 65504; e¹² does not. So in float16, any score above about 11 makes exp overflow. In float32 the limit is about 88."
+  hints:
+    - when: { equals: 12 }
+      say: "e¹² ≈ 162 755 is above 65504, so it becomes inf."
+    - when: { any: true }
+      say: "Compare each of e¹¹ and e¹² with 65504."
+
+pred-naive:
+  type: predict
+  prompt: "Scores z = [1000, 1001] in float32, where e⁸⁹ is already inf. What does the plain formula e^z / sum(e^z) give?"
+  options: ["[0.27, 0.73]", "[0, 1]", "[nan, nan]"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "That is the right answer on paper. Follow the computer: what is e¹⁰⁰⁰ in float32?"
+    - when: { equals: 1 }
+      say: "Both e¹⁰⁰⁰ and e¹⁰⁰¹ are inf, and so is the sum. What is inf / inf?"
+  reveal: "[nan, nan]. e¹⁰⁰⁰ and e¹⁰⁰¹ both overflow to inf, the sum is inf, and inf / inf is nan (“not a number”)."
+
+softmax-stable:
+  type: number
+  prompt: "Scores z = [1000, 1001]. Subtract the largest score first: [−1, 0]. Use e⁻¹ ≈ 0.37 and e⁰ = 1. What is the softmax probability of score 1 (the 1001), to two decimals?"
+  answer: 0.73
+  tol: 0.01
+  after: "e⁰ / (e⁻¹ + e⁰) = 1 / 1.37 ≈ 0.73. The other one gets 0.37 / 1.37 ≈ 0.27. These are the same numbers softmax gives for [1, 2], or for any two scores 1 apart."
+  hints:
+    - when: { equals: 0.27 }
+      say: "0.27 is the probability of the smaller score. Score 1 is the 1001."
+    - when: { equals: 1 }
+      say: "Divide e⁰ by the sum of both: 0.37 + 1."
+    - when: { any: true }
+      say: ["After subtracting 1001: score 0 → −1, score 1 → 0. Take e of each.", "The sum of both is 0.37 + 1 = 1.37. Score 1 gets its own part of that sum."]
+
+lse:
+  type: number
+  prompt: "Use ln 2 ≈ 0.69. What is ln(e¹⁰⁰⁰ + e¹⁰⁰⁰), to two decimals? (A computer gets inf when it computes this directly, but you can do it by hand.)"
+  answer: 1000.69
+  tol: 0.01
+  after: "Pull the largest score out of the sum as a factor: ln(e¹⁰⁰⁰ · (1 + 1)) = 1000 + ln 2 ≈ 1000.69. That is log-sum-exp: m + ln Σ e^(z − m)."
+  hints:
+    - when: { equals: 2000 }
+      say: "ln(a + b) is not ln a + ln b. Write e¹⁰⁰⁰ + e¹⁰⁰⁰ as 2 · e¹⁰⁰⁰ first."
+    - when: { equals: 1000 }
+      say: "Close, but the sum has two equal terms: 2 · e¹⁰⁰⁰. ln 2 is still there."
+    - when: { equals: 0.69 }
+      say: "That is ln 2 alone. ln(2 · e¹⁰⁰⁰) = ln 2 + ln e¹⁰⁰⁰."
+    - when: { any: true }
+      say: ["e¹⁰⁰⁰ + e¹⁰⁰⁰ = 2 · e¹⁰⁰⁰.", "ln(a · b) = ln a + ln b, and ln e¹⁰⁰⁰ = 1000."]
+
+code-softmax:
+  type: code
+  prompt: "Write the line that makes softmax safe for big scores: subtract each row’s largest score before exp."
+  template: |
+    def stable_softmax(z):
+        e = ____
+        return e / e.sum(axis=-1, keepdims=True)
+
+    print(stable_softmax(np.array([1000.0, 1001.0])))   # about [0.27, 0.73]
+  solution: "np.exp(z - z.max(axis=-1, keepdims=True))"
+  after: "Subtracting the same number from every score in a row does not change softmax, and now the largest exp is e⁰ = 1, so nothing overflows. keepdims=True gives shape (B, 1), so each row subtracts its own maximum."
+  tests:
+    - expr: "stable_softmax(np.array([1000.0, 1001.0]))"
+      expect: [0.268941, 0.731059]
+      tol: 0.000001
+      say: "[1000, 1001] → [0.27, 0.73], no nan"
+    - expr: "stable_softmax(np.array([-1000.0, -999.0]))"
+      expect: [0.268941, 0.731059]
+      tol: 0.000001
+      say: "[−1000, −999]: the plain formula gives 0 / 0"
+    - expr: "stable_softmax(np.array([[1.0, 2.0], [1000.0, 1000.0]]))"
+      expect: [[0.268941, 0.731059], [0.5, 0.5]]
+      tol: 0.000001
+      say: "two rows at once: each row subtracts its own largest score"
+  hints:
+    - when: { error: "overflow|invalid" }
+      say: "Something still overflows. Subtract the largest score inside np.exp(…), before exp."
+    - when: { testFailed: 2 }
+      say: ["One row works, two rows do not. Is the max taken for each row?", "Take the max along the last axis, and keep that axis, so the (2, 1) maximum lines up with each row of z."]
+    - when: { any: true }
+      say: ["Subtract the largest score from each score, then take e of the result.", "The largest score of each row comes from the max method. Its result must keep shape (B, 1) to line up with z.", "For z = [1000, 1001] the subtraction gives [−1, 0], and exp gives about [0.37, 1]."]
+
+bf16-update:
+  type: number
+  prompt: "A weight w = 1 is stored in bfloat16, where the next number above 1 is 1 + 1/128 ≈ 1.0078. An update adds 0.001. What is w after the update, stored in bfloat16?"
+  answer: 1
+  tol: 0
+  after: "1.001 is much nearer to 1 than to 1.0078, so it rounds back to 1. The update is lost. Do this 100 times and w is still 1; in float32 it would be 1.1."
+  hints:
+    - when: { equals: 1.001 }
+      say: "1.001 is not a bfloat16 number. Round it to the nearest one: 1 or 1.0078?"
+    - when: { equals: 1.0078 }
+      say: "1.001 is 0.001 from 1 and 0.0068 from 1.0078. Which is nearer?"
+    - when: { any: true }
+      say: "The result must be a bfloat16 number: 1 or 1.0078. Pick the nearer one."
+
+code-ce:
+  type: code
+  prompt: "Write `cross_entropy` from raw scores with log-sum-exp, so it never sees inf. z has shape (B, V); t holds each row’s target index. Compute lse, one log-sum-exp per row, shape (B,)."
+  template: |
+    def cross_entropy(z, t):
+        ____
+        picked = z[np.arange(len(t)), t]     # the score of each row’s target
+        return (lse - picked).mean()
+
+    print(cross_entropy(np.array([[1000.0, 1000.0]]), np.array([0])))   # ln 2 ≈ 0.693
+  solution: |-
+    m = z.max(axis=1, keepdims=True)
+        lse = m[:, 0] + np.log(np.exp(z - m).sum(axis=1))
+  after: "Cross-entropy is ln Σ e^z − zₜ, and only the first part can overflow. Taking m out first means every exp sees a score at most 0, so the sum is between 1 and V. m[:, 0] drops the extra axis, so lse has shape (B,) like picked."
+  tests:
+    - expr: "cross_entropy(np.array([[1000.0, 1000.0]]), np.array([0]))"
+      expect: 0.693147
+      tol: 0.000001
+      say: "scores [1000, 1000], target 0: ln 2 ≈ 0.693"
+    - expr: "cross_entropy(np.zeros((1, 4)), np.array([2]))"
+      expect: 1.386294
+      tol: 0.000001
+      say: "four equal scores: ln 4 ≈ 1.386"
+    - expr: "cross_entropy(np.array([[1000.0, 0.0]]), np.array([1]))"
+      expect: 1000
+      tol: 0.000001
+      say: "sure and wrong: the loss is 1000, a big number but not inf"
+    - expr: "cross_entropy(np.array([[1.0, 2.0], [-1000.0, -1000.0]]), np.array([1, 0]))"
+      expect: 0.503204
+      tol: 0.000001
+      say: "two rows: (0.313262 + 0.693147) / 2"
+  hints:
+    - when: { error: "lse.*not defined|name 'lse'" }
+      say: "The return line uses lse. Set lse in your lines, one value per row."
+    - when: { error: "broadcast|shapes|matmul|core dimension" }
+      say: ["lse must have shape (B,), the same as picked. Check the shape of each part you add.", "Keep keepdims=True for z − m. When you add the max back, use the (B,) form of m, not the (B, 1) form."]
+    - when: { testFailed: 2 }
+      say: "Is the result inf or nan? The exp must see z − m, never z itself."
+    - when: { testFailed: 3 }
+      say: "One row works, two do not. Take the max and the sum along axis 1, one per row."
+    - when: { any: true }
+      say: ["log-sum-exp is m + ln Σ e^(z − m), with m the row’s largest score. Write two lines: first m, then lse.", "m is the largest score of each row, kept with shape (B, 1). The sum inside the log runs along the same axis.", "For the row [1000, 1000]: m = 1000, z − m = [0, 0], the sum of exp is 2, so lse = 1000 + ln 2."]
+
+pred-nan-spread:
+  type: predict
+  prompt: "w = [0.5, nan, −1] and x = [1, 2, 3]. What is w @ x?"
+  options: ["−2.5: NumPy skips the nan", "nan", "An error"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "NumPy skips nothing. What is nan × 2, and what is anything + nan?"
+    - when: { equals: 2 }
+      say: "NumPy does not stop on nan. It keeps computing and gives a result."
+  reveal: "nan. nan × 2 is nan, and anything + nan is nan. One nan weight makes the output nan, then the loss, then every gradient that passes through it, and after the next update those weights are nan too."

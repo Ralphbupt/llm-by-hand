@@ -1,0 +1,246 @@
+---
+title: Residuals and normalization
+short: Residuals and norms
+level: "N2"
+order: 10.2
+part: foundations
+branch: classic
+question: Why do very deep networks stop learning, and what fixed it?
+run: browser
+glossarySkip: [padding]
+checkpoint: ln-code
+testOut: [grad-plain, res-deriv, ln-x21, bn-count, ln-code]
+recap:
+  can:
+    - "Compute how much gradient reaches the bottom of a plain stack: multiply the slopes of every layer."
+    - "Explain why a residual layer $h + f(h)$ keeps the gradient from shrinking to 0: its slope is $1 + f'(x)$."
+    - "Normalize a table by hand and in NumPy, per column (BatchNorm) or per row (LayerNorm)."
+  keys:
+    - "$h_{\\text{out}} = h + f(h)$, slope $1 + f'(x)$"
+    - "Normalize: $(x - \\text{mean}) / \\sqrt{\\text{var} + \\varepsilon}$, then mean 0 and std 1"
+    - "BatchNorm: `axis=0`, one mean per feature over the batch. LayerNorm: `axis=1`, one mean per example"
+    - "Running mean: keep 0.9 of the old value, add 0.1 of the new batch’s mean"
+  mistakes:
+    - "Using the wrong axis: BatchNorm averages down each column, LayerNorm across each row."
+    - "Thinking a slope a bit below 1 is harmless: 30 layers at 0.75 shrink the gradient to about 0.0002."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import DepthLab from '@viz/DepthLab.astro'
+import NormAxisLab from '@viz/NormAxisLab.astro'
+import ResBlockDiagram from '@viz/ResBlockDiagram.astro'
+
+This level uses [N1](/learn/convolutions/) and levels 6–7.
+
+More layers should mean a smarter network. For years it didn’t: past a few dozen layers, networks got worse, not better.
+Two small changes fixed it, and both sit inside every Transformer block you will build in level 16:
+
+1. a **residual connection**, which adds a layer’s input back to its output;
+2. **normalization**, which rescales numbers so they stay in a stable range.
+
+## 1. Deeper should be better. Is it?
+
+Backpropagation (level 6) sends the gradient down one layer at a time. Each layer multiplies it by its own slope.
+If every slope is a bit below 1, the product of many of them is tiny.
+
+<Blank id="grad-plain" />
+
+<Gate requires="grad-plain">
+
+Now a real stack. Each layer is `h ← tanh(h @ W)`, 16 numbers wide, with weights drawn from a normal distribution with std 0.8/√16.
+That is a little smaller than the level-7 rule of 1/√16.
+
+<Predict id="depth-guess" />
+
+<Gate requires="depth-guess">
+
+<DepthLab />
+
+The lines marked “plain” are the plain stack. Going up, the signal (each layer’s outputs) shrinks layer after layer. Coming back down, the gradient does the same:
+in [`demo.py`](/files/residuals-and-norms/demo.py), the gradient’s std is 1.02 at the top, 0.098 ten layers down, 0.0059 twenty layers down and 0.000135 at the bottom.
+The first layers get almost no learning signal, so they barely change. A deeper plain network can finally be worse than a shallow one.
+
+<Stuck q="Level 7 fixed this with a good starting scale. Why isn’t that enough?">
+
+A good starting scale keeps the numbers in range on step one. Training then changes every weight, and tanh units slowly move into their flat ends,
+where the slope is near 0. Thirty factors that are each a little different from 1 still multiply into something tiny or huge.
+The fix has to keep working while the weights change. A residual connection does.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 2. The residual path
+
+<Gate requires="depth-guess">
+
+A **residual** layer adds its input back:
+
+$$
+h_{\text{out}} = h + f(h)
+$$
+
+$f$ is the layer that learns, here `tanh(h @ W)`. Take one number to see what this does to the gradient. The slope of $x + f(x)$ is
+
+$$
+\frac{d}{dx}\bigl(x + f(x)\bigr) = 1 + f'(x)
+$$
+
+<Blank id="res-deriv" />
+
+<Gate requires="res-deriv">
+
+That 1 is the point. Even when $f$ has a slope near 0, the gradient still passes down at full size along the plain $x$ path,
+the **residual path**. The layer $f$ is on the other side of the `+`: we call it the layer side. Ten plain layers with slope 0.1 multiply the gradient by $0.1^{10} = 10^{-10}$.
+Ten residual layers with the same $f$ multiply it by $1.1^{10} \approx 2.59$.
+
+Look at the lines marked “residual” in the lab: the gradient reaching layer 0 never shrinks to 0. In this stack it even grows, to about 11 times
+its size at the top. The residual signal grows too, from 0.97 at the input to 2.33, 3.46 and 4.39 after 10, 20 and 30 layers in `demo.py`.
+Each block adds something to $h$, so $h$ keeps getting larger. Numbers that keep growing are the next problem, so every residual network
+also **normalizes**: sections 4 and 5.
+
+<TryIt>
+
+Set the weight scale to 0.5 and the depth to 50. How far down does the plain gradient fall, and where does the residual one stop?
+Then try scale 1.5: what goes wrong for the plain stack now?
+
+</TryIt>
+
+<Deeper title="With many numbers per layer, why is it still “1 + something”?">
+
+With 16 numbers per layer, the slope of a layer is a 16×16 table of slopes (one for each input and output pair), called the Jacobian.
+For $h + f(h)$ it is $I + J_f$, where $I$ is the identity table: 1 on the diagonal, 0 elsewhere.
+Going down $L$ blocks multiplies $L$ such tables. Expanded, the product contains $I \cdot I \cdots I = I$ as one of its terms,
+so there is always a route on which the gradient isn’t shrunk at all.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 3. A residual block in a convolutional network
+
+<Gate requires="res-deriv">
+
+Residual networks for pictures stack many blocks like this one. The layer side has two 3×3 convolutions (level N1),
+each followed by BatchNorm (section 4) and a ReLU. The residual path carries the block’s input around them, unchanged.
+
+<ResBlockDiagram />
+
+The `+` adds two tensors cell by cell, so $F(x)$ must have exactly the shape of $x$. A 3×3 convolution with padding 1 keeps the
+height and width (level N1), and its number of filters sets the number of output channels.
+
+<Blank id="resblock-shape" />
+
+<Deeper title="What if a block changes the number of channels?">
+
+Then $x$ and $F(x)$ no longer match. The residual path gets its own small layer, usually a 1×1 convolution: it mixes the channels at each pixel
+into the new count without looking at neighbors. With stride 2 it also halves the height and width, to match a layer side that shrinks the picture.
+
+</Deeper>
+
+</Gate>
+
+## 4. BatchNorm: one feature, across the batch
+
+<Gate requires="resblock-shape">
+
+Residuals keep the gradient from vanishing, but the numbers inside the network can still grow or shift as training changes the weights.
+**Normalization** puts them back in a stable range: subtract the mean, divide by the standard deviation (std = √variance, level 10).
+Afterwards the numbers have mean 0 and std 1.
+
+The question is **which numbers** share a mean. Here is a batch of 4 examples (rows) with 4 features each (columns):
+
+|  | f0 | f1 | f2 | f3 |
+|---|---|---|---|---|
+| ex 0 | 1 | 4 | 2 | 9 |
+| ex 1 | 1 | 0 | 6 | 3 |
+| ex 2 | 5 | 1 | 5 | 1 |
+| ex 3 | 5 | 7 | 3 | 1 |
+
+**BatchNorm** normalizes each feature (column) using that column’s mean and std over the batch.
+To get a std by hand: subtract the mean, square each difference, average the squares, take the square root.
+
+<Blank id="bn-x20" />
+
+<Gate requires="bn-x20">
+
+Real BatchNorm adds a tiny number ε to the variance before the square root, so it never divides by 0. Then it applies a learned
+scale and shift per feature, so the network can undo the normalization if that helps.
+
+During training, the mean and std come from the current batch. At test time there may be only one example, so BatchNorm keeps a
+**running mean**: after each batch it keeps 0.9 of the old value and adds 0.1 of the new batch’s mean.
+
+<Blank id="running" />
+
+<Predict id="bn-one" />
+
+In a convolutional network, like the residual block in section 3, each channel is one feature. Its mean is taken over the batch
+and over every pixel of that channel.
+
+</Gate>
+
+</Gate>
+
+## 5. LayerNorm: one example, across its features
+
+<Gate requires="bn-one">
+
+**LayerNorm** uses the other direction of the table: it normalizes each example (row) using that row’s own mean and std.
+It never looks at the other examples in the batch.
+
+<Blank id="ln-x21" />
+
+<Gate requires="ln-x21">
+
+<NormAxisLab />
+
+<Blank id="bn-count" />
+
+<Predict id="why-ln" />
+
+Transformers use LayerNorm, not BatchNorm, for three reasons:
+
+- **Sentences have different lengths.** Short sentences in a batch get extra padding tokens (PAD), and BatchNorm would mix them into every feature’s mean.
+- **Generation runs one token at a time.** When a model writes, the “batch” is often one sequence, where batch statistics are useless.
+- **The same token should get the same answer.** With LayerNorm, a token’s output depends only on that token, not on which other sentences share its batch.
+
+<Stuck q="If LayerNorm only looks at one example, how can it help training at all?">
+
+It still does the job that matters: whatever the layer below produced, the next layer receives numbers with mean 0 and std 1.
+The next layer’s weights never have to adjust to inputs that keep getting bigger or shifting. In level 16 you will see it after (or, in today’s models, before)
+every attention and feed-forward step of the Transformer block, right next to the residual `+`.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 6. Write it yourself
+
+<Gate requires="why-ln">
+
+In NumPy, `X.mean(axis=0)` averages **down** each column, giving one number per column. `X.mean(axis=1)` averages **across** each row,
+giving one number per row. `keepdims=True` keeps the averaged axis with size 1, so a (4, 4) table gives a (1, 4) or (4, 1) result
+that broadcasts back over the table (level 1). `X.var(...)` gives the variance the same way, and `np.sqrt` takes the square root.
+
+```python
+X = np.array([[1., 3], [5, 7]])
+X.mean(axis=0, keepdims=True)   # [[3., 5.]]      one mean per column
+X.var(axis=1, keepdims=True)    # [[1.], [1.]]    one variance per row
+```
+
+Here is BatchNorm, with ε added to the variance. Write the whole LayerNorm function: three lines.
+
+<CodeBlank id="ln-code" />
+
+</Gate>

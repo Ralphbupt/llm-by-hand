@@ -1,0 +1,272 @@
+---
+title: Debugging a model
+short: Debugging
+level: "U5"
+order: 6.5
+part: foundations
+branch: internals
+question: The code runs, but the model doesn’t learn. How do you find the bug?
+run: mixed
+checkpoint: boss-report
+mustSolve: [boss-line, boss-lm]
+boss: "Fix three broken training scripts: two small NumPy ones graded in your browser, and one PyTorch script with four bugs that check.py passes only when every bug is fixed and the model gets at least 95% of the held-out points right."
+testOut: [bcast-shape, numgrad-code, boss-line, boss-lm, boss-report]
+recap:
+  can:
+    - "Find a shape bug that gives no error message by printing shapes, before it ruins the loss."
+    - "Check a gradient formula against the numeric slope, and overfit one batch to test the whole loop."
+    - "Read a loss curve: diverging, NaN, stuck, swinging, or falling suspiciously fast."
+  keys:
+    - "A column `(n, 1)` minus a flat `(n,)` gives an `(n, n)` square: no error, wrong loss"
+    - "numeric slope $\\approx \\dfrac{f(w+h) - f(w-h)}{2h}$"
+    - "inf − inf = NaN, 0 × inf = NaN, and NaN spreads to everything it touches"
+    - "next-token targets are the inputs shifted by one place: the inputs drop the last column, the targets drop the first"
+  mistakes:
+    - "Changing the learning rate or the model size before checking that one batch can be memorized."
+    - "Trusting a loss that falls very fast: the input may already contain the answer."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import BugLab from '@viz/BugLab.astro'
+
+Most bugs in model code don’t crash. The script runs, the loss prints, and the model just learns badly, or learns
+the wrong thing. This level is a checklist for that situation. Each step comes with a small broken example.
+
+1. **Check the shapes.**
+2. **Overfit one batch.**
+3. **Check the gradient** against a numeric slope.
+4. **Look for the first inf or NaN.**
+5. **Read the loss curve:** not falling, swinging, or falling too fast.
+
+The boss at the end is three broken scripts. The last one runs on your computer; if you haven’t installed Python
+and PyTorch yet, see the [setup page](/setup/).
+
+All examples use the four points of level 7: (1, 3), (2, 3), (3, 7), (4, 7), fit by a line $\hat y = w x + b$ that starts at
+w = 0.5, b = 0. The best line is w = 1.6, b = 1, with loss 0.8.
+
+## 1. Check the shapes
+
+Model code often makes the prediction a column, shape `(4, 1)`, because it is the result of `X @ W`.
+The targets are often a flat list, shape `(4,)`. The loss line `((pred - y) ** 2).mean()` runs without an error.
+
+<Blank id="bcast-shape" />
+
+<Gate requires="bcast-shape">
+
+So the loss compares every prediction with every target, 16 pairs instead of 4. The model still lowers that loss,
+but the loss is asking the wrong question.
+
+<Blank id="bcast-b" />
+
+</Gate>
+
+<Gate requires="bcast-b">
+
+The lab trains the line live, with the numbers of a real training run (32-bit floats, as in PyTorch).
+Check the shape bug box and train: the line ends flat, and the loss stops at 4 instead of 0.8.
+
+<BugLab />
+
+The fix is one line: make both sides the same shape, `pred[:, 0] - y` or `pred - y.reshape(-1, 1)`.
+The habit that finds it: **print the shape of every array in the loss once**, and write next to it what you expect.
+
+<Stuck q="Why doesn’t NumPy (or PyTorch) raise an error here?">
+
+Broadcasting is a feature: it is how `X @ W + b` adds one bias row to every row (level 1).
+NumPy can’t know if you wanted a broadcast or not. So shape bugs give no error message, and only you can catch them.
+`assert pred.shape == y.shape` in the loss function turns this bug into an error you can see.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="bcast-b">
+
+## 2. Overfit one batch
+
+Before training on everything, train on **one small batch**, for example 4 examples, many times.
+A model with a few hundred weights can memorize 4 examples, so the loss should fall close to its lowest possible value.
+(For the straight line that lowest value is 0.8; for an MLP it is close to 0.)
+
+This is a test of the whole loop at once: the model, the loss, the gradients and the update.
+It takes seconds, and then the amount of data cannot be the cause.
+
+<Predict id="pred-overfit" />
+
+</Gate>
+
+<Gate requires="pred-overfit">
+
+## 3. Check the gradient
+
+Level 6 checked a hand-written gradient against a numeric one. The numeric slope at $w$ needs only the loss itself:
+
+$$
+\frac{dL}{dw} \approx \frac{L(w + h) - L(w - h)}{2h}, \quad h \text{ small}
+$$
+
+<Blank id="numgrad" />
+
+<Gate requires="numgrad">
+
+With several weights, you move one weight at a time and keep the others still. For the line fit at w = 0.5, b = 0,
+the numeric gradient is dw = −21.5, db = −7.5. A correct formula gives the same two numbers.
+
+<Predict id="pred-gradbug" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pred-gradbug">
+
+Now write the numeric gradient for any number of weights. One NumPy detail: `w[i] += h` changes entry `i` of the array `w`
+**in place**, so `f(w)` right after it sees the moved value. Afterwards, put `w[i]` back where it was:
+the caller still needs the original `w`.
+
+<CodeBlank id="numgrad-code" />
+
+<Deeper title="How close is close enough?">
+
+The numeric slope is not exact. With $h = 10^{-5}$ in 64-bit floats, a correct formula usually agrees to 6 or more
+digits. Compare the **relative** difference, $|a - b| / \max(|a|, |b|)$: around $10^{-7}$ is fine, $10^{-2}$ is a bug.
+In 32-bit floats the check is much less precise, so run gradient checks in 64 bits (`torch.float64`).
+`torch.autograd.gradcheck` does exactly this for any PyTorch function.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="numgrad-code">
+
+## 4. Look for the first inf or NaN
+
+A learning rate that is too large makes each step jump past the minimum and land farther away.
+
+<Blank id="diverge-w" />
+
+<Gate requires="diverge-w">
+
+The numbers grow until they don’t fit in a float. A 32-bit float stops at about $3.4 \times 10^{38}$; anything larger is
+**inf** (infinity). In the lab, set the learning rate to 0.2 and train 200 steps: the readout shows the step where the
+loss first becomes inf, and the step where it becomes **NaN** (“not a number”).
+
+<Predict id="pred-nan" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pred-nan">
+
+The other common source is a logarithm: `np.log(0)` is −inf, so a cross-entropy that takes the log of a probability that
+rounded to 0 gives inf at once. That is why PyTorch’s `F.cross_entropy` takes logits and computes the log itself, safely.
+Level U2 shows how floats round and why.
+
+The habit: check `np.isfinite(loss)` (or `torch.isfinite`) every step, and stop at the **first** bad step. By the time you
+notice NaN in a printout, every weight is already NaN, and the cause is hundreds of steps back.
+
+<TryIt>
+
+In the lab, try learning rates 0.001, 0.01, 0.05 and 0.2, 200 steps each. Which one is the slowest, which one is fine,
+and which one diverges? Where is the boundary between fine and diverging, roughly?
+
+</TryIt>
+
+## 5. Read the loss curve
+
+Some bugs show only in the shape of the loss curve.
+
+**It swings up and down and never settles.** Often the gradients are never reset. `loss.backward()` **adds** into
+`.grad` (level 9), so without `opt.zero_grad()` every step uses the sum of all gradients so far.
+
+<Blank id="zero-grad-sum" />
+
+</Gate>
+
+<Gate requires="zero-grad-sum">
+
+In the lab, check **Forget `zero_grad`** at learning rate 0.01: the loss swings between about 1 and 17, step after step.
+
+**It falls much faster than expected, then the model is useless.** Usually the input already contains the answer.
+A **next-token model** (level 11 builds one) reads a sequence of tokens (numbers that stand for words or characters)
+and, at every position, guesses the token that comes next. `<bos>` is a token that marks the start of a sequence.
+The model must predict token $t + 1$ from tokens up to $t$, so the targets are the inputs **shifted by one**:
+for the tokens `[<bos>, a, b, c]`, the inputs are `[<bos>, a, b]` and the targets are `[a, b, c]`.
+
+<Predict id="pred-shift" />
+
+</Gate>
+
+<Gate requires="pred-shift">
+
+A wrong causal mask does the same: if a word can see the words after it (level 15), it can read the answer.
+The training loss looks wonderful; generation is nonsense.
+
+**It doesn’t fall at all.** Check the list again from step 1: the shapes, one batch, the gradient. Then the learning rate:
+try values 10 times smaller and 10 times larger.
+
+<Deeper title="The checklist, in the order to use it">
+
+1. Print the shapes of everything in the loss. Write the shape you expect next to each one.
+2. Look at one batch with your own eyes: inputs, targets, mask. Are the targets shifted? Does each label belong to its input?
+3. Check the loss at step 0. For $V$ classes and random weights it should be about $\ln V$ (level 10), for example 0.69 for 2 classes.
+4. Overfit one batch.
+5. Check the gradients numerically, if you wrote any by hand.
+6. Watch for the first inf or NaN.
+7. Only then tune: the learning rate, the batch size, the model size.
+
+</Deeper>
+
+## The boss: three broken scripts
+
+Each script runs without an error. Each one learns the wrong thing. Use the checklist.
+
+**Part A.** A line fit with three bugs. Write a working body for `train_line`.
+
+<CodeBlank id="boss-line" />
+
+</Gate>
+
+<Gate requires="boss-line">
+
+**Part B.** A batch for next-token training, with two bugs. Use the collate function from level U4 and the
+shift from section 5. `keep` is the mask of targets that count in the loss: `True` for real tokens, `False` for PAD.
+(It is the opposite of a padding mask: `True` here means “counts”.)
+
+<CodeBlank id="boss-lm" />
+
+</Gate>
+
+<Gate requires="boss-lm">
+
+**Part C, on your computer.** A PyTorch script that should learn which points lie inside a circle. It has four bugs,
+one in each of `split`, `batches`, `MLP.forward` and `train_step`. Everything else is correct.
+
+1. Download [`broken_train.py`](/files/debugging/broken_train.py) and [check.py](/files/debugging/check.py) into one folder. {/* en-ok: download */}
+2. Copy `broken_train.py` to `my_train.py`. Run `python my_train.py` once and look at the loss and the accuracy.
+3. Fix the bugs one at a time. After each fix, run `python check.py my_train.py`. It runs five checks. A check that
+   fails says what it measured, not where the bug is: finding the cause is your job.
+4. When all five pass, paste the last line it prints here (`U5 PASS …`). Stuck on a check? Paste the `U5 FAIL …` line
+   instead: the page then gives a hint for the first failing check, a little more with each try.
+
+The code at the end of the line only shows that you pasted it unchanged; this part relies on your honesty.
+
+<Stuck q="A check fails and I don’t know where to start.">
+
+Read the numbers the check prints, then check the checklist above in order, one item at a time. For each function, print what it
+returns for a few points and compare it with its docstring. Each check matches one function: split, batches, forward,
+`train_step`.
+
+</Stuck>
+
+The level counts as cleared once parts A and B above and this line all pass.
+
+<CodeBlank id="boss-report" />
+
+</Gate>

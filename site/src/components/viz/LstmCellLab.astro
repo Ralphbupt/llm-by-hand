@@ -1,0 +1,6 @@
+---
+import Lab from './LstmCellLab.svelte'
+interface Props { hide?: { c?: string; h?: string; keep?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

@@ -1,0 +1,333 @@
+seq-len:
+  type: number
+  prompt: "How many tokens are in <bos>23+58=81<eos>?"
+  answer: 10
+  after: "<bos>, 2, 3, +, 5, 8, =, 8, 1, <eos>. Every character is its own token."
+  hints:
+    - when: { equals: 8 }
+      say: "That counts the characters of 23+58=81. Add <bos> and <eos>."
+      wrong: "2+3+1+1+1"
+    - when: { equals: 9 }
+      say: "Close. Both <bos> at the start and <eos> at the end are tokens."
+      wrong: "1+8"
+    - when: { any: true }
+      say: ["One character is one token. Count the characters of 23+58=81 first.", "Then add the two special tokens at the ends."]
+
+pad-len:
+  type: number
+  prompt: "Sequences in a batch must all have the same length. The longest problem is 99 + 99. How many tokens are in <bos>99+99=198<eos>?"
+  answer: 11
+  after: "<bos>, 9, 9, +, 9, 9, =, 1, 9, 8, <eos>: 11. So every sequence is padded with <pad> up to 11. 23+58 needs one <pad>."
+  hints:
+    - when: { equals: 10 }
+      say: "10 is 23+58=81. Here the answer has three digits: 198."
+    - when: { equals: 9 }
+      say: "Count the characters of 99+99=198 (9 of them), then add <bos> and <eos>."
+    - when: { any: true }
+      say: ["Count the characters of 99+99=198.", "Then add <bos> and <eos>."]
+
+first-answer-pos:
+  type: number
+  prompt: "Positions count from 0: x = <bos> 2 3 + 5 8 = 8 1 … At which position t does the model make its guess for the first digit of the answer?"
+  answer: 6
+  after: "At t = 6 the model sees “=”, and the next token is 8. That is the first target that the loss on the answer digits only counts."
+  hints:
+    - when: { equals: 7 }
+      say: "Position 7 holds the 8 itself. The guess has to happen one step earlier, while the model sees “=”."
+    - when: { equals: 5 }
+      say: "Without <bos>, “=” would be at position 5. Here <bos> sits at position 0, so every token moves one place right, and “=” is at position 6."
+    - when: { any: true }
+      say: ["y[t] is the token after x[t]: the guess made at t is for the next token.", "Which x[t] is followed by the first answer digit?"]
+
+answer-targets:
+  type: number
+  prompt: "y for 23 + 58 is 2 3 + 5 8 = 8 1 <eos> <pad>. With the loss on the answer digits only, every target before the answer and every <pad> becomes IGNORE. How many targets still count?"
+  answer: 3
+  after: "8, 1 and <eos>. So “the answer digits only” means the answer digits and <eos>: the model is graded on writing the answer and on knowing when to stop, and nothing else."
+  hints:
+    - when: { equals: 2 }
+      say: "The digits 8 and 1 count. Does the model also need to learn when to stop?"
+      wrong: "1+1"
+    - when: { equals: 4 }
+      say: "<pad> is never a target: it is only there to make the rows equally long."
+      wrong: "2+1+1"
+    - when: { any: true }
+      say: ["Everything up to and including “=” is ignored, and so is <pad>.", "What is left between “=” and <pad>?"]
+
+make-xy:
+  type: code
+  prompt: "Split one sequence of ids into the input x and the target y."
+  template: |
+    def make_xy(ids):
+        x, y = ____
+        return x, y
+
+    ids = [1, 5, 6, 13, 8, 11, 14, 11, 4, 2, 0]   # <bos> 2 3 + 5 8 = 8 1 <eos> <pad>
+    x, y = make_xy(ids)
+    print("x:", x)
+    print("y:", y)
+  solution: "ids[:-1], ids[1:]"
+  tests:
+    - expr: "make_xy([1, 5, 6, 13, 8, 11, 14, 11, 4, 2, 0])"
+      expect: [[1, 5, 6, 13, 8, 11, 14, 11, 4, 2], [5, 6, 13, 8, 11, 14, 11, 4, 2, 0]]
+      say: "x drops the last id, y drops the first"
+    - expr: "make_xy([7, 8, 9])"
+      expect: [[7, 8], [8, 9]]
+      say: "a short sequence: x is [7, 8], y is [8, 9]"
+  hints:
+    - when: { testFailed: 0 }
+      say: "Check the order: x keeps the start (drop the last id), y keeps the end (drop the first id)."
+    - when: { any: true }
+      say: ["x is every id except the last one; y is every id except the first one.", "A slice can omit one end: s[3:] starts at index 3, and s[:3] stops before index 3.", "A negative index counts from the end: s[-2] is the second item from the end."]
+  after: "x[t] and y[t] sit side by side, so the target at position t is always the token right after x[t]. One sequence of 11 ids gives 10 guesses to train on, all at once."
+
+logits-shape:
+  type: shape
+  prompt: "A batch of 64 examples, each padded to 11 tokens, so each x has 10. The vocabulary has 15 tokens. What shape are the logits?"
+  answer: [64, 10, 15]
+  after: "One row of 15 scores for every position of every example."
+  hints:
+    - when: { shape: [64, 15] }
+      say: "Every position makes a guess, not just the last one."
+    - when: { shape: [64, 11, 15] }
+      say: "The full sequence has 11 tokens, but x drops the last one."
+    - when: { any: true }
+      say: ["One row of scores for every position of every example.", "(batch, length of x, vocabulary)."]
+
+split-heads:
+  type: shape
+  prompt: "q has shape (32, 10, 64): batch 32, length 10, `d_model` 64. With 4 heads, dₖ = 16. After view(32, 10, 4, 16) and transpose(1, 2), what shape is q?"
+  answer: [32, 4, 10, 16]
+  after: "(B, h, L, dₖ). Moving the heads in front of the length means q @ k.transpose(-2, -1) computes a (10, 10) score table for every head of every example at once."
+  hints:
+    - when: { shape: [32, 10, 4, 16] }
+      say: "That is the shape after view. transpose(1, 2) then swaps axes 1 and 2."
+    - when: { shape: [32, 16, 10, 4] }
+      say: "transpose(1, 2) swaps axes 1 and 2 (counting from 0), not the last ones."
+    - when: { any: true }
+      say: ["Write down the shape after view first.", "Then swap the second and third numbers."]
+
+split-code:
+  type: code
+  prompt: "Split the last axis into h heads and move the heads in front of the length: (B, L, d) → (B, h, L, d // h)."
+  template: |
+    def split_heads(x, h):
+        B, L, d = x.shape
+        return ____
+
+    x = np.arange(8.0).reshape(1, 2, 4)   # 1 example, 2 tokens, d = 4
+    print(split_heads(x, 2))
+  solution: "x.reshape(B, L, h, d // h).transpose(0, 2, 1, 3)"
+  tests:
+    - expr: "split_heads(np.arange(8.0).reshape(1, 2, 4), 2).shape"
+      expect: [1, 2, 2, 2]
+      say: "(1, 2, 4) with 2 heads → (1, 2, 2, 2)"
+    - expr: "split_heads(np.arange(8.0).reshape(1, 2, 4), 2)"
+      expect: [[[[0.0, 1.0], [4.0, 5.0]], [[2.0, 3.0], [6.0, 7.0]]]]
+      say: "head 0 gets columns 0–1 of both tokens, head 1 gets columns 2–3"
+  hints:
+    - when: { testFailed: 1 }
+      wrong: "x.reshape(B, h, L, d // h)"
+      say: "The shape is right but the numbers are in the wrong order: reshape alone can’t move the heads in front. Reshape to (B, L, h, d // h), then transpose."
+    - when: { any: true }
+      say: ["Two steps: split the last axis, then reorder the axes.", "In NumPy, transpose takes the new order of all four axes (level 9’s table)."]
+  after: "reshape only splits d into h groups of d // h numbers; the axes stay in the order (B, L, h, dₖ). transpose(0, 2, 1, 3) then puts the heads in front of the length, so each head gets its own (L, dₖ) table."
+
+merge-heads:
+  type: shape
+  prompt: "After the attention, out has shape (32, 4, 10, 16): batch 32, 4 heads, length 10, dₖ 16. What shape is out.transpose(1, 2).contiguous().view(32, 10, -1)?"
+  answer: [32, 10, 64]
+  after: "transpose gives (32, 10, 4, 16), and view joins the last two axes: 4 × 16 = 64 = `d_model`. Every token has its full 64 numbers again, one slice from each head."
+  hints:
+    - when: { shape: [32, 10, 4, 16] }
+      say: "That is the shape after transpose. view(32, 10, -1) then joins the last two axes into one."
+    - when: { shape: [32, 4, 160] }
+      say: "transpose(1, 2) comes first: it moves the length in front of the heads."
+    - when: { any: true }
+      say: ["First transpose(1, 2): swap the heads and the length.", "Then join the last two axes: 4 heads × 16 numbers."]
+
+mha-code:
+  type: code
+  prompt: "Finish masked multi-head attention. q, k, v are already split into heads, shape (B, h, L, dₖ)."
+  template: |
+    def causal(L):
+        return np.triu(np.ones((L, L), dtype=bool), k=1)       # True = blocked
+
+    def split_heads(x, h):
+        B, L, d = x.shape
+        return x.reshape(B, L, h, d // h).transpose(0, 2, 1, 3)
+
+    def join_heads(y):
+        B, h, L, d_k = y.shape
+        return y.transpose(0, 2, 1, 3).reshape(B, L, h * d_k)
+
+    def attention(x, Wq, Wk, Wv, Wo, h):
+        q, k, v = split_heads(x @ Wq, h), split_heads(x @ Wk, h), split_heads(x @ Wv, h)
+        ____
+        return join_heads(out) @ Wo
+
+    # 1 example, 3 tokens, d = 4
+    x = np.array([[[1.0, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]]])
+    I = np.eye(4)
+    print(np.round(attention(x, I, I, I, I, 2), 4))
+  solution: "d_k = q.shape[-1]\n    scores = q @ k.transpose(0, 1, 3, 2) / np.sqrt(d_k)\n    scores = np.where(causal(q.shape[2]), -np.inf, scores)\n    out = softmax(scores) @ v"
+  tests:
+    - expr: "np.round(attention(np.ones((1, 3, 4)), np.eye(4), np.eye(4), np.eye(4), np.eye(4), 2), 4)"
+      expect: [[[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]]]
+      say: "three equal tokens: each output is a weighted average of equal rows, so it equals that row"
+    - setup: "xa = np.array([[[1.0, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]]]); xb = xa.copy(); xb[0, 2] = [5, -5, 5, -5]"
+      expr: "int(np.allclose(attention(xa, np.eye(4), np.eye(4), np.eye(4), np.eye(4), 2)[0, :2], attention(xb, np.eye(4), np.eye(4), np.eye(4), np.eye(4), 2)[0, :2]))"
+      expect: 1
+      say: "changing the last token must not change the first two outputs (the causal mask)"
+    - expr: "np.round(attention(np.array([[[1.0, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]]]), np.eye(4), np.eye(4), np.eye(4), np.eye(4), 2), 4)"
+      expect: [[[1.0, 0.0, 1.0, 0.0], [0.3302, 0.6698, 0.3302, 0.6698], [0.7517, 0.7517, 0.3333, 0.3333]]]
+      tol: 0.0002
+      say: "the three tokens of x with identity weights"
+  hints:
+    - when: { error: "not defined" }
+      say: "attention() only receives x, the weights and h. Take the sizes from the arrays: dₖ = q.shape[-1] and L = q.shape[2]."
+    - when: { testFailed: 0 }
+      wrong: "d_k = q.shape[-1]\n    scores = q @ k.transpose(0, 1, 3, 2) / np.sqrt(d_k)\n    scores = np.where(causal(q.shape[2]), -np.inf, scores)\n    out = softmax(scores, axis=-2) @ v"
+      say: ["Three equal tokens must give three equal outputs, so each row of weights must add to 1. Check which axis the softmax normalizes.", "Each query owns one row of the (L, L) table. softmax must normalize along the last axis, the default axis=-1."]
+    - when: { testFailed: 1 }
+      wrong: ["d_k = q.shape[-1]\n    scores = q @ k.transpose(0, 1, 3, 2) / np.sqrt(d_k)\n    out = softmax(scores) @ v", "d_k = q.shape[-1]\n    scores = q @ k.transpose(0, 1, 3, 2) / np.sqrt(d_k)\n    scores = np.where(causal(q.shape[2]), 0, scores)\n    out = softmax(scores) @ v"]
+      say: "The first two outputs change when the last token changes: the mask isn’t working. Blocked scores must become −∞ before the softmax, and the blocked cells are the ones above the diagonal."
+    - when: { testFailed: 2 }
+      wrong: "d_k = q.shape[-1]\n    scores = q @ k.transpose(0, 1, 3, 2)\n    scores = np.where(causal(q.shape[2]), -np.inf, scores)\n    out = softmax(scores) @ v"
+      say: ["The mask works, but the numbers are off. Did you divide the scores by √dₖ?", "dₖ is the size of one head: the last axis of q, here 2."]
+    - when: { error: "shapes|broadcast|align|matmul|core dimension" }
+      say: "q @ k needs k with its last two axes swapped: k.transpose(0, 1, 3, 2) for a 4-axis array."
+    - when: { any: true }
+      say: ["Four lines: scores, scale by √dₖ, mask, then softmax and multiply by v.", "Scores are q @ (k with its last two axes swapped). The mask uses np.where(blocked, -np.inf, scores)."]
+  after: "With 4 axes, @ works on the last two, so every head of every example gets its own (L, L) score table. The mask is (L, L) and broadcasts over the batch and the heads. softmax turns each −∞ into a weight of 0."
+
+plateau:
+  type: predict
+  prompt: "Loss on every position. After 8 epochs, accuracy on the 500 validation problems is 16%, and since epoch 4 it has only risen slowly, from 9% to 16%. The training loss is still falling slowly, from 1.34 to 1.27. What do you do?"
+  options: ["Stop. The model is too small for this.", "Lower the learning rate and restart.", "Keep training."]
+  reveal: "Keep training. Validation accuracy is 52% at epoch 9, 75% at epoch 10, and 95.2% at epoch 19. The lab below shows the same run on the 1,000 unseen problems. Press play and watch it jump."
+
+loss-floor:
+  type: predict
+  prompt: "With the loss on every position, the training loss stays around 1.0 forever, while the answers become almost all correct. Why can’t it go lower?"
+  options: ["The model is too small to learn addition perfectly", "The numbers before “=” are random, so no model can predict them", "The learning rate is too high to settle"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "The answers are almost all correct, so the model has learned addition. Which targets are still hard?"
+    - when: { equals: 2 }
+      say: "With the loss on the answer digits only, the same settings bring the loss down to 0. What is different about every position?"
+  reveal: "The two numbers are chosen at random. After <bos>, the first digit could be anything, and nothing in the past tells you which. Those guesses keep the average loss near 1.0. Exactly: the two random numbers add ln 10⁴ ≈ 9.21 to the loss of each problem. Spread over about 9.3 targets per problem, that is ln 10⁴ / 9.3 ≈ 0.99. The answer digits are fully determined by what came before, so the loss on the answer digits only goes to 0."
+
+start-loss:
+  type: predict
+  prompt: "The vocabulary has 15 tokens, and ln 15 ≈ 2.71. Your untrained model’s first loss on one batch is 9.4. What does that tell you?"
+  options: ["Normal: a new model starts with a high loss", "Something in the code is wrong: the output layer, the loss, or what the loss is counting", "The model is too small"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "A new model is unsure about everything, so it gives each token about 1/15. What loss does that give?"
+    - when: { equals: 2 }
+      say: "Size doesn’t matter before training. An untrained model of any size guesses about evenly."
+  reveal: "An untrained model guesses about evenly, so its loss should be close to ln 15 ≈ 2.71. A first loss far above that means the scores are huge or the loss compares the wrong things: check the output layer, the shapes passed to `cross_entropy`, and the targets."
+
+list-wrong:
+  type: code
+  prompt: "Return every problem the model got wrong, written like '2+7=1'. problems is a list of (a, b) pairs, answers the model’s answers as strings, in the same order."
+  template: |
+    def misses(problems, answers):
+        return ____
+
+    problems = [(2, 7), (50, 57), (4, 26), (17, 69)]
+    answers = ["1", "107", "20", "86"]
+    print(misses(problems, answers))
+  solution: "[f'{a}+{b}={got}' for (a, b), got in zip(problems, answers) if got != str(a + b)]"
+  tests:
+    - expr: "misses([(2, 7), (50, 57), (4, 26), (17, 69)], ['1', '107', '20', '86'])"
+      expect: ["2+7=1", "4+26=20"]
+      say: "2 + 7 = 9 and 4 + 26 = 30 are the two misses"
+    - expr: "misses([(1, 1)], ['2'])"
+      expect: []
+      say: "no misses, an empty list"
+  hints:
+    - when: { error: "not defined" }
+      say: "Use the names of the function’s arguments: problems and answers."
+    - when: { testFailed: 0 }
+      say: "Keep only the pairs where the answer is not str(a + b), and write each as a string like '2+7=1'."
+    - when: { any: true }
+      say: ["Walk through problems and answers together with zip.", "A list comprehension with an if keeps only the misses: [… for (a, b), got in zip(…) if …]."]
+  after: "zip pairs each problem with its answer. The if keeps only the pairs where the answer is not str(a + b). Reading the misses side by side shows patterns, for example a missing carry."
+
+boss-forward:
+  type: code
+  prompt: "python check.py `my_gpt.py` printed a line like forward = \"0a1b2c3d4e5f\". Paste that whole line over the first line below, or put only the 12 letters and digits in place of ____."
+  paste: check.py
+  template: |
+    forward = "____"      # 12 letters and digits, in quotes
+    print(forward)
+  mustFail: ["000000000000", "0a1b2c3d4e5f", "forward = 0a1b2c3d4e5f", "0a1b2c3d4e5f\"\nimport hashlib\nclass _F:\n    def hexdigest(self): return \"868816c86223d9e4\" * 4\nhashlib.sha256 = lambda *a, **k: _F()\n_x = \""]
+  tests:
+    - setup: "_c = forward.split('=')[-1].strip().strip('\"')"
+      expr: "len(_c)"
+      expect: 12
+      say: "a code of 12 letters and digits"
+    - expr: "'llm-by-hand/20/page/' + _c"
+      sha256: "868816c86223d9e4"
+      say: "the same logits as the reference model with these weights"
+  hints:
+    - when: { error: "SyntaxError" }
+      say: "The code needs its quotes: forward = \"0a1b2c3d4e5f\". Paste the whole line check.py printed, quotes included."
+    - when: { testFailed: 0 }
+      say: "Paste the code exactly as check.py printed it: the 12 letters and digits between the quotes."
+    - when: { testFailed: 1 }
+      say:
+        - "Your model runs, but it computes something different. Read what check.py printed under the code first: it names the most common mistake it can find."
+        - "Then the norms: pre-norm (normalize before each sublayer, not after), the final norm before the head, and the RMSNorm gain."
+        - "Then the attention: the causal mask must block positions after t, and the scores are divided by √dₖ."
+        - "Then the split of qkv: q is the first d columns, then k, then v (.split(d, dim=-1)), and only then the heads."
+        - "Then the positions: the position embedding is added to the token embedding, using positions 0 to L − 1."
+        - "And the embeddings: the input to the first block is just tok(x) + pos(positions), with no × √d."
+    - when: { any: true }
+      say: "Run python check.py `my_gpt.py` in the folder with `check_weights.json`, and paste the code it prints."
+  after: "Your code matches the reference, so your model computes exactly what a pre-norm GPT with RMSNorm and a causal mask computes. Now train it."
+
+boss-report:
+  type: code
+  prompt: "Paste the report line that python check.py `my_gpt.py` model.pt printed: everything after “report =”."
+  paste: check.py
+  template: |
+    report = ____      # for example {"correct": 961, "wrong": ["…", …], "check": "…"}
+    print(report["correct"], "of 1000 right")
+  mustFail: ["{\"correct\": 1000, \"wrong\": []}", "{\"correct\": 1000, \"wrong\": [], \"check\": \"00000000\"}"]
+  tests:
+    - setup: "import random as _r\n_p = [(a, b) for a in range(100) for b in range(100)]\n_r.Random(0).shuffle(_p)\n_unseen = set(_p[9000:])"
+      expr: "int(report['correct'] >= 950)"
+      expect: 1
+      say: "at least 950 of the 1,000 unseen problems right"
+    - expr: "int(len(report['wrong']) == min(10, 1000 - report['correct']))"
+      expect: 1
+      say: "the report lists the first ten misses (or all of them, if there are fewer)"
+    - expr: "int(all((int(w.split('=')[0].split('+')[0]), int(w.split('=')[0].split('+')[1])) in _unseen and w.split('=')[1] != str(int(w.split('=')[0].split('+')[0]) + int(w.split('=')[0].split('+')[1])) for w in report['wrong']))"
+      expect: 1
+      say: "every listed miss is an unseen problem with a wrong answer"
+    - expr: "['llm-by-hand/20/%d/' % report['correct'] + '|'.join(report['wrong']), report['check']]"
+      sha256Pair: true
+      say: "the check code matches the rest of the report"
+  hints:
+    - when: { error: "KeyError|TypeError|SyntaxError" }
+      say: "Paste the whole report from check.py, from the opening { to the closing }. It has three parts: correct, wrong and check."
+    - when: { testFailed: 0 }
+      say:
+        - "Fewer than 950 of the 1,000 unseen problems right. check.py does its own evaluation, so look at your training. What did validation accuracy reach in the last epochs?"
+        - "Does the loss count the answer digits only? The targets of the question tokens and of every <pad> must be IGNORE, so the model isn’t trained to guess the random question."
+        - "Do you save model.pt each time validation accuracy beats its best so far? Accuracy can dip for an epoch, and the last epoch is not always the best one."
+        - "Still under 950? Train for more epochs: train(60) instead of train(40). The jump to over 95% can come late."
+    - when: { testFailed: 1 }
+      say: "The number of listed misses doesn’t match the count. Paste the report exactly as check.py printed it."
+    - when: { testFailed: 2 }
+      say: "A listed problem is not one of the 1,000 unseen ones. Your split must be the starter file’s split(seed=0), unchanged." # en-ok: starter
+    - when: { testFailed: 3 }
+      say: "The check code doesn’t match the numbers. Copy the line again exactly as check.py printed it, without editing it."
+    - when: { any: true }
+      say: "Train, save model.pt, then run python check.py `my_gpt.py` model.pt and paste the report."
+  after: "Your model learned two-digit addition from examples only, and it answers problems it never saw. You wrote every part of it yourself."

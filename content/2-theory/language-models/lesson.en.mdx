@@ -1,0 +1,226 @@
+---
+title: What is a language model?
+short: "Language models"
+level: "11"
+order: 11
+part: theory
+question: How can predicting the next word turn into writing?
+run: browser
+checkpoint: bigram-probs
+testOut: [p-sat-cat, ppl-hand, nn-loss, bigram-probs]
+recap:
+  can:
+    - "Count bigrams in a text and turn one row of counts into next-word probabilities."
+    - "Compute the perplexity of a short text by hand from the probabilities of its real next words."
+    - "Say why a count table that looks several words back grows too large to fill."
+  keys:
+    - "$P(\\text{next} \\mid \\text{prev})$ = count of the pair / row total for prev"
+    - "$\\text{perplexity} = \\exp\\Big(\\frac{1}{n}\\sum_{k=1}^{n} -\\ln p_k\\Big)$: lower is better; uniform over 10 words gives 10"
+    - "$P(\\text{next} \\mid \\text{prev}) = \\text{softmax}(\\text{onehot}(\\text{prev})\\, W)$, with `W` of shape `(V, V)`"
+    - "`P = C / C.sum(axis=1, keepdims=True)`: every row adds up to 1"
+    - "Looking 2 words back with 10 words needs 10 × 10 = 100 rows"
+  mistakes:
+    - "Dividing a count by the column total or the grand total instead of its own row total."
+    - "Multiplying the probabilities (0.5 × 0.5 × 0.5) instead of averaging −ln p and taking e to that power."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import BigramLab from '@viz/BigramLab.astro'
+import NeuralBigramLab from '@viz/NeuralBigramLab.astro'
+
+A language model does one thing. Given the text so far, it gives a probability to every word that could come next.
+
+To write, you use it in a loop: get the probabilities, pick a word (level 10 showed how to sample), append it,
+and ask again with the longer text. Everything a chatbot writes is made by that loop.
+
+This level builds the smallest possible language model, first by counting, then as a neural network.
+The rest of Theory makes it look further back than one word.
+
+## 1. Count the neighbors
+
+The simplest model only looks at the **previous word**. To learn it, read some text and count how often
+each word is directly followed by each other word. A pair of neighbors is called a **bigram**.
+
+Here is a tiny piece of text. It has 12 words, so 11 pairs of neighbors:
+
+```
+the cat sat . the dog sat . a cat ran .
+```
+
+<Blank id="count-sat-dot" />
+
+<Gate requires="count-sat-dot">
+
+A count turns into a probability when you divide by the row total: of all the times you saw "cat",
+how often was the next word "sat"?
+
+<Blank id="p-sat-cat" />
+
+</Gate>
+
+<Gate requires="p-sat-cat">
+
+Here is the whole count table for that text. Row = this word, column = the next word.
+
+|        | the | a | cat | dog | sat | ran | . |
+|--------|----:|--:|----:|----:|----:|----:|--:|
+| **the** | 0 | 0 | 1 | 1 | 0 | 0 | 0 |
+| **a**   | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+| **cat** | 0 | 0 | 0 | 0 | 1 | 1 | 0 |
+| **dog** | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
+| **sat** | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
+| **ran** | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| **.**   | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+
+<Predict id="zero-a-dog" />
+
+</Gate>
+
+<Gate requires="zero-a-dog">
+
+## 2. A bigger story collection
+
+Three sentences are too few. The lab uses 200 tiny stories made by one rule of our own:
+
+```
+(the | a) (cat | dog) (sat | ran) [on the (mat | rug)] .
+```
+
+Each choice is random: "the" 70% of the time, "cat" 60%, "sat" 50%, and half the sentences get "on the mat" or "on the rug".
+That gives a vocabulary of 10 words (the period “.” counts as a word). 160 stories are used for counting; 40 are held out (not used for counting) to test the model later.
+
+Before you open the lab, one question about what the counting model can write.
+
+<Predict id="novel-sentence" />
+
+</Gate>
+
+<Gate requires="novel-sentence">
+
+<BigramLab />
+
+<TryIt>
+
+Press "Write a sentence" until you get one marked **never in the stories**. Find the step where it went wrong,
+and look at the probability under that word. Every single step was allowed. Only the whole sentence is strange.
+
+</TryIt>
+
+<Stuck q="It only ever picks one word. Where does the writing come from?">
+
+From the loop. Each pick becomes part of the text, and the next pick is made from the new text.
+A sentence is just the record of many single picks.
+
+That is also why one bad pick can make the rest of the sentence wrong: the model never goes back to change a word.
+Level 18 looks at smarter ways to pick.
+
+</Stuck>
+
+## 3. Scoring a model: perplexity
+
+How good is a language model? Show it text it has not seen, and look at the probability it gave to each
+word that actually came next. Average the $-\ln p$ values and undo the log:
+
+$$
+\text{perplexity} = \exp\Big(\frac{1}{n}\sum_{k=1}^{n} -\ln p_k\Big)
+$$
+
+Level 10 introduced the formula and wrote it as code; here you only need it by hand. A perplexity of 4 means the model was, on average,
+as unsure as if it were choosing among 4 equally likely words. Lower is better. Guessing uniformly among 10 words gives exactly 10.
+
+<Blank id="ppl-hand" />
+
+<Stuck q="What if the model gave a real next word probability 0?">
+
+Then $-\ln 0$ is infinite, and so is the perplexity. One impossible-looking word ruins the whole score.
+The counting model does this whenever the test text has a pair it never counted, like "a dog" in the tiny example.
+
+The usual fix for counting is **smoothing**: add a small number, say 1, to every cell before dividing, so nothing is
+exactly impossible. Neural models never have this problem, because softmax never outputs exactly 0.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="ppl-hand">
+
+## 4. The same model as a neural network
+
+The count table can also be **learned**. Give the network a table of weights W, one row per previous word.
+The row is a list of scores, and softmax turns them into probabilities:
+
+$$
+P(\text{next} \mid \text{prev}) = \text{softmax}(\text{onehot}(\text{prev})\, W)
+$$
+
+Multiplying by a one-hot row just picks row "prev" of W. (Level 13 uses the same trick to give every word a list of numbers.)
+Training is the loop from level 2: compute the cross-entropy of the real next words, take the gradient, step.
+
+<Blank id="w-shape" />
+
+<Predict id="neural-match" />
+
+<Gate requires="neural-match">
+
+<NeuralBigramLab />
+
+The weights start at zero, so every row starts uniform: perplexity 10. After 300 steps it is at 2.037 and still
+slowly moving toward the counting model's 2.016.
+
+The learning rate here is 5, much bigger than the 0.05 of level 2. That is safe because of the form of this loss surface:
+softmax plus cross-entropy over one table changes slowly in every direction, so even a big step does not jump far past the lowest point.
+(Level 2’s squared error on x values up to 3 changes much faster, which is why 0.2 already diverged there.)
+
+<CodeBlank id="nn-loss" />
+
+<Deeper title="Why training finds the counts">
+
+For one row, the loss is the cross-entropy between the real next words and softmax(W[row]).
+With nothing else tying the rows together, the best you can do is to make softmax(W[row]) equal the fraction
+of times each word followed, which is exactly the count table divided by its row total.
+
+So for a one-word context, the neural network and the counting model are the same model, found two different ways.
+The difference only appears when the context gets longer, which is the next section.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="nn-loss">
+
+## 5. Why counting stops working
+
+To look two words back, the count table needs one row for every **pair** of previous words.
+
+<Blank id="rows-2ctx" />
+
+<Predict id="huge-table" />
+
+A neural network does not need a row per context. It turns each word into a vector (level 13), and similar words
+get similar vectors, so what it learns about "the cat sat" also helps with "the dog sat". Then attention (level 14)
+lets it look at every earlier word at once, with weights it computes. That is the path from here to a GPT.
+
+## 6. The whole counting model in one line
+
+Before we stop using counts, build its probability table yourself. You have the count table `C` from section 1
+(row = this word, column = the next word), this time with **smoothing**: add 1 to every cell first, so no pair is
+exactly impossible (a pair counted 0 times now counts 1, a pair counted 2 times counts 3). Then each row has to become
+probabilities that add up to 1, so each row is divided by its own total. Two NumPy tools do it:
+
+```python
+M = np.array([[1, 3], [2, 2]])
+M.sum(axis=1)                  # [4, 4]       one total per row, shape (2,)
+M.sum(axis=1, keepdims=True)   # [[4], [4]]   the same totals, shape (2, 1)
+M / M.sum(axis=1, keepdims=True)   # [[0.25, 0.75], [0.5, 0.5]]   (2, 1) is stretched across the columns
+```
+
+<CodeBlank id="bigram-probs" />
+
+</Gate>

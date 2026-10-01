@@ -1,0 +1,391 @@
+---
+title: Backward through attention
+short: Attention, backward
+level: "U6"
+order: 6.6
+part: foundations
+branch: internals
+question: How does the gradient get back through attention, and what must training keep in GPU memory for it?
+run: browser
+checkpoint: attn-backward
+testOut: [jac-off, dz-fast, ds-hand, dk-hand, adam-bytes, attn-backward]
+glossarySkip: [memory]
+recap:
+  can:
+    - "Write the Jacobian of softmax, and compute dz with the short form p ⊙ (dp − dp·p) without building it."
+    - "Take one attention head backward from dO to dQ, dK and dV, say the shape of every step, and check it against numeric slopes."
+    - "Estimate the GPU memory of training: 16 bytes per parameter, plus saved activations that grow with B × L × d<sub>model</sub> and B × h × L²."
+  keys:
+    - "$J = \\text{diag}(p) - p^\\top p$, and the sum of every row of $J$ is 0"
+    - "`s = (dp * p).sum(-1, keepdims=True)`, then `dz = p * (dp - s)`"
+    - "A matrix product $Y = XW$ goes backward as `dX = dY @ W.T` and `dW = X.T @ dY`; every gradient has the shape of its value"
+    - "Query $i$ is in row $i$ of the scores and key $j$ in column $j$: dK needs the transpose of dS, dQ does not, and both keep the $1/\\sqrt{d_k}$"
+    - "Mixed-precision Adam: 2 + 2 + 4 + 4 + 4 = 16 bytes per parameter"
+    - "One pre-norm block keeps about 16 tensors of shape (B, L, d<sub>model</sub>) for its backward pass, besides A"
+    - "Saved attention weights: B × h × L × L numbers per layer (in a plain implementation; a fused kernel keeps none)"
+  mistakes:
+    - "Forgetting the 1/√dₖ in dQ and dK, or confusing the rows and the columns of dS."
+    - "Counting only the bf16 weights (2 bytes each) for training: gradients, the master copy and Adam’s m and v make it 16."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import SoftmaxJacobianLab from '@viz/SoftmaxJacobianLab.astro'
+import MemoryLedgerLab from '@viz/MemoryLedgerLab.astro'
+import AttnBackwardFlow from '@viz/AttnBackwardFlow.astro'
+
+This level uses the backward rules of [U3](/learn/autograd/) and the number formats of [U2](/learn/numbers-in-a-computer/).
+If you skipped them, read them quickly first.
+
+The full model trains with one line, `loss.backward()`. In U3 you built that line yourself for single numbers:
+every operation knows its own backward rule, and the chain rule connects the rules.
+Attention needs two rules that U3 didn’t have: one for softmax, and one for a matrix product.
+
+This level writes them, takes one attention head backward by hand, and checks the result against numeric slopes.
+Then it counts what the backward pass costs: every value a backward rule needs must be kept in GPU memory
+from the forward pass until the backward pass uses it.
+
+The level’s [demo.py](/files/attention-backward/demo.py) prints every number on this page. To run it, download it into a folder of its own
+and run `python demo.py` there ([setup](/setup/)).
+
+## 1. Softmax backward
+
+Softmax turns scores $z$ into probabilities $p$:
+
+$$
+p_i = \frac{e^{z_i}}{\sum_j e^{z_j}}
+$$
+
+Backward receives $dp$, the gradient of the loss with respect to each $p_i$, and must return $dz$.
+The new part: every score moves **every** probability, because all of them share the same denominator
+(the sum under the fraction line). If $z_1$ grows, $p_1$ grows. $p_0$ and $p_2$ shrink, so the total stays 1.
+
+So the slopes form a table. Row $i$, column $j$ holds $\partial p_i / \partial z_j$: how fast $p_i$ moves when $z_j$ moves.
+This table of all slopes is the **Jacobian** $J$. For softmax it has a short formula:
+
+- on the diagonal, $J_{ii} = p_i (1 - p_i)$;
+- off the diagonal, $J_{ij} = -p_i \, p_j$.
+
+Both lines together: $J = \text{diag}(p) - p^\top p$. Here $\text{diag}(p)$ is the table with $p$ on the diagonal and 0 elsewhere,
+and $p^\top p$ (`np.outer(p, p)`) is the table of every product $p_i p_j$. Vectors are rows in this course, so $p^\top p$ is
+`(n, 1) @ (1, n)` → `(n, n)`.
+
+Take $z = [\ln 2, 0, 0]$. Then $e^z = [2, 1, 1]$, the sum is 4, and $p = [0.5, 0.25, 0.25]$.
+
+<SoftmaxJacobianLab hide={{ j11: "jac-diag", j01: "jac-off", rows: "pred-jac-rows", dz2: "dz-fast" }} />
+
+<Blank id="jac-diag" />
+
+<Deeper title="Where the two formulas come from">
+
+Write $s = \sum_j e^{z_j}$, so $p_i = e^{z_i} / s$. When $z_i$ moves, both $e^{z_i}$ and $s$ move, at the same rate $e^{z_i}$.
+The rule for a fraction gives
+
+$$
+\frac{\partial p_i}{\partial z_i} = \frac{e^{z_i} s - e^{z_i} e^{z_i}}{s^2} = p_i - p_i^2 = p_i (1 - p_i).
+$$
+
+When another score $z_j$ moves, only $s$ moves: $\partial p_i / \partial z_j = -e^{z_i} e^{z_j} / s^2 = -p_i \, p_j$.
+
+</Deeper>
+
+<Gate requires="jac-diag">
+
+Now an entry off the diagonal. Its sign says which way $p_0$ goes when another score grows.
+
+<Blank id="jac-off" />
+
+</Gate>
+
+<Gate requires="jac-off">
+
+One more fact about softmax: adding the same number $c$ to every score changes nothing.
+$e^{z_i + c} = e^c \, e^{z_i}$, and the factor $e^c$ appears in the numerator and in every term of the denominator, so it cancels.
+
+<Predict id="pred-jac-rows" />
+
+</Gate>
+
+<Gate requires="pred-jac-rows">
+
+### From dp to dz
+
+Each score $z_j$ moves every $p_i$, so $dz_j$ collects one part from each of them: $dp_i \times J_{ij}$.
+This is the `+=` of U3: a value used in several places gets the sum of all its parts.
+
+$$
+dz_j = \sum_i dp_i \, J_{ij}, \quad \text{that is,} \quad dz = dp \; J
+$$
+
+When you put the formula for $J$ into the sum, the sum becomes short. $dp \; \text{diag}(p)$ is just $dp_j \, p_j$, and $dp \; p^\top p$ is
+$(dp \cdot p) \, p_j$, where $dp \cdot p$ is one number for the whole row. So
+
+$$
+dz = p \odot (dp - dp \cdot p)
+$$
+
+where $\odot$ means entry by entry (`*` in NumPy). Subtract the one number $dp \cdot p$ from every entry of $dp$, then multiply by $p$.
+
+Check both ways on numbers, with $p = [0.5, 0.25, 0.25]$ and $dp = [1, 1, 0]$:
+
+- the long way: column 0 of $J$ is $[0.25, -0.125, -0.125]$, so $dz_0 = 1 \times 0.25 + 1 \times (-0.125) + 0 \times (-0.125) = 0.125$;
+- the short way: $dp \cdot p = 0.5 + 0.25 + 0 = 0.75$, so $dz_0 = p_0 (dp_0 - 0.75) = 0.5 \times 0.25 = 0.125$.
+
+<Blank id="dz-fast" />
+
+<Stuck q="Why not just build J and multiply?">
+
+It gives the same numbers, but it is much more work. With $n$ scores, $J$ has $n \times n$ entries, and the short form needs about $2n$
+multiplications. In attention, each row of scores has one entry per token: with 1000 tokens, $J$ for one row has a million entries,
+and there are 1000 rows per head. The short form never builds $J$.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="dz-fast">
+
+### In NumPy, and checked
+
+In attention, softmax runs along each row of a table, so `dp·p` is needed once per row: a sum along the last axis.
+A sum along an axis normally removes that axis: for a `(2, 3)` table, `.sum(axis=-1)` gives shape `(2,)`.
+The argument `keepdims=True` keeps the axis with size 1, so the result is `(2, 1)`, one number per row.
+Broadcasting can then subtract it from every entry of its own row.
+
+How do you know a backward pass is right? Compare it with numeric slopes $(L(z + h) - L(z - h)) / 2h$, as in level 6 and U5.
+A loss that makes the check easy is $L = \sum dp \odot \text{softmax}(z)$: its gradient at $p$ is exactly $dp$. The template does this check for you.
+
+<CodeBlank id="softmax-back-code" />
+
+<TryIt>
+
+In the lab, set the scores to $z = [10, 0, 0]$. Then $p \approx [1, 0, 0]$, and almost every entry of $J$ is 0.
+Change $dp$ to anything: $dz$ stays near 0. A softmax that is almost certain passes almost no gradient back.
+That is one reason level 14 divides the scores by $\sqrt{d_k}$: it keeps the scores small, so softmax is not this certain at the start of training.
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="softmax-back-code">
+
+## 2. One attention head, backward
+
+The forward pass of one head (level 14) has three lines. Here are their shapes, with $L$ tokens:
+
+| Forward | Shape |
+|---|---|
+| `S = Q @ K.T / √dₖ` | `(L, dₖ) @ (dₖ, L)` → `(L, L)` |
+| `A = softmax(S)`, each row | `(L, L)` |
+| `O = A @ V` | `(L, L) @ (L, dᵥ)` → `(L, dᵥ)` |
+
+Backward handles the lines in reverse order, starting with the last one. It starts with `dO`, which has the shape of `O`.
+Two rules do all the work:
+
+- **A matrix product** $Y = X W$ (level 6): `dX = dY @ W.T` and `dW = X.T @ dY`.
+- **Softmax**, each row: section 1’s formula, with $A$ in place of $p$.
+
+The figure shows the order. Every gradient has the shape of its value, which makes the transposes easy to check:
+
+| Gradient | Comes from | Shape |
+|---|---|---|
+| `dV` | `O = A @ V` | `(L, dᵥ)` |
+| `dA` | `O = A @ V` | `(L, L)` |
+| `dS` | `A = softmax(S)` | `(L, L)` |
+| `dQ` | `S = Q @ K.T / √dₖ` | `(L, dₖ)` |
+| `dK` | `S = Q @ K.T / √dₖ` | `(L, dₖ)` |
+
+<AttnBackwardFlow />
+
+### An example by hand
+
+Two tokens, $d_k = 4$ (so $\sqrt{d_k} = 2$), $d_v = 2$. The queries and keys are chosen so that every score is 0:
+
+$$
+Q = \begin{bmatrix} 1 & 1 & 0 & 0 \\ 0 & 0 & 1 & 1 \end{bmatrix} \quad
+K = \begin{bmatrix} 1 & -1 & 0 & 0 \\ 0 & 0 & 1 & -1 \end{bmatrix} \quad
+V = \begin{bmatrix} 2 & 0 \\ 1 & 1 \end{bmatrix}
+$$
+
+Every dot product of a row of $Q$ with a row of $K$ is 0, so $S$ is all zeros and every weight in $A$ is 0.5.
+Each output row is the average of the rows of $V$: $O = [[1.5, 0.5], [1.5, 0.5]]$.
+The gradient that arrives from the layers above is $dO = [[1, 0], [0, 2]]$.
+
+<Blank id="dv-hand" />
+
+</Gate>
+
+<Gate requires="dv-hand">
+
+The product $O = A V$ also gives $dA$: $dA = dO \; V^\top = [[2, 1], [0, 2]]$. Row 0 of $dA$ says how the loss changes when token 0 gives more weight
+to each token. Now the softmax step, one row at a time.
+
+<Blank id="ds-hand" />
+
+</Gate>
+
+<Gate requires="ds-hand">
+
+The full score gradient is $dS = [[0.25, -0.25], [-0.5, 0.5]]$. Each row adds up to 0, like the rows of the Jacobian.
+The last step is the backward pass of $S = Q K^\top / \sqrt{d_k}$.
+The forward pass divided the scores by $\sqrt{d_k}$, so both $dQ$ and $dK$ are divided by $\sqrt{d_k}$ too.
+
+<Blank id="dq-hand" />
+
+</Gate>
+
+<Gate requires="dq-hand">
+
+Now the keys. $S$ has one row per query and one column per key: $S[1][0]$ is query 1 against key 0.
+Look at where key $j$ appears in $S = Q K^\top / \sqrt{d_k}$.
+
+<Blank id="dk-hand" />
+
+</Gate>
+
+<Gate requires="dk-hand">
+
+<Stuck q="Why does dK use dS.T, and dQ use dS?">
+
+$S_{ij} = q_i \cdot k_j / \sqrt{d_k}$. Query $i$ appears only in **row** $i$ of $S$, so $dq_i$ collects row $i$ of $dS$, each entry times its key:
+that is `dS @ K / √dₖ`. Key $j$ appears only in **column** $j$ of $S$, so $dk_j$ collects column $j$ of $dS$. `dS.T` turns the columns into
+rows, and `dS.T @ Q / √dₖ` does the same sum for the keys.
+
+</Stuck>
+
+The shapes give a quick check on any line you write. Try it with sizes that are all different.
+
+<Blank id="dk-shape" />
+
+<Deeper title="With a batch, heads and a mask">
+
+A real model computes all of this for $B$ sequences and $h$ heads together. The tensors get two extra axes at the front:
+`(B, h, L, L)` for `S` and `A`. Every line stays the same. Only `.T` must become `.swapaxes(-1, -2)`, so that the batch and head axes stay where they are.
+
+The causal mask needs no extra backward code. A blocked score became −∞, so its weight in $A$ is 0. Every entry of
+`dS = A * (…)` is multiplied by its weight, so a blocked position gets exactly 0 gradient.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="dk-shape">
+
+### The whole head
+
+Now write the backward pass in NumPy: five lines, in the order of the second table, with the rules you just used by hand. The template runs it on the example above,
+then checks every gradient against numeric slopes, on random numbers with 3 tokens, $d_k = 2$ and $d_v = 4$.
+
+<CodeBlank id="attn-backward" />
+
+</Gate>
+
+<Gate requires="attn-backward">
+
+## 3. What backward must keep in GPU memory
+
+Look at the five backward lines again. Each one uses values from the forward pass: `A`, `V`, `K`, `Q`.
+Those values must still exist when the backward pass reaches them, so the forward pass keeps them. These kept values are called
+**saved activations**. In your code they were the tuple `saved`.
+
+<Predict id="pred-saved" />
+
+</Gate>
+
+<Gate requires="pred-saved">
+
+So one head keeps `Q`, `K`, `V` and `A`, and the other layers keep what their own backward rules need (the input of every
+matrix product, for example). Training uses GPU memory in two ways.
+
+### Per parameter: a fixed cost
+
+Large models train in mixed precision (U2). The forward and backward passes use 16-bit numbers, bfloat16 (bf16 for short).
+The update is done on a 32-bit float32 copy (fp32 for short), so that small changes aren’t lost to rounding. With Adam (level 7), each parameter needs:
+
+| Kept for every parameter | Format | Bytes |
+|---|---|---:|
+| the weight used in forward and backward | bf16 | 2 |
+| its gradient | bf16 | 2 |
+| the master copy of the weight | fp32 | 4 |
+| Adam’s m | fp32 | 4 |
+| Adam’s v | fp32 | 4 |
+
+That is 16 bytes per parameter, whatever the batch or the length.
+
+<Blank id="adam-bytes" />
+
+</Gate>
+
+<Gate requires="adam-bytes">
+
+### Per token: activations
+
+Saved activations grow with the data in the batch. Most of them have one row per token, shape `(B, L, d_model)`: with $B = 4$, $L = 1000$,
+`d_model` = 1000 and 2 bytes per number, one such tensor is 8 MB. A layer keeps several of them, for example the inputs
+of its matrix products. The attention weights `A` are different: they have one number for every
+pair of tokens, in every head. Their shape is `(B, h, L, L)`.
+
+<Blank id="scores-mb" />
+
+</Gate>
+
+<Gate requires="scores-mb">
+
+How many `(B, L, ·)` tensors does one layer keep? Here is one pre-norm block (level 16), with an FFN of width 4 × `d_model`.
+The table lists what its backward rules need, step by step, in a plain implementation:
+
+| Kept for the backward pass | Width |
+|---|---|
+| the input of the first LayerNorm | `d_model` |
+| the input of the Q, K, V products (the LayerNorm’s output) | `d_model` |
+| Q, K and V | `d_model` each |
+| the heads’ output, the input of the output product | `d_model` |
+| the input of the second LayerNorm | `d_model` |
+| the input of the FFN’s first product | `d_model` |
+| the FFN’s hidden layer before ReLU | 4 × `d_model` |
+| the FFN’s hidden layer after ReLU, the input of its second product | 4 × `d_model` |
+
+<Blank id="block-saved" />
+
+</Gate>
+
+<Gate requires="block-saved">
+
+Now make the sequences longer and keep everything else.
+
+<Predict id="pred-double-len" />
+
+</Gate>
+
+<Gate requires="pred-double-len">
+
+The lab adds up everything training keeps, for one model. Move $L$ and watch which part grows fastest.
+
+<MemoryLedgerLab />
+
+<Deeper title="Recomputation: more arithmetic, less GPU memory">
+
+The forward pass doesn’t have to keep everything. With **recomputation**, each layer keeps only its input. When the backward pass
+reaches that layer, it runs the layer’s forward pass again from the input, gets the values back, and uses them immediately.
+
+In the example above, a layer then keeps one `(4, 1000, 1000)` input, 8 MB, instead of 64 MB for `A` alone plus everything else.
+The values of that one layer exist again while the backward pass is inside it, so the peak is the kept inputs plus one layer’s values.
+The cost is one more forward pass. A backward pass costs about twice a forward pass. So one training step goes from 1 + 2 = 3 units
+of work to 3 + 1 = 4: about 33% more arithmetic, and much less GPU memory.
+
+A kernel here is one program that runs on the GPU. A fused kernel does several steps in one program.
+Fused attention kernels save even more GPU memory than recomputation. They keep `Q`, `K`, `V`, `O` and one number per row (from the softmax’s sum), but not `A`.
+They recompute `A` in small blocks during the backward pass, so nothing of size $L \times L$ is kept. A later part of the course builds this.
+The softmax step still needs $dA \cdot A$ for each row, and it can come from `O` and `dO` alone:
+$dA = dO \, V^\top$, so $\sum_j dA_{ij} A_{ij} = \sum_c dO_{ic} \sum_j A_{ij} V_{jc} = \sum_c dO_{ic} O_{ic}$.
+In section 2’s example, row 0 gives $dO \cdot O = 1 \times 1.5 + 0 \times 0.5 = 1.5$, and $dA \cdot A = 2 \times 0.5 + 1 \times 0.5 = 1.5$.
+
+<Blank id="do-dot-o" />
+
+</Deeper>
+
+</Gate>

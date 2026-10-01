@@ -1,0 +1,290 @@
+seq-len:
+  type: number
+  prompt: "Level 17’s model reads 905 as one sequence: the digits, then =, then the words, then <eos>. One token per digit and one per word. How many tokens is that?"
+  answer: 8
+  tol: 0
+  after: "9, 0, 5, =, nine, hundred, five, <eos>: 3 digits + 1 + 3 words + 1 = 8 tokens."
+  hints:
+    - when: { equals: 7 }
+      wrong: "3 + 1 + 3"
+      say: "Did you count <eos> at the end? The model has to learn when to stop, so <eos> is a token too."
+    - when: { equals: 9 }
+      wrong: "3 + 1 + 4 + 1"
+      say: "905 has no “zero” and no tens word: it is read “nine hundred five”."
+    - when: { any: true }
+      say: ["Write the whole sequence: digits, =, words, <eos>.", "905 is read “nine hundred five”: 3 words."]
+
+logits-shape:
+  type: shape
+  prompt: "A batch holds 64 numbers. The model input x is (64, 8): 8 tokens per number, padded. There are 42 tokens in the vocabulary and `d_model` = 64. What shape are the logits?"
+  answer: [64, 8, 42]
+  after: "One row of 42 scores for every position of every sequence in the batch. Each row guesses the token that comes next."
+  hints:
+    - when: { shape: [64, 42] }
+      say: "That is one score row per sequence. But every one of the 8 positions makes a guess."
+    - when: { shape: [64, 8, 64] }
+      say: "(64, 8, 64) is the output of the last block. The output layer turns the 64 numbers into how many scores?"
+    - when: { any: true }
+      say: "The output layer only changes the last dimension: `d_model` becomes the number of tokens."
+
+heads-params:
+  type: predict
+  prompt: "`d_model` stays 64 and you change heads from 4 to 8. The parameter count…"
+  options: ["doubles", "stays exactly the same", "halves"]
+  answer: 1
+  hints:
+    - when: { any: true }
+      say: "What shape is `W_Q` with 4 heads? What shape is it with 8 heads? More heads only cut it into more slices."
+  reveal: "It stays at 72,106. With 4 heads each head is 16 numbers wide; with 8 heads each is 8 wide. `W_Q` is still a 64 × 64 matrix, just cut into more slices. Try it in the diagram."
+
+ffn-params:
+  type: number
+  prompt: "`d_model` = 64 and `d_ff` = 128. How many parameters does one FFN have? It is Linear(64 → 128), ReLU, Linear(128 → 64). Count weights and biases."
+  answer: 16576
+  after: "64 × 128 + 128 for the first layer, 128 × 64 + 64 for the second: 8,320 + 8,256 = 16,576."
+  hints:
+    - when: { equals: 16384 }
+      wrong: "2*64*128"
+      say: "That is the weights only. Each Linear layer also has one bias per output number."
+    - when: { equals: 8192 }
+      wrong: "64*128"
+      say: "That is one of the two weight matrices. There are two Linear layers."
+    - when: { any: true }
+      say: ["A Linear layer from a to b has a × b weights and b biases. Add up both layers.", "The first layer has 64 × 128 + 128 = 8,320 parameters. Now count the second layer."]
+
+scores-shape:
+  type: shape
+  prompt: "Same batch: x is (64, 8), and the model has 4 heads. What shape are one block’s attention scores?"
+  answer: [64, 4, 8, 8]
+  after: "(B, heads, L, L): each head of each sequence has an 8 × 8 table, one row per query position and one column per key position. Q and K come from the same 8 tokens."
+  hints:
+    - when: { shape: [64, 8, 8] }
+      say: "Right table, but every head has its own scores. Put the heads after the batch."
+    - when: { shape: [64, 8, 4, 8] }
+      say: "The heads come right after the batch, so each head’s table stays together: (B, h, L, L)."
+    - when: { any: true }
+      say: ["Scores are (B, h, `L_q`, `L_k`). Here Q and K come from the same sequence.", "64 sequences, 4 heads, 8 tokens."]
+
+infer-vs-train:
+  type: predict
+  prompt: "A trained model reads a number aloud (inference). Which of these changes while it runs?"
+  options: ["`W_Q`, the matrix inside the attention", "The attention scores", "The embedding table"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "`W_Q` is a weight. Weights change only during training, when the optimizer updates them."
+    - when: { equals: 2 }
+      say: "The embedding table is a weight too. It was learned in training and is now fixed."
+  reveal: "The scores. Every weight (`W_Q`, `W_K`, `W_V`, the embedding table, the FFN) was learned in training and is now fixed. Q, K, V, the scores and the outputs are computed again from the input every time the model runs, and removed after."
+
+step-rows:
+  type: number
+  prompt: "Reading 742 aloud. The model has already written “seven hundred forty”. How many rows go into the model at this step?"
+  answer: 7
+  after: "7, 4, 2, =, seven, hundred, forty: 7 rows. Only the last row, forty’s, is used to pick the next word."
+  hints:
+    - when: { equals: 3 }
+      say: "The words alone are 3 rows, but the model reads the whole sequence: the digits and = come first."
+    - when: { equals: 4 }
+      wrong: "1 + 3"
+      say: "Count the digits too: they are in the same sequence as the words."
+    - when: { any: true }
+      say: "Count every token so far: the 3 digits, =, and the words already written."
+
+greedy-pick:
+  type: code
+  prompt: "Write one step of greedy decoding. h is the last row of the model’s output (after the final LayerNorm), W and b are the output layer. Return the id of the next word."
+  template: |
+    def next_token(h, W, b):
+        scores = h @ W + b
+        print("scores:", scores)
+        return ____
+
+    h = np.array([1.0, -1.0])
+    W = np.array([[1.0, 0.0, 2.0],
+                  [0.0, 1.0, 1.0]])
+    b = np.array([0.0, 0.0, -0.5])
+    print("next token:", next_token(h, W, b))
+  solution: "int(np.argmax(scores))"
+  tests:
+    - expr: "next_token(h, W, b)"
+      expect: 0
+      say: "scores are [1, -1, 0.5], so id 0"
+    - setup: "b2 = np.array([0.0, 0.0, 1.5])"
+      expr: "next_token(h, W, b2)"
+      expect: 2
+      say: "scores are [1, -1, 2.5], so id 2"
+  hints:
+    - when: { error: "not defined" }
+      say: "Use the scores variable that is already computed."
+    - when: { testFailed: 0 }
+      say: "Return the position of the biggest score, not the score itself. np.argmax does that."
+    - when: { any: true }
+      say: ["Greedy means: take the word with the highest score. Return its position, not the score.", "NumPy has a function that returns the index of the largest value."]
+  after: "np.argmax gives the position of the top score, and that position is the token id. Softmax is not needed here: it never changes which score is the biggest."
+
+greedy-loop:
+  type: code
+  prompt: "Write the whole greedy loop. Start from the prompt (the digits and =). Each step runs the model on everything so far, takes the last row of the scores, appends the top id, and stops after the model picks eos (keep eos in the list). Stop after `max_new` new tokens even without eos."
+  template: |
+    # A small stand-in model with 6 tokens:
+    # 0 <pad>, 1 <eos>, 2 "4", 3 "=", 4 four, 5 hundred.
+    # Row i of T holds the scores for the token that follows token i.
+    T = np.array([[0., 0., 0., 0., 0., 0.],
+                  [0., 0., 0., 0., 0., 0.],
+                  [0., 0., 0., 2., 0., 0.],    # after "4": =
+                  [0., 0., 0., 0., 2., 1.],    # after "=": four
+                  [0., 1., 0., 0., 0., 3.],    # after four: hundred
+                  [0., 2., 0., 0., 1., 0.]])   # after hundred: <eos>
+
+    def model(ids):
+        # (len(ids), 6): one row of scores per token
+        return T[np.array(ids)]
+
+    def greedy_decode(model, prompt, eos=1, max_new=6):
+        ids = list(prompt)
+        for step in range(max_new):
+            ____
+        return ids
+
+    print("ids:", [int(i) for i in greedy_decode(model, [2, 3])])
+  solution: |-
+    scores = model(ids)
+            nxt = int(np.argmax(scores[-1]))
+            print("step", step, "rows in:", len(ids), "pick:", nxt)
+            ids.append(nxt)
+            if nxt == eos:
+                break
+  tests:
+    - expr: "greedy_decode(model, [2, 3])"
+      expect: [2, 3, 4, 5, 1]
+      say: "4 = → four → hundred → <eos>"
+    - setup: "T2 = T.copy(); T2[5] = [0., 0., 0., 0., 5., 0.]"
+      expr: "greedy_decode(lambda ids: T2[np.array(ids)], [2, 3], max_new=4)"
+      expect: [2, 3, 4, 5, 4, 5]
+      say: "without <eos> the loop stops after `max_new` = 4 new tokens"
+    - expr: "len(greedy_decode(model, [2, 3], max_new=2))"
+      expect: 4
+      say: "`max_new` = 2 stops before <eos>: [4, =, four, hundred]"
+    - setup: "lens = []\ndef counting(ids):\n    lens.append(len(ids))\n    return T[np.array(ids)]"
+      expr: "[greedy_decode(counting, [2, 3]), lens][1]"
+      expect: [2, 3, 4]
+      say: "a stand-in model that records how many tokens it gets: 2, then 3, then 4"
+  hints:
+    - when: { error: "not defined" }
+      say: "Compute the scores inside the loop first: scores = model(ids)."
+    - when: { testFailed: 0 }
+      say: ["The prompt [2, 3] should give [2, 3, 4, 5, 1]. Check three things: which row of the scores you pick, what the model runs on, and the order of append and the eos test.", "Only the last row, scores[-1], predicts the next token. The model runs on ids, which grows by one each step, not on the prompt.", "Append the picked id first, then break if it is eos. Otherwise eos never reaches the list."]
+    - when: { testFailed: 3 }
+      say: ["This stand-in model records how many tokens it gets at each step. They should be 2, 3 and 4: the list grows by one each step.", "The model needs every token so far, not only the last one. Run it on the whole list, model(ids), and take only the last row of its scores."]
+      wrong: "scores = model(ids[-1:])\n        nxt = int(np.argmax(scores[-1]))\n        ids.append(nxt)\n        if nxt == eos:\n            break"
+    - when: { any: true }
+      say: ["Each pass: run the model, pick from the last row, append, stop on eos.", "model(ids) gives one row of scores per token. Only the last row predicts the next token.", "np.argmax gives the top id. Append it first, then use break when it is eos."]
+  after: "Each step runs the model on everything so far, prompt included, but only the last row predicts the next token. eos is appended before the check, so it stays in the list. range(`max_new`) is the limit for when eos never comes."
+
+count-427:
+  type: number
+  prompt: "For 427, x = 4 2 7 = four hundred twenty seven and y = 2 7 = four hundred twenty seven <eos>: 8 targets. The loss counts only targets that are part of the answer (the words and <eos>). How many of the 8 count?"
+  answer: 5
+  tol: 0
+  after: "four, hundred, twenty, seven, <eos>: 5. The targets 2, 7 and = are guesses about the question, which is random, so they are skipped."
+  hints:
+    - when: { equals: 4 }
+      say: "<eos> is part of the answer: the model must learn when to stop."
+      wrong: "4"
+    - when: { equals: 8 }
+      say: "The first three targets are 2, 7 and =. Are they part of the answer?"
+      wrong: "3 + 4 + 1"
+    - when: { equals: 6 }
+      say: "The target = is a guess about the question, like 2 and 7. Only the words and <eos> count."
+      wrong: "4 + 1 + 1"
+    - when: { any: true }
+      say: ["Check y and mark each target that is a word or <eos>.", "y = 2, 7, =, four, hundred, twenty, seven, <eos>."]
+
+reshape-rows:
+  type: shape
+  prompt: "For the loss, the (64, 5, 42) logits are flattened so that every position is one row. What shape do they become?"
+  answer: [320, 42]
+  after: "64 sequences × 5 positions = 320 guesses, each a row of 42 scores. The targets become a list of 320 ids."
+  hints:
+    - when: { shape: [64, 210] }
+      say: "Keep the 42 scores together. Merge the batch and the positions instead."
+    - when: { any: true }
+      say: "reshape(-1, 42): every position of every sequence becomes one row. How many rows is that?"
+
+no-causal:
+  type: predict
+  prompt: "You delete the causal mask and train again. What happens?"
+  options: ["The training loss stays high and the model learns nothing", "The training loss gets very low, but reading new numbers aloud fails", "Nothing changes"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Without the mask, position t can see x[t + 1], which is exactly its target. Is that hard or easy?"
+    - when: { equals: 2 }
+      say: "During training the whole answer is in x. What can each position see without the mask?"
+  reveal: "In training, every position can now see the next token in x, and the next token is exactly its target. It learns to copy, so the loss drops very low. When it writes by itself, the next word doesn’t exist yet: there is nothing to copy, and the answers are wrong."
+
+copy-first:
+  type: predict
+  prompt: "You build a new model for a new task. After 10 epochs it gets 0% right, and the training loss stopped falling long ago. What do you try first?"
+  options: ["Make the model bigger", "Train it on the copy task: input 1 2 3, output 1 2 3", "Collect more data"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "A bigger model with the same bug fails the same way. First find out whether the code itself works."
+    - when: { equals: 2 }
+      say: "More data won’t help if the code has a bug. Which test tells you quickly whether it does?"
+  reveal: "The copy task. It is so easy that a correct model learns it in about a minute of training. If it fails, the bug is in your code (a mask, the shift by one, the loss), not in the task. This is for a loss that has stopped falling. If the loss is still falling, keep training instead: level 21 shows a run stuck at a few percent for several epochs that then jumps to almost 100%."
+
+masked-loss:
+  type: code
+  prompt: "Write the whole loss that skips PAD, starting from the scores. logits is (N, V), targets is (N,), and the argument pad is the id of PAD (0 by default). Return the mean loss over the rows whose target is not PAD. Several lines."
+  template: |
+    def masked_loss(logits, targets, pad=0):
+        N = len(targets)                     # the number of rows
+        # p[np.arange(N), targets] picks one entry per row:
+        # from row i, column targets[i]
+        ____
+
+    logits = np.array([[2.0, 1.0, 0.0],
+                       [0.0, 3.0, 0.0],
+                       [1.0, 1.0, 1.0]])
+    targets = np.array([0, 1, 0])        # rows 0 and 2 are PAD
+    print("loss:", masked_loss(logits, targets))
+  solution: |-
+    p = softmax(logits)                                  # (N, V)
+        nll = -np.log(p[np.arange(N), targets])   # one number per row
+        keep = targets != pad
+        print("per row:", nll.round(3), "  keep:", keep)
+        return nll[keep].mean()
+  tests:
+    - expr: "masked_loss(logits, targets)"
+      expect: 0.0949229564
+      tol: 0.0001
+      say: "only row 1 counts: −ln(0.909) = 0.095"
+    - setup: "L2 = np.array([[0.0, 0.0, 0.0, 0.0], [1.0, 2.0, 3.0, 4.0]]); t2 = np.array([2, 3])"
+      expr: "masked_loss(L2, t2)"
+      expect: 0.9132420298
+      tol: 0.0001
+      say: "no PAD here, so it is the plain average"
+    - setup: "L3 = np.array([[1.0, 2.0, 0.0], [0.0, 0.0, 0.0], [3.0, 0.0, 0.0]]); t3 = np.array([1, 2, 0])"
+      expr: "masked_loss(L3, t3, pad=2)"
+      expect: 0.2512644604
+      tol: 0.0001
+      say: "with pad = 2, row 1 is the PAD row and rows 0 and 2 count"
+  hints:
+    - when: { error: "not defined" }
+      say: "Compute each name before you use it: the probabilities first, then the per-row losses, then keep."
+    - when: { error: "only integers|IndexError|index .* is out of bounds" }
+      say: "To pick one entry per row, index with two arrays: the row numbers np.arange(N) and the target ids."
+    - when: { equals: 0.5337137365111503 }
+      say: "0.534 is the average over all 3 rows, PAD included. Average only the rows where keep is True."
+    - when: { equals: 0.03164098547365358 }
+      say: "(nll * keep).mean() sets the PAD rows to 0 but still divides by all 3 rows. Divide by the number of kept rows instead."
+      wrong: "p = softmax(logits)\n    nll = -np.log(p[np.arange(N), targets])\n    keep = targets != pad\n    return (nll * keep).mean()"
+    - when: { testFailed: 2 }
+      say: "Test 3 uses pad = 2. Build keep from the pad argument, not from the number 0."
+      wrong: "p = softmax(logits)\n    nll = -np.log(p[np.arange(N), targets])\n    keep = targets != 0\n    return nll[keep].mean()"
+    - when: { any: true }
+      say: ["Four steps, one line each: softmax over each row, −ln of the probability of each row's target, keep = the rows whose target is not PAD, then the mean over the kept rows only.", "The loss of one row is −ln of the probability its target gets. Pick those probabilities with p[np.arange(N), targets].", "keep is targets != pad. Indexing an array with a True/False array keeps only the True rows; take the mean of what is left."]
+  after: "softmax turns each row of scores into probabilities, and −ln of the target's probability is that row's loss. Indexing with keep removes the PAD rows, so the mean divides by the number of real rows. (nll * keep).mean() sets the PAD rows to 0 but still divides by all rows, so the loss looks too small."

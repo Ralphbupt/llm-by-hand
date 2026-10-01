@@ -1,0 +1,165 @@
+z-11:
+  type: number
+  prompt: "The AND neuron has w1 = 1, w2 = 1, b = −1.5, and z = w1·x1 + w2·x2 + b. What is z for the point (1, 1)?"
+  answer: 0.5
+  tol: 0.001
+  after: "z = 1×1 + 1×1 − 1.5 = 0.5. This is the only corner with z > 0, so it is the only corner where the AND neuron says 1."
+  hints:
+    - when: { equals: 2 }
+      say: "You forgot b. z = w1·x1 + w2·x2 + b."
+    - when: { equals: -1.5 }
+      say: "That is z for (0, 0). Use x1 = 1 and x2 = 1."
+    - when: { any: true }
+      say: ["Put the numbers into z = w1·x1 + w2·x2 + b, with x1 = 1 and x2 = 1.", "The weighted sum is w1·x1 + w2·x2 = 1×1 + 1×1 = 2. Now add b."]
+
+p-11:
+  type: number
+  prompt: "A neuron has z = 0.5. Its output is p = sigmoid(0.5) = 1 / (1 + e^(−0.5)). Use e^(−0.5) ≈ 0.6. What is p? (Three decimals.)"
+  answer: 0.625
+  tol: 0.004
+  after: "1 / (1 + 0.6) = 1 / 1.6 = 0.625. The exact value is 0.6225. Above 0.5, so the neuron says 1. In the AND neuron (w1 = w2 = 1, b = −1.5), the other three corners get z ≤ −0.5 and p < 0.5."
+  hints:
+    - when: { equals: 0.375 }
+      say: "That is sigmoid(−0.5). The sign in e^(−z) matters: here e^(−0.5) ≈ 0.6, so the bottom is 1 + 0.6."
+    - when: { equals: 1.6 }
+      say: "1.6 is the bottom of the fraction (the denominator). p is 1 divided by it."
+    - when: { any: true }
+      say: ["Use p = 1 / (1 + e^(−z)) and put in e^(−0.5) ≈ 0.6.", "The bottom of the fraction is 1 + 0.6 = 1.6. Now divide 1 by it."]
+
+xor-line:
+  type: predict
+  prompt: "XOR data: the points (0, 0) and (1, 1) have target 0, and (0, 1) and (1, 0) have target 1. One neuron draws one straight line. Can you find w1, w2, b so that all 4 points are correct?"
+  options: ["Yes, with the right slope", "Yes, if the steepness is high enough", "No, at best 3 of the 4 points are right"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "Try a few slopes. The two 1s sit on one diagonal of the square and the two 0s on the other. Can one straight line separate the diagonals?"
+    - when: { equals: 1 }
+      say: "Steepness only sharpens the colors. Does it move or bend the line?"
+  reveal: "No. The two 1s sit on one diagonal and the two 0s on the other. Any straight line that puts both 1s on one side puts at least one 0 there too. Every line you try leaves at least one point on the wrong side. Steepness only sharpens the colors; the line stays a line."
+
+neuron:
+  type: code
+  prompt: "Write z for one neuron."
+  template: |
+    def neuron(x, w, b):
+        z = ____
+        return 1 / (1 + np.exp(-z))
+
+    w = np.array([1.0, 1.0])
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+    print("AND neuron on all four points:", neuron(X, w, -1.5).round(4))
+  solution: "x @ w + b"
+  tests:
+    - expr: "neuron(np.array([1.0, 1.0]), np.array([1.0, 1.0]), -1.5)"
+      expect: 0.6224593
+      tol: 0.0001
+      say: "point (1, 1) with the AND neuron gives 0.6225"
+    - expr: "neuron(np.array([[0,0],[0,1],[1,0],[1,1]], dtype=float), np.array([1.0, 1.0]), -1.5)"
+      expect: [0.1824255, 0.3775407, 0.3775407, 0.6224593]
+      tol: 0.0001
+      say: "all four points at once"
+    - expr: "neuron(np.array([3.0, -1.0]), np.array([0.5, 2.0]), 0.0)"
+      expect: 0.3775407
+      tol: 0.0001
+  hints:
+    - when: { error: "unsupported operand|not aligned|mismatch" }
+      say: "Check the shapes. x is (2,) or (4, 2), w is (2,). x @ w gives one number per point."
+    - when: { testFailed: 0 }
+      say: ["z is the weighted sum of the inputs plus the bias. Did you add the bias?", "The weighted sum w1·x1 + w2·x2 is a matrix multiply, as in level 1. One multiply gives one number per point."]
+    - when: { any: true }
+      say: ["z = w1·x1 + w2·x2 + b. Which NumPy operation gives w1·x1 + w2·x2?", "Use the matrix multiply from level 1 on the inputs and the weights. Then add the bias."]
+  after: "x @ w gives one weighted sum per point: shape (4, 2) @ (2,) → (4,), and shape (2,) @ (2,) → one number. Adding b then shifts every z by the same amount. The same line works for one point and for all four at once."
+
+flat-loss:
+  type: number
+  prompt: "On XOR, one neuron answers p = 0.5 for every point. Suppose a model answered p = 0.25 for the two points whose target is 0, and p = 0.75 for the two whose target is 1. What is its loss −mean(y·ln p + (1 − y)·ln(1 − p))? Use ln 0.75 ≈ −0.288 and ln 0.25 ≈ −1.386."
+  answer: 0.288
+  tol: 0.002
+  after: "Every point is 75% right: a target-1 point costs −ln 0.75 = 0.288, and a target-0 point costs −ln(1 − 0.25) = −ln 0.75 = 0.288 too. The mean is 0.288. One neuron can’t reach that on XOR. Its best is p = 0.5 everywhere, loss −ln 0.5 = ln 2 ≈ 0.693: the number it stays at, which means “no better than a coin flip”. You’ll see ln 2 again whenever a model has learned nothing."
+  hints:
+    - when: { equals: 1.386 }
+      say: "That uses ln 0.25. For a target-0 point the loss is −ln(1 − p), and 1 − 0.25 = 0.75."
+    - when: { equals: 0.837 }
+      say: "You mixed ln 0.25 into the target-0 points. Their loss is −ln(1 − p) = −ln 0.75."
+    - when: { equals: -0.288 }
+      say: "Right size, wrong sign. The loss has a minus sign in front: −mean(…). Each ln of a number below 1 is negative, so the loss is positive."
+    - when: { any: true }
+      say: ["Take one point at a time: a target-1 point costs −ln p, a target-0 point costs −ln(1 − p).", "For a target-0 point, compute 1 − p first. Which of the two given ln values does that need?", "Do the four points cost the same? What is the mean of four equal numbers?"]
+
+
+bce-code:
+  type: code
+  prompt: "Write the binary cross-entropy loss: −mean(y·ln p + (1 − y)·ln(1 − p)) for arrays p and y."
+  template: |
+    def bce(p, y):
+        return ____
+
+    y = np.array([0, 1, 1, 0], dtype=float)
+    print("coin flip  ", round(bce(np.array([0.5, 0.5, 0.5, 0.5]), y), 4))
+    print("75% sure   ", round(bce(np.array([0.25, 0.75, 0.75, 0.25]), y), 4))
+  solution: "-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))"
+  tests:
+    - expr: "bce(np.array([0.5, 0.5, 0.5, 0.5]), np.array([0, 1, 1, 0], dtype=float))"
+      expect: 0.6931472
+      tol: 0.0001
+      say: "p = 0.5 everywhere costs ln 2 ≈ 0.6931"
+    - expr: "bce(np.array([0.25, 0.75, 0.75, 0.25]), np.array([0, 1, 1, 0], dtype=float))"
+      expect: 0.2876821
+      tol: 0.0001
+      say: "75% sure of the right answer on every point costs 0.2877"
+    - expr: "bce(np.array([0.9, 0.2]), np.array([1, 1], dtype=float))"
+      expect: 0.8573992
+      tol: 0.0001
+      say: "two target-1 points, p = 0.9 and p = 0.2"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["p = 0.5 everywhere should give 0.6931. Is the whole sum inside np.mean( … ), with one minus sign in front of np.mean?", "Each point costs −ln p if y = 1 and −ln(1 − p) if y = 0. Multiply each term by y or by (1 − y)."]
+    - when: { testFailed: 1 }
+      say: ["Check the target-0 term: it uses ln(1 − p), not ln p.", "The target-0 term is multiplied by (1 − y), so it is 0 when y = 1."]
+    - when: { any: true }
+      say: ["Write the formula from the page with np.log and np.mean.", "Inside the mean are two terms: one for target 1 (with ln p) and one for target 0 (with ln(1 − p)).", "Check the minus sign. It goes in front of the mean, so the loss is positive."]
+  after: "y and (1 − y) choose one term for each point. For a target-1 point only ln p counts, and for a target-0 point only ln(1 − p) counts. Each ln is negative for numbers below 1, so the minus sign in front makes the loss positive."
+
+neuron-loss:
+  type: code
+  prompt: "Write the body of `neuron_loss`: return the binary cross-entropy of the neuron's predictions against y. Several lines."
+  template: |
+    def neuron_loss(X, w, b, y):
+        # 1. z for every point  2. p = sigmoid(z)  3. return the loss
+        ____
+
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+    y_and, y_xor = np.array([0, 0, 0, 1.0]), np.array([0, 1, 1, 0.0])
+    w_and = np.array([1.0, 1.0])
+    print("AND neuron on AND:  ", round(neuron_loss(X, w_and, -1.5, y_and), 4))
+    print("all-zero neuron, XOR:", round(neuron_loss(X, np.zeros(2), 0.0, y_xor), 4))
+  solution: "z = X @ w + b\n    p = 1 / (1 + np.exp(-z))\n    return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))"
+  tests:
+    - setup: "X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)"
+      expr: "neuron_loss(X, np.array([1.0, 1.0]), -1.5, np.array([0, 0, 0, 1.0]))"
+      expect: 0.4059111
+      tol: 0.0001
+      say: "the AND neuron (w = [1, 1], b = −1.5) on the AND targets has loss 0.4059"
+    - setup: "X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)"
+      expr: "neuron_loss(X, np.zeros(2), 0.0, np.array([0, 1, 1, 0.0]))"
+      expect: 0.6931472
+      tol: 0.0001
+      say: "w = [0, 0], b = 0 gives p = 0.5 everywhere: loss ln 2 ≈ 0.6931"
+    - setup: "X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)"
+      expr: "neuron_loss(X, np.array([2.0, 2.0]), -1.0, np.array([0, 1, 1, 1.0]))"
+      expect: 0.2470931
+      tol: 0.0001
+      say: "w = [2, 2], b = −1 on the OR targets has loss 0.2471"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Every line inside the function needs the same 4 spaces in front as the first one."
+    - when: { error: "is not defined" }
+      say: "Compute each name before you use it: z first, then p from z, then the loss from p."
+    - when: { error: "NoneType|unsupported format" }
+      say: "The function returns nothing. The last line needs return in front of the loss."
+    - when: { testFailed: 0 }
+      say: ["Check z first: for the point (1, 1) it should be 0.5, as in section 1.", "Did the loss use p, the sigmoid of z, and not z itself? np.log of a negative z gives nan.", "Section 2 wrote p = 1 / (1 + np.exp(-z)), and section 3 wrote the loss with np.log and np.mean."]
+    - when: { any: true }
+      say: ["Three lines: z for every point (section 2), then p = sigmoid(z), then the loss of p against y (section 3).", "z = X @ w + b gives one number per point. The sigmoid turns each z into a p."]
+  after: "These are the three parts of the page in order: z = X @ w + b, then the sigmoid, then the loss. The loss uses p, never z, because ln needs a number between 0 and 1."

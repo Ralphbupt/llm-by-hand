@@ -1,0 +1,39 @@
+# Cloudflare Pages response headers (https://developers.cloudflare.com/pages/configuration/headers/).
+# HTML keeps Cloudflare's default (max-age=0, must-revalidate), so a new deploy shows at once.
+# No Content-Security-Policy yet: it would have to allow GA4, the Pyodide CDN (and wasm), inline boot scripts and
+# the Python worker, and it has not been tested with all of them. No COOP/COEP: nothing uses SharedArrayBuffer.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
+
+# hashed build output (scripts, styles, fonts, the Python worker): never changes under the same name
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# not hashed: cache a while, then check again
+/og/*
+  Cache-Control: public, max-age=86400
+/data/*
+  Cache-Control: public, max-age=3600
+/files/*
+  Cache-Control: public, max-age=3600
+/favicon.svg
+  Cache-Control: public, max-age=604800
+/favicon.ico
+  Cache-Control: public, max-age=604800
+/apple-touch-icon.png
+  Cache-Control: public, max-age=604800
+
+# text for AI assistants and crawlers
+/learn/*.md
+  Content-Type: text/markdown; charset=utf-8
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8

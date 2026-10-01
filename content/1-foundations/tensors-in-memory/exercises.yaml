@@ -1,0 +1,202 @@
+addr-2-3:
+  type: number
+  prompt: "An array of shape (3, 5) is contiguous, so its strides are (5, 1) and it starts at memory position 0. At which memory position is element [2, 3]?"
+  answer: 13
+  tol: 0
+  after: "start + i·s0 + j·s1 = 0 + 2·5 + 3·1 = 13. Two full rows of 5 come before row 2, then 3 more steps along the row."
+  hints:
+    - when: { equals: 11 }
+      say: "11 is 2·4 + 3: that uses a row length of 4. This array has rows of 5, so its row stride is 5."
+    - when: { equals: 17 }
+      say: "17 is 2 + 3·5: the strides are used in the wrong order. The row index i goes with the first stride, 5."
+    - when: { equals: 6 }
+      say: "6 is 2·3. Each index is multiplied by its own stride, then the products are added."
+    - when: { any: true }
+      say: ["Use the address rule: start + i·s0 + j·s1.", "i = 2 goes with s0 = 5, and j = 3 goes with s1 = 1."]
+
+strides-234:
+  type: shape
+  prompt: "An array of shape (2, 3, 4) is contiguous. What are its strides, counted in elements? Type them like a shape, for example (1, 2, 3)."
+  answer: [12, 4, 1]
+  after: "The last axis steps 1. One step along the middle axis jumps over a whole row of 4. One step along the first axis jumps over a whole (3, 4) block: 12."
+  hints:
+    - when: { shape: [1, 4, 12] }
+      say: "Right numbers, wrong order. The last axis is the one with stride 1."
+    - when: { shape: [6, 2, 1] }
+      say: "Each stride is the product of the sizes to its right, not to its left: 3·4 for the first axis."
+    - when: { shape: [24, 8, 1] }
+      say: "Close: 24 would be 3·4·2. The first axis jumps over one (3, 4) block, so 3·4."
+    - when: { any: true }
+      say: ["The last axis has stride 1. Each other stride is the product of the sizes to its right.", "Middle axis: the only size to its right is 4. The first axis has two sizes to its right."]
+
+code-strides:
+  type: code
+  prompt: "Write `contiguous_strides`(shape): the strides of a contiguous array, in elements. Walk the shape from the right."
+  template: |
+    def contiguous_strides(shape):
+        strides = []
+        step = 1
+        for size in reversed(shape):
+            ____
+        return strides
+
+    print(contiguous_strides((3, 4)))       # [4, 1]
+    print(contiguous_strides((2, 3, 4)))    # [12, 4, 1]
+  solution: |-
+    strides.insert(0, step)
+            step = step * size
+  after: "Each stride is the product of the sizes to its right. The loop walks from the right, so it records the step first and only then multiplies by this axis's size. Multiplying first would make the last stride 4 instead of 1."
+  tests:
+    - expr: "contiguous_strides((3, 4))"
+      expect: [4, 1]
+      say: "x with shape (3, 4) has strides (4, 1)"
+    - expr: "contiguous_strides((2, 3, 4))"
+      expect: [12, 4, 1]
+      say: "shape (2, 3, 4) has strides (12, 4, 1)"
+    - expr: "contiguous_strides((5,))"
+      expect: [1]
+      say: "one axis: stride 1"
+    - expr: "contiguous_strides((2, 4, 10, 16))"
+      expect: [640, 160, 16, 1]
+      say: "(B, h, L, dₖ) = (2, 4, 10, 16) has strides (640, 160, 16, 1)"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Two things happen for each size: write down the current step, then make the step bigger.", "The loop goes from the right, so each new stride goes at the front of the list. Use strides.insert(0, …).", "For shape (2, 3, 4) the step is 1, then 4, then 12. Each new step is the old step times one size."]
+    - when: { any: true }
+      say: ["The last axis has stride 1, which is the starting step. Each axis further left jumps over everything to its right.", "The blank has two lines: one adds the current step to the list, one makes the step bigger.", "For shape (3, 4) the loop sees size 4 first. It records step 1, then the step becomes 1 × 4 = 4."]
+
+strides-T:
+  type: shape
+  prompt: "x = np.arange(12.0).reshape(3, 4) has shape (3, 4) and strides (4, 1), in elements. What are the strides of x.T? Type them like a shape."
+  answer: [1, 4]
+  after: "x.T has shape (4, 3) and strides (1, 4). Moving down a row of x.T moves one column of x: 1 step in memory. Moving along a row of x.T moves down a column of x: 4 steps."
+  hints:
+    - when: { shape: [4, 1] }
+      say: "(4, 1) are the strides of x itself. A transpose swaps them, the same way it swaps the shape."
+    - when: { shape: [3, 1] }
+      say: "x.T has rows of 3, but it does not get new memory. Its numbers are still where x put them."
+    - when: { any: true }
+      say: ["A transpose swaps the shape (3, 4) → (4, 3). It swaps the strides the same way.", "x.T[1, 0] is x[0, 1], which sits one step from x[0, 0] in memory."]
+
+pred-write:
+  type: predict
+  prompt: "x = np.arange(12.0).reshape(3, 4), so x[1, 0] is 4. Then y = x.T and y[0, 1] = 100. What is x[1, 0] now?"
+  options: ["4: y is a separate array", "100: y and x use the same memory", "An error: you cannot write into a transpose"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Does x.T get new memory, or new strides over the same memory? `np.shares_memory(x, x.T)` answers this: it returns True."
+    - when: { equals: 2 }
+      say: "A transpose view can be written. Only special views, such as the result of `np.broadcast_to`, are read-only."
+  reveal: "100. y[0, 1] lives at memory position 0 + 0·1 + 1·4 = 4, and so does x[1, 0]. A view is another way to read the same memory, so writing through it changes the original. Use x.T.copy() when you want separate numbers."
+
+strides-swap:
+  type: shape
+  prompt: "t has shape (2, 3, 4) and strides (12, 4, 1). What are the strides of np.swapaxes(t, 1, 2), which has shape (2, 4, 3)? Type them like a shape."
+  answer: [12, 1, 4]
+  after: "Axes 1 and 2 swap places, in the shape and in the strides: (12, 4, 1) → (12, 1, 4). No number moves in memory."
+  hints:
+    - when: { shape: [12, 3, 1] }
+      say: "(12, 3, 1) would be a new contiguous array of shape (2, 4, 3). A swap makes no new memory: it only swaps the two strides."
+    - when: { shape: [1, 4, 12] }
+      say: "Only axes 1 and 2 swap. Axis 0 keeps its stride of 12."
+    - when: { any: true }
+      say: ["Swapping axes swaps their strides and nothing else.", "Axis 0 keeps its stride of 12. Which two strides belong to axes 1 and 2?"]
+
+flat-T-1:
+  type: number
+  prompt: "small = np.arange(6.0).reshape(2, 3) is [[0, 1, 2], [3, 4, 5]]. What is small.T.reshape(6)[1]?"
+  answer: 3
+  tol: 0
+  after: "small.T is [[0, 3], [1, 4], [2, 5]]. In row order that is 0, 3, 1, 4, 2, 5, so element 1 is 3. These numbers do not sit at one fixed step in memory (0 → 3 → 1 …), so reshape makes a copy."
+  hints:
+    - when: { equals: 1 }
+      say: "1 is small.reshape(6)[1]: the memory order. reshape reads small.T row by row, and small.T’s row 0 is [0, 3]."
+    - when: { any: true }
+      say: ["First write small.T: its row 0 is column 0 of small.", "small.T = [[0, 3], [1, 4], [2, 5]]. Read it row by row."]
+
+pred-copy:
+  type: predict
+  prompt: "x = np.arange(12.0).reshape(3, 4). Which of these must be a copy, with its own memory?"
+  options: ["x.reshape(6, 2)", "x.T.reshape(12)", "x[::2]"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "x is contiguous. Reading it in row order visits memory 0, 1, 2, … so any reshape is just new strides."
+    - when: { equals: 2 }
+      say: "x[::2] takes rows 0 and 2. That is a row stride of 8 instead of 4: still a view."
+  reveal: "x.T.reshape(12). x.T in row order visits memory 0, 4, 8, 1, 5, 9, … No single stride gives that, so NumPy copies. The other two are views."
+
+heads-strides:
+  type: shape
+  prompt: "Attention heads out has shape (2, 4, 10, 16) = (B, h, L, dₖ) and strides (640, 160, 16, 1). What are the strides of out.transpose(1, 2), with shape (2, 10, 4, 16)? Type them like a shape."
+  answer: [640, 16, 160, 1]
+  after: "Axes 1 and 2 swap their strides: (640, 160, 16, 1) → (640, 16, 160, 1). The strides no longer fall from left to right, so the result is not contiguous, and view(2, 10, 64) refuses."
+  hints:
+    - when: { shape: [640, 64, 16, 1] }
+      say: "(640, 64, 16, 1) are the strides of a new contiguous (2, 10, 4, 16) array. That is what .contiguous() would make. transpose only swaps."
+    - when: { any: true }
+      say: ["transpose(1, 2) swaps the strides of axes 1 and 2, nothing else.", "Axes 0 and 3 keep 640 and 1. Which two strides belong to axes 1 and 2?"]
+
+bytes-bc:
+  type: number
+  prompt: "v is a float32 vector of shape (4,), and each float32 number takes 4 bytes. How many bytes of memory does `np.broadcast_to(v, (1000, 4))` store?"
+  answer: 16
+  tol: 0
+  after: "16 bytes: only v’s 4 numbers. The (1000, 4) view has strides (0, 1), so all 1000 rows read the same 4 numbers. A real copy would take 16 000 bytes."
+  hints:
+    - when: { equals: 16000 }
+      say: "16 000 bytes would be a real (1000, 4) copy. `broadcast_to` makes a view with stride 0 for the rows."
+    - when: { equals: 4000 }
+      say: "4000 is 1000 × 4: the number of cells the view shows. How many of them are stored separately?"
+    - when: { any: true }
+      say: ["With row stride 0, every row reads the same memory.", "Only the numbers of v itself are stored, once."]
+
+code-read:
+  type: code
+  prompt: "Write the one line that reads element [i, j] from memory buf, given strides and a start offset. The tests use a transpose, a step, a slice and a broadcast."
+  template: |
+    def read(buf, shape, strides, offset=0):
+        rows, cols = shape
+        out = []
+        for i in range(rows):
+            row = []
+            for j in range(cols):
+                row.append(____)
+            out.append(row)
+        return out
+
+    # the memory of x = np.arange(12).reshape(3, 4)
+    buf = list(range(12))
+    print(read(buf, (3, 4), (4, 1)))         # x itself
+    print(read(buf, (4, 3), (1, 4)))         # x.T
+  solution: "buf[offset + i * strides[0] + j * strides[1]]"
+  after: "Every view in this level is the same memory read with a different shape, strides and start. A transpose swaps the strides, a step multiplies one, a slice moves the start, and a broadcast sets a stride to 0."
+  tests:
+    - expr: "read(list(range(12)), (3, 4), (4, 1))"
+      expect: [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+      say: "x itself: shape (3, 4), strides (4, 1)"
+    - expr: "read(list(range(12)), (4, 3), (1, 4))"
+      expect: [[0, 4, 8], [1, 5, 9], [2, 6, 10], [3, 7, 11]]
+      say: "x.T: shape (4, 3), strides (1, 4)"
+    - expr: "read(list(range(12)), (3, 2), (4, 2))"
+      expect: [[0, 2], [4, 6], [8, 10]]
+      say: "x[:, ::2]: strides (4, 2)"
+    - expr: "read(list(range(12)), (2, 3), (4, 1), 5)"
+      expect: [[5, 6, 7], [9, 10, 11]]
+      say: "x[1:, 1:]: start 5"
+    - expr: "read(list(range(12)), (3, 4), (0, 1))"
+      expect: [[0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3]]
+      say: "`broadcast_to`(x[0], (3, 4)): row stride 0"
+  hints:
+    - when: { error: "list indices must be integers" }
+      say: "Index buf with one whole number: the memory position. Use strides[0] and strides[1], not the tuple strides."
+    - when: { error: "index out of range" }
+      say: "The position went past the end of buf. Is each index multiplied by its own stride? i goes with strides[0]."
+    - when: { testFailed: 1 }
+      say: ["x itself works but x.T does not. Are you using the strides, or a fixed row length?", "The row step must come from strides[0], not from cols."]
+    - when: { testFailed: 3 }
+      wrong: "buf[i * strides[0] + j * strides[1]]"
+      say: "The slice starts at position 5. Add offset to the position."
+    - when: { any: true }
+      say: ["Use the address rule: start + i·s0 + j·s1. Then read buf at that position.", "The start is the offset argument. The row index goes with the first stride, the column index with the second stride.", "Check one element by hand: x.T[0, 1] should be 4. Put i = 0 and j = 1 into your line. Do you get 4?"]

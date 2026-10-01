@@ -1,0 +1,6 @@
+---
+import Lab from './RmsLab.svelte'
+interface Props { hide?: { rms?: string; out?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

@@ -1,0 +1,185 @@
+activations	activation function	With the activation back on, the network gets all four points right.
+attention	attention	A word needs to use information from the words around it. Attention is how it does that: every word builds a new vector
+attention	inference	Running a trained model on new input is called inference: the parameters stay fixed, the input passes through every layer
+attention	mask	Every word here may look at every word, including the words after it. Level 15 adds masks, so a word can be stopped
+attention	multi-head attention	You now know every piece of one attention head: three projections, scores, scaling, softmax, a weighted average.
+attention	padding	from looking ahead or at padding, and splits attention into several heads.
+attention	parameter	| parameters | , , , the embedding table | start random; training changes them | yes, fixed after training |
+attention	query	- Q = X @ , the query: what this word is looking for.
+attention	seed	| all three, random start (seed 0) | 0.16 | 0.0000 |
+attention-backward	attention	Attention needs two rules that U3 didn’t have: one for softmax, and one for a matrix product.
+attention-backward	batch	for and . Every line stays the same. Only must become , so that the batch and head axes stay where they are.
+attention-backward	multi-head attention	This level writes them, takes one attention head backward by hand, and checks the result against numeric slopes.
+attention-backward	parameter	The update is done on a 32-bit float32 copy (fp32 for short), so that small changes aren’t lost to rounding. With Adam (level 7), each parameter needs:
+attention-backward	query	Two tokens, (so ), . The queries and keys are chosen so that every score is 0:
+attention-backward	shape	The forward pass of one head (level 14) has three lines. Here are their shapes, with tokens:
+attention-backward	token	multiplications. In attention, each row of scores has one entry per token: with 1000 tokens, for one row has a million entries,
+autoencoders	batch	Batches work as in level 5: a batch of pictures is a table with one row per picture, and each layer is .
+autoencoders	bottleneck	The narrow middle is called the bottleneck. Everything the decoder knows about the picture has to pass through it.
+autoencoders	latent	Those few numbers are called the code (or the latent). The same idea lets image generators work on small codes
+autoencoders	shape	Now write the sampling step. and work number by number on arrays of the same shape.
+backprop	activation function	activation, one number per example and per neuron. In general it is not the error (prediction − truth) of level 2:
+backprop	bias	2. gradient of a layer's bias: , one number per neuron. A bias is like a weight whose
+backprop	parameter	In level 2 you could write the gradient by hand: one formula, two parameters. A network has thousands of
+backprop	shape	Let the shapes decide. is (4, 2): 4 examples, 2 inputs. The gradient at the hidden layer, , is (4, 6).
+convolutions	attention	| Transformer | every token, mixed by attention weights | every token position |
+convolutions	bias	| the layer | filters, plus one bias each |
+convolutions	channel	it has many filters, and each one makes its own output map. The maps are stacked, and each map is called a channel.
+convolutions	shape	| | shape |
+convolutions	stride	- Stride is how far the filter moves each step. Stride 2 uses only every second position (0, 2, 4, …) and roughly halves the output.
+convolutions	token	| Transformer | every token, mixed by attention weights | every token position |
+data-pipeline	attention	- attention: no word may look at a PAD token. That is the padding mask of level 15.
+data-pipeline	batch	of different sizes. Before the model sees anything, some code has to pick the examples, group them into batches,
+data-pipeline	mask	column is always the newest real token. Both work, as long as the mask says where the PAD cells are.
+data-pipeline	seed	random generator: an object that makes random numbers, starting from a number called the seed (here 0).
+data-pipeline	shape	Text examples have different lengths. A batch must be a rectangle, an array of shape .
+data-pipeline	token	So the shorter sequences get extra PAD tokens (here the number 0) at the end, until they are as long as the longest one.
+debugging	batch	2. Overfit one batch.
+debugging	bias	Broadcasting is a feature: it is how adds one bias row to every row (level 1).
+debugging	mask	2. Look at one batch with your own eyes: inputs, targets, mask. Are the targets shifted? Does each label belong to its input?
+debugging	shape	1. Check the shapes.
+debugging	token	A next-token model (level 11 builds one) reads a sequence of tokens (numbers that stand for words or characters)
+encoder-decoder	attention	Level 17’s model is one stack: the digits, then , then the words, all in one sequence, with masked self-attention
+encoder-decoder	batch	With several heads, attention scores have the shape : batch, heads, then the length of Q and the length of K.
+encoder-decoder	decoder	and a decoder that writes. (On this page, “target” means the sentence to write. It is not the training target y.)
+encoder-decoder	encoder	source sentence in one language, write a target sentence in another. So it has two stacks, an encoder that reads
+encoder-decoder	mask	The model uses three attentions, and each one has its own mask. A mask always has the shape of the scores it blocks,
+encoder-decoder	memory	The encoder’s final output is called memory: one vector per source token. It is what the decoder reads.
+encoder-decoder	multi-head attention	At the default size ( 64, 4 heads, 2 layers, 128):
+encoder-decoder	parameter	through cross-attention. Select a block to see its input, its output, and how many parameters it holds. The shapes are for one
+encoder-decoder	query	column; to give it the shape of the scores, stretch that row over every query row.
+encoder-decoder	residual connection	, “add & norm”: add the residual first, then normalize. That is the wrapping of level 16,
+encoder-decoder	shape	It is the output of the last encoder layer: one vector per source token, shape .
+encoder-decoder	token	- the encoder reads the whole source at once: every source token may look at every other source token;
+full-model	attention	You have every part now: embeddings, attention, masks, the FFN, residuals and LayerNorm, and level 16 put them together
+full-model	batch	With several heads, attention scores have the shape : batch, heads, then the length of Q and the length
+full-model	decoder	design, now is a good time. N7 builds the two-stack encoder–decoder on this same task. Level 18 continues the main line.
+full-model	encoder	design, now is a good time. N7 builds the two-stack encoder–decoder on this same task. Level 18 continues the main line.
+full-model	greedy decoding	4. Pick the highest score (this is called greedy decoding), and add that token to the end.
+full-model	inference	Level 14 called it inference: running a trained model to get an answer. It is the whole forward pass, from token ids to
+full-model	mask	You have every part now: embeddings, attention, masks, the FFN, residuals and LayerNorm, and level 16 put them together
+full-model	multi-head attention	At the default size ( 64, 4 heads, 2 blocks, 128):
+full-model	parameter	Select a block to see its input, its output, and how many parameters it holds.
+full-model	prompt	time, until it writes . The part you give it is the prompt; the part it writes is the answer.
+full-model	residual connection	You have every part now: embeddings, attention, masks, the FFN, residuals and LayerNorm, and level 16 put them together
+full-model	shape	The shapes are for one sequence of 8 tokens, the longest input this task has.
+full-model	token	The model only ever does one thing: guess the next token. Give it and it continues the sequence, one word at a
+generalization	capacity	How complicated a curve a model can draw is called its capacity. More parameters give more capacity.
+generalization	parameter	The model is a polynomial, : a sum of powers of x, each times a number (a coefficient). Its degree is the biggest power. Each coefficient is one parameter.
+generation	greedy decoding	Level 17 always took the word with the top score (greedy). This level shows the other ways to pick.
+generation	mask	is the k-th largest score. As with masks in level 15, takes a where
+generation	temperature	Temperature from level 10 still works here: divide every score by T before softmax.
+generation	token	Every strategy on this page runs inside the same loop: run the model on everything written so far, pick one token,
+gradient-descent	parameter	A model is a formula with adjustable numbers called parameters (or weights). Learning means changing the
+inference-cost	attention	One part is missing from 2N: attention itself. Inside one block, a new token with vector size (the model width)
+inference-cost	batch	In prefill, the weights are read once for all L prompt tokens. That is the same idea as a batch of L users.
+inference-cost	decode	Writing the answer one token at a time is called decode. Each decode step makes one new token.
+inference-cost	multi-head attention	This is the same cache as in level 18, section 7. Now count its size. In every layer and every attention head, each
+inference-cost	prompt	the 99 tokens before it (and the whole prompt). So all of them stay in memory until the conversation ends.
+inference-cost	query	can serve. Grouped-query attention makes it smaller: several query heads share one K/V head.
+inference-cost	shape	2 × a × b rule on their shapes.
+inference-cost	token	limit it. One is the memory it needs on the GPU. The other is the time each new token takes. Both come from a
+language-models	attention	get similar vectors, so what it learns about "the cat sat" also helps with "the dog sat". Then attention (level 14)
+latents-and-dit	attention	You have already met the tool built for exactly that: attention, from level 14.
+latents-and-dit	guidance	- : the guidance mix from level D2,
+latents-and-dit	mask	mask, because it writes no sequence one token at a time: every patch may look at every other patch.
+latents-and-dit	residual connection	The middle is the same pre-norm block you built in level 16: attention, feed-forward, LayerNorm, residuals. It has no causal
+latents-and-dit	token	A Transformer reads a sequence of tokens. So we cut the picture into square patches and put them in a row,
+lstm	attention	(for example ). Our LSTM did not learn that version in 6,000 steps. In level 14, attention solves this kind of long-distance rule directly.
+lstm	batch	and now holds a whole batch, one row per example, so slice the columns: ).
+lstm	bias	One detail decides whether training starts to work at all. Before training, a gate’s output is about sigmoid(its bias),
+masks-and-heads	attention	sequences (a source and a target of different lengths). Its section 5 shows which mask each attention uses, and which length sets its size.
+masks-and-heads	batch	- No looking at padding. Sentences in a batch have different lengths, so short ones are filled with PAD tokens
+masks-and-heads	mask	1. Masks, so a word can be stopped from looking at some words: the words after it, or padding.
+masks-and-heads	multi-head attention	2. Several heads, so the model can look in several ways at once.
+masks-and-heads	padding	1. Masks, so a word can be stopped from looking at some words: the words after it, or padding.
+masks-and-heads	parameter	Splitting does not add parameters. , and stay ( , ): the heads share their columns instead of
+masks-and-heads	query	middle, (B, 1, L), and NumPy copies that single row across all L query rows. This copying is called broadcasting.
+masks-and-heads	shape	That is why it is stored as one row, with shape (1, 6), and copied down every row when it is used.
+masks-and-heads	token	- No looking at padding. Sentences in a batch have different lengths, so short ones are filled with PAD tokens
+matrices	attention	so a (3, 2) matrix turns into (2, 3). You will use it in level 6 and again in attention.
+matrices	batch	A real model does not multiply one sentence at a time. It stacks several sentences into a batch, so the input
+matrices	bias	smaller: one bias row to every example, one mask row to every word. NumPy has a rule for that, called
+matrices	mask	and it is used in places like masks. But it never mixes information between positions:
+matrices	padding	every word's score for every other word. Some sentences are shorter and end in padding words, so each sentence
+matrices	shape	A matrix is a table of numbers. Its shape says how big the table is: shape (2, 3) means 2 rows and 3 columns.
+mlp	activation function	feeding the next, with an activation function in between.
+mlp	batch	a whole batch of examples. In NumPy, tanh is : gives , one tanh per element.
+mlp	bias	a bias, and an activation. The output layer is one more:
+mlp	parameter	The parameter count in the lab is now unlocked. Compare your answers with it.
+mlp	seed	That randomness is normal. Real training fixes the random seed when it needs to repeat a run exactly.
+mlp	shape	Now the output layer, then the shapes.
+modern-llm	attention	embeddings, attention, a feed-forward network, residuals, normalization. Inside each block, three parts are new.
+modern-llm	decoder	The 2017 design had two stacks: an encoder that reads the source and a decoder that writes the target, joined by
+modern-llm	encoder	The 2017 design had two stacks: an encoder that reads the source and a decoder that writes the target, joined by
+modern-llm	multi-head attention	A real head has numbers, so / 2 pairs. Each pair rotates at its own speed: θᵢ = 10000^(−2i/ ).
+modern-llm	residual connection	embeddings, attention, a feed-forward network, residuals, normalization. Inside each block, three parts are new.
+modern-llm	token	two tokens are, not on where they are? RoPE, positions by rotation, does. Can the feed-forward network reach a lower loss
+neurons-and-loss	shape	Write the neuron in NumPy. can be one point of shape (2,) or all four points as a (4, 2) matrix.
+noise-and-denoise	attention	> What you need: Foundations (levels 1–10). D1 and D2 use nothing else. D3 also uses attention and
+noise-and-denoise	temperature	- In this branch, is the number of steps. It is not the temperature T from level 10.
+numbers-in-a-computer	exponent	- the exponent: which power of 2. It is stored with a fixed offset added, called the exponent bias (not the
+numbers-in-a-computer	overflow	When a result is bigger than the largest number of its format, it overflows and becomes (infinity).
+numbers-in-a-computer	precision	- The mantissa bits set the precision: how many numbers there are between one power of 2 and the next.
+numbers-in-a-computer	range	- The exponent bits set the range: how big and how small a number can be. bfloat16 keeps float32’s 8
+numbers-in-a-computer	shape	In NumPy, gives the largest score of each row, with shape , so that it lines
+numpy-to-pytorch	parameter	Why add? A parameter can be used in several places, and its total gradient is the sum of the pieces
+numpy-to-pytorch	seed	Copy these lines into a file (or download [ ](/files/numpy-to-pytorch/first_run.py)) and run . The seed makes the random starting
+numpy-to-pytorch	shape	In NumPy you wrote with of shape . stores its weight in the opposite
+optimization	activation function	An activation function does not fix this. Try tanh:
+optimization	batch	1. Mini-batches: don't look at all the data before every step.
+optimization	momentum	- Momentum keeps a velocity that remembers past steps: , then .
+probability	attention	and the first attention ([level N1](/learn/convolutions/) to [N6](/learn/autoencoders/)). [Level 11](/learn/language-models/) continues the main line: the rest of this page (section 8) is optional.
+probability	batch	so a score like 1000 does not overflow. Training never scores one example at a time. It takes a batch of B
+probability	bit	With the natural log, surprise is measured in nats. With it is in bits: a surprise of 1 bit
+probability	greedy decoding	At the biggest score gets probability 1. Always picking the top word is called greedy decoding.
+probability	overflow	The template subtracts the largest score before , so never overflows; softmax gives the same result.
+probability	shape	normal values: the shape you pass in is the shape you get. Multiply by std and add the mean, and you get any
+probability	surprise	Each is the model's surprise at the word that actually came, so the average is its
+probability	temperature	Leave the temperature slider at 1 for now. Section 3 explains it.
+residuals-and-norms	attention	every attention and feed-forward step of the Transformer block, right next to the residual .
+residuals-and-norms	batch	The question is which numbers share a mean. Here is a batch of 4 examples (rows) with 4 features each (columns):
+residuals-and-norms	channel	height and width (level N1), and its number of filters sets the number of output channels.
+residuals-and-norms	residual connection	1. a residual connection, which adds a layer’s input back to its output;
+residuals-and-norms	shape	The adds two tensors cell by cell, so must have exactly the shape of . A 3×3 convolution with padding 1 keeps the
+residuals-and-norms	stride	into the new count without looking at neighbors. With stride 2 it also halves the height and width, to match a layer side that shrinks the picture.
+residuals-and-norms	token	- Sentences have different lengths. Short sentences in a batch get extra padding tokens (PAD), and BatchNorm would mix them into every feature’s mean.
+rnn	shape	At the end, turns a list of L rows of H numbers into one array of shape (L, H).
+sampling-and-guidance	guidance	Guidance mixes them:
+seq2seq-attention	alignment	Nobody told the model which digit goes with which word. It learned these alignments only because looking at the
+seq2seq-attention	attention	uses: attention. The boss has a part that runs on your computer; see [Run the code on your computer](/setup/).
+seq2seq-attention	batch	reverser except . Write it in PyTorch: the same three steps as part 1, for a whole batch. Now S is
+seq2seq-attention	bottleneck	The short strings are easy. The long ones fail: the summary vector is a bottleneck, a narrow passage. Everything the decoder will
+seq2seq-attention	query	which is called self-attention. And level 14 first multiplies each vector by learned matrices (queries, keys, values),
+seq2seq-attention	shape	L states, an array of shape (L, H). The decoder receives only the last one.
+seq2seq-attention	token	1. The encoder reads the input, one token at a time, exactly like level N4. It produces one state per input token.
+tensors-in-memory	multi-head attention	3. why level 21 writes when it joins the attention heads.
+tensors-in-memory	shape	In level 1 an array was a table with a shape. Inside the computer there is no table. There is one long row of
+tensors-in-memory	view	An array that reads another array’s memory is a view. NumPy can tell you when two arrays share memory:
+tokenization	token	Level 11's model predicted the next word. But "word" was a choice. A model reads a list of tokens,
+transformer-parts	attention	Attention is the main part, but a Transformer layer has four more. Each one fixes a specific problem.
+transformer-parts	batch	The last one: the numbers of a single word. A batch of shape (B, L, d) gets B × L separate means and stds,
+transformer-parts	bias	Three words, each with 2 numbers, so X is (3, 2). The first layer is W1 (2, 4) plus a bias b1, then ReLU
+transformer-parts	decoder	distinguish “dog bites man” from “man bites dog”, which is why decoders still add position vectors (or rotate Q and K).
+transformer-parts	encoder	The first one was. It was built for translation, so it had two stacks: an encoder that reads the source sentence and a
+transformer-parts	parameter	W1, b1 and W2 are parameters: learned during training, then fixed. The hidden numbers are activations: computed again
+transformer-parts	prompt	decoder stack: the prompt and the answer are one sequence, and the model continues it. A model like this is called
+transformer-parts	residual connection	- Residual: add the layer's input back to its output, . The layer only has to learn a change, and the original signal always passes.
+transformer-parts	shape	The last one: the numbers of a single word. A batch of shape (B, L, d) gets B × L separate means and stds,
+transformer-parts	token	The position table is built once, for the longest sentence the model will see (16 here). A sentence of L tokens takes
+vectors	attention	Attention, in the next level, uses the plain dot product. Length matters there: a longer vector gets bigger scores.
+vectors	shape	real models use hundreds or thousands. So a sentence of L tokens becomes an array of shape (L, d): one row per token.
+vectors	token	Level 12 turned text into token ids. For , cut into characters, the vocabulary is e, h, l, o
+write-a-gpt	attention	- Model. Decoder only: embeddings, a few blocks of causal self-attention and FFN, then an output layer.
+write-a-gpt	batch	Recommended before this boss: levels U4 (feeding data to a model) and U5 (debugging a model). They cover the batches,
+write-a-gpt	decoder	- Model. Decoder only: embeddings, a few blocks of causal self-attention and FFN, then an output layer.
+write-a-gpt	encoder	No encoder and no cross-attention. The blocks are pre-norm (level 16) and use RMSNorm (level 19), with
+write-a-gpt	greedy decoding	1,000 unseen problems with its own greedy loop. It prints a report with three parts: how many are right, the first ten
+write-a-gpt	mask	A correct pre-norm GPT with RMSNorm, a causal mask and the √ scaling gives the reference’s code. A missing mask, a missing gain or a post-norm block each
+write-a-gpt	multi-head attention	The hardest line in the model splits the heads. In level 15 each head took its own slice of columns.
+write-a-gpt	padding	padding and bugs you will meet here. If you skipped them, this is the batch loop you need for one epoch:
+write-a-gpt	parameter	102,415 parameters.
+write-a-gpt	plateau	Plateau or bug? Look at the training loss, not only the accuracy.
+write-a-gpt	seed	To see how much randomness matters, change the seed: the flat part gets longer or shorter, and the end result is similar.
+write-a-gpt	shape	1. [skeleton.py](/files/write-a-gpt/skeleton.py), the starter file: names, shapes and one-line descriptions, no hints. Copy it to and complete every .
+write-a-gpt	token	- What the model does. It reads and continues with . One character per token.

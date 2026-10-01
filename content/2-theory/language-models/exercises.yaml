@@ -1,0 +1,190 @@
+count-sat-dot:
+  type: number
+  prompt: "In “the cat sat . the dog sat . a cat ran .”, how many times is “sat” directly followed by “.”?"
+  answer: 2
+  tol: 0
+  after: "Both times “sat” appears, “.” comes next: “cat sat .” and “dog sat .”."
+  hints:
+    - when: { equals: 3 }
+      say: "3 is how many times “.” appears. Count only the dots that come right after “sat”."
+    - when: { equals: 1 }
+      say: "Look again: “sat” appears twice, in the first and the second sentence."
+    - when: { any: true }
+      say: ["Find every “sat” in the text.", "For each “sat”, look at the word right after it and count."]
+
+p-sat-cat:
+  type: number
+  prompt: "In “the cat sat . the dog sat . a cat ran .”, “cat” appears twice: once before “sat”, once before “ran”. What is P(sat | cat)?"
+  answer: 0.5
+  tol: 0.001
+  after: "1 time out of 2. The row for “cat” is [sat: 1, ran: 1], and dividing by its total 2 gives [0.5, 0.5]."
+  hints:
+    - when: { equals: 1 }
+      say: "That is the count. Divide it by how many times “cat” was followed by anything."
+    - when: { any: true }
+      say: ["A count becomes a probability when you divide it by the row total for “cat”.", "count(cat → sat) is 1. How many times was “cat” followed by anything?"]
+
+zero-a-dog:
+  type: predict
+  prompt: "A counting model looks one word back. It counted only the text “the cat sat . the dog sat . a cat ran .”. What probability does it give the sentence “a dog sat .”?"
+  options: ["0: it can never write it", "Small but not zero", "The same as “a cat sat .”"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "Look at every “a” in the text. Which word comes right after it?"
+    - when: { equals: 2 }
+      say: "“a cat” was counted. Was “a dog”? Check the words that follow “a”."
+  reveal: "Exactly 0. The row for “a” has a single count, “a → cat”, so P(dog | a) = 0, and one zero makes the whole sentence impossible. A counting model knows nothing it did not count."
+
+novel-sentence:
+  type: predict
+  prompt: "A counting model looks one word back. Its training stories contain “… on the mat .” many times, but no story contains “the mat .” without “on” before it. Can the model write “the mat .”?"
+  options: ["Yes", "No, it never saw it"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "The model never looks at whole sentences. Check the pairs one at a time: was “the → mat” ever counted? Was “mat → .”?"
+  reveal: "Yes. It only checks one pair at a time. “the → mat” was counted (in “on the mat”), and so was “mat → .”. Each step alone is fine, so the whole thing gets a probability above zero: P(mat | the) = 0.15 in these stories."
+
+ppl-hand:
+  type: number
+  prompt: "After a “.”, a model reads “the cat ran” and gives each next word P(the | .) = 0.5, P(cat | the) = 0.5, P(ran | cat) = 0.5. What is the perplexity?"
+  answer: 2
+  tol: 0.001
+  after: "Every surprise is −ln 0.5 = ln 2, so the average is ln 2 and perplexity = e^(ln 2) = 2. When every word gets p = 1/k, the perplexity is exactly k: here, as unsure as a coin flip."
+  hints:
+    - when: { equals: 0.5 }
+      say: "0.5 is each probability. Perplexity undoes it: as unsure as choosing among how many words?"
+    - when: { equals: 0.125 }
+      say: "0.125 is the product of the probabilities. Perplexity takes the average of −ln p, then e to that power."
+    - when: { any: true }
+      say: ["Each surprise is −ln 0.5. What is the average of three equal numbers?", "−ln 0.5 = 0.693, and the average of three equal numbers is that same number. Perplexity is e to the average surprise."]
+
+w-shape:
+  type: shape
+  prompt: "The stories have a vocabulary of 10 words. W holds one row of scores per previous word, one score per possible next word. What is the shape of W?"
+  answer: [10, 10]
+  after: "10 previous words × 10 possible next words: the same shape as the count table."
+  hints:
+    - when: { shape: [10] }
+      say: "That is one row. W has a row for every possible previous word."
+    - when: { shape: [1, 10] }
+      say: "onehot(prev) is (1, 10). W must turn it into 10 scores, so W is (10, ?)."
+    - when: { any: true }
+      say: ["onehot(prev) is (1, 10) and the result is 10 scores, (1, 10). What shape turns (1, 10) into (1, 10)?", "(1, k) @ (k, m) → (1, m). Here k and m are both the vocabulary size."]
+
+neural-match:
+  type: predict
+  prompt: "The counting model scores perplexity 2.016 on the 40 held-out stories. The neural version starts with W all zeros (perplexity 10) and trains on the same 160 stories. Where is its perplexity after training?"
+  options: ["Much better than 2.016", "About the same as 2.016", "Clearly worse than 2.016"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Both models see one previous word and nothing else. Can a learned table know more than the counts of that one word?"
+    - when: { equals: 2 }
+      say: "Training keeps lowering the loss. With one word of context, which table gives the lowest possible loss?"
+  reveal: "About the same. With one word of context, the best neural table is the count table itself. After 300 steps it is at 2.037, approaching 2.016 from above."
+
+nn-loss:
+  type: code
+  prompt: "Compute the mean cross-entropy of the real next words. W is (2, 2), prev and nxt are arrays of word ids."
+  template: |
+    # scores chosen so that softmax(W[0]) = [0.5, 0.5] and softmax(W[1]) = [0.9, 0.1]
+    W = np.log(np.array([[0.5, 0.5],
+                         [0.9, 0.1]]))
+    prev = np.array([0, 0, 1])
+    nxt  = np.array([0, 1, 0])
+
+    def loss(W, prev, nxt):
+        P = softmax(W[prev])                # (3, 2): one row of probabilities per pair
+        p_real = P[np.arange(len(nxt)), nxt]
+        print("probability of the real next word:", p_real)
+        return ____
+
+    print(loss(W, prev, nxt))
+  solution: "-np.log(p_real).mean()"
+  tests:
+    - expr: "loss(W, prev, nxt)"
+      expect: 0.4972
+      tol: 0.0001
+      say: "(0.693 + 0.693 + 0.105) / 3 = 0.497"
+    - expr: "loss(W, np.array([1]), np.array([1]))"
+      expect: 2.3026
+      tol: 0.0001
+      say: "one pair with p = 0.1 → −log 0.1 = 2.303"
+  hints:
+    - when: { testFailed: 0 }
+      say: "Take −log of each real-word probability, then the mean. Is the sign right?"
+    - when: { any: true }
+      say: ["The loss of one pair is −ln of the probability of the real next word. Then average over the pairs.", "np.log works on the whole array pᵣₑₐₗ at once. Two more steps: the sign, then the average."]
+  after: "The loss only looks at the probability of the word that really came next. A probability of 1 costs 0, and 0.1 costs 2.303. The minus sign makes the loss positive, because ln of a number below 1 is negative."
+
+rows-2ctx:
+  type: number
+  prompt: "With a vocabulary of 10 words, how many rows does a count table need to look 2 words back (one row per possible pair of previous words)?"
+  answer: 100
+  tol: 0
+  after: "10 × 10 = 100 rows, each with 10 columns. Three words back: 1,000 rows."
+  hints:
+    - when: { equals: 20 }
+      say: "Pairs multiply, they don’t add: each of the 10 first words can go with each of the 10 second words."
+    - when: { equals: 10 }
+      say: "That is one word of context. Two words means every pair."
+    - when: { any: true }
+      say: ["Each row is one possible pair of previous words. How many pairs are there?", "The first word has 10 choices, and for each of them the second word has 10 choices."]
+
+huge-table:
+  type: predict
+  prompt: "A real vocabulary has 50,000 tokens. A count table that looks 3 tokens back needs 50,000³ = 125,000,000,000,000 rows. What goes wrong?"
+  options: ["Almost every row is empty: those 3-token contexts never appear in any text", "Counting all that text takes too long to finish", "The rows no longer add up to 1"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "Counting is fast: one pass over the text. Think about how much text you would need to fill 125 trillion rows."
+    - when: { equals: 2 }
+      say: "Each row is still counts divided by the row total. But what is in a row whose context never appeared?"
+  reveal: "Almost every row is empty. Even an enormous amount of text contains an extremely small fraction of all 3-token contexts, so most contexts the model meets were never counted. Counting can’t share what it learned about “the cat sat” with “the dog sat”. Vectors and attention can."
+
+bigram-probs:
+  type: code
+  prompt: "C is the count table of “the cat sat . the dog sat . a cat ran .” (row = this word, column = the next word). Write probs: the next-word probabilities with add-one smoothing, so every row adds up to 1. A few lines."
+  template: |
+    words = ["the", "a", "cat", "dog", "sat", "ran", "."]
+    C = np.array([[0, 0, 1, 1, 0, 0, 0],
+                  [0, 0, 1, 0, 0, 0, 0],
+                  [0, 0, 0, 0, 1, 1, 0],
+                  [0, 0, 0, 0, 1, 0, 0],
+                  [0, 0, 0, 0, 0, 0, 2],
+                  [0, 0, 0, 0, 0, 0, 1],
+                  [1, 1, 0, 0, 0, 0, 0]], dtype=float)
+
+    def probs(C):
+        ____
+        return P
+
+    P = probs(C)
+    print("P(next | cat):", P[2])
+  solution: "S = C + 1\n    totals = S.sum(axis=1, keepdims=True)\n    P = S / totals"
+  tests:
+    - expr: "probs(C).sum(axis=1)"
+      expect: [1, 1, 1, 1, 1, 1, 1]
+      say: "every row adds up to 1"
+    - expr: "probs(C)[2]"
+      expect: [0.1111111, 0.1111111, 0.1111111, 0.1111111, 0.2222222, 0.2222222, 0.1111111]
+      tol: 0.0001
+      say: "after “cat”: the counts 0, 0, 0, 0, 1, 1, 0 become 1, 1, 1, 1, 2, 2, 1, out of 9"
+    - expr: "bool((probs(C) > 0).all())"
+      expect: true
+      say: "after smoothing no next word has probability 0"
+  hints:
+    - when: { error: "not defined" }
+      say: ["The function must set P before `return P`.", "First add 1 to C, then a line for the totals, then a line for P."]
+    - when: { error: "broadcast|matmul|core dimension" }
+      say: ["The totals have the wrong shape to divide C. C is (7, 7).", "Keep the summed axis: keepdims=True gives (7, 1), which stretches across the columns."]
+    - when: { testFailed: 0 }
+      say: ["Each row should add up to 1, and yours don't. C is square, so dividing by totals of shape (7,) gives no error, but it divides each column by a row's total. Check keepdims.", "Did you take the totals of the smoothed table (after adding 1), not of C?", "The totals need the shape (7, 1): sum along axis 1 with keepdims=True, as in the example above the exercise."]
+    - when: { testFailed: 1 }
+      say: ["The rows add up to 1, but the numbers are not the smoothed ones. Did you add 1 to every cell before dividing?", "After “cat” there are 7 cells. Add 1 to each count, then divide by the new row total."]
+    - when: { any: true }
+      say: ["Three steps: add 1 to every cell, compute the row totals of the result, then divide every row by its own total.", "Compute one total per row with the shape (7, 1), then divide the smoothed table by it."]
+  after: "Adding 1 to every cell makes every pair possible. Summing along axis 1 gives one total per row, and keepdims=True keeps the shape (7, 1), so dividing stretches each total across its own row. Without keepdims the shape is (7,), and dividing by it divides each column by one total instead, so the rows don't add up to 1. Because C is square, NumPy gives no error."

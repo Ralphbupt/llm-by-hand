@@ -1,0 +1,6 @@
+---
+import Lab from './DecodeLab.svelte'
+interface Props { data?: string }
+const { data = 'full-model' } = Astro.props
+---
+<Lab client:visible data={data} />

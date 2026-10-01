@@ -1,0 +1,411 @@
+jac-diag:
+  type: number
+  prompt: "Softmax gave p = [0.5, 0.25, 0.25]. Its Jacobian is J = diag(p) − pᵀp, so J[i][i] = pᵢ(1 − pᵢ). What is J[1][1]?"
+  answer: 0.1875
+  tol: 0.001
+  after: "J[1][1] = p₁(1 − p₁) = 0.25 × 0.75 = 0.1875. If z₁ grows by a little bit, p₁ grows by 0.1875 times as much."
+  hints:
+    - when: { equals: 0.25 }
+      say: "0.25 is p₁ itself (or J[0][0] = 0.5 × 0.5). Use p₁ = 0.25 in p₁(1 − p₁)."
+    - when: { equals: 0.0625 }
+      say: "0.0625 is p₁ × p₁, the part that pᵀp subtracts. The diagonal is p₁ − p₁ × p₁."
+    - when: { equals: -0.0625 }
+      say: "−0.0625 is only the −pᵀp part. On the diagonal, diag(p) adds p₁ = 0.25 too."
+    - when: { any: true }
+      say: ["On the diagonal, J[i][i] = pᵢ(1 − pᵢ). Which number is p₁?", "p₁ = 0.25, so 1 − p₁ = 0.75."]
+
+jac-off:
+  type: number
+  prompt: "Softmax gave p = [0.5, 0.25, 0.25]. Off the diagonal, the Jacobian J = diag(p) − pᵀp has J[i][j] = −pᵢ·pⱼ. What is J[0][1]?"
+  promptShort: "Softmax gave p = [0.5, 0.25, 0.25]. What is J[0][1] of its Jacobian, the slope of p₀ when z₁ moves?"
+  answer: -0.125
+  tol: 0.001
+  after: "J[0][1] = −p₀·p₁ = −0.5 × 0.25 = −0.125. Raising z₁ makes p₀ a little smaller, so the slope is negative."
+  hints:
+    - when: { equals: 0.125 }
+      wrong: "0.5 * 0.25"
+      say: "Right size, wrong sign. When z₁ grows, p₁ takes a larger part of the total, so p₀ gets smaller."
+    - when: { equals: 0.375 }
+      wrong: "0.5 - 0.5 * 0.25"
+      say: "diag(p) is 0 off the diagonal. Only the −pᵀp part is left there."
+    - when: { any: true }
+      say: ["Off the diagonal only the −pᵀp part is left: −pᵢ × pⱼ.", "Row 0 belongs to p₀ = 0.5 and column 1 to p₁."]
+
+pred-jac-rows:
+  type: predict
+  prompt: "For p = [0.5, 0.25, 0.25], J = diag(p) − pᵀp, and J[i][j] is how fast pᵢ moves when zⱼ moves. Adding the same number c to every score leaves p unchanged. What is the sum of each row of J?"
+  options: ["1, like the probabilities", "0", "a different number for each row"]
+  answer: 1
+  reveal: "Adding c to every score is the same as moving every zⱼ by c. The change of pᵢ is c × (row i of J, added up). pᵢ doesn’t change, so every row adds up to 0. Row 0: 0.25 − 0.125 − 0.125 = 0."
+  hints:
+    - when: { equals: 0 }
+      say: "p adds up to 1, but a row of J holds slopes, not probabilities. Move every score by the same amount: how much does pᵢ change?"
+    - when: { equals: 2 }
+      say: "Add up row 0: 0.25, −0.125 and −0.125. Then think of what row i means when every score moves by the same amount."
+
+dz-fast:
+  type: number
+  prompt: "Softmax gave p = [0.5, 0.25, 0.25], and the gradient arriving at p is dp = [1, 0, 2]. Use the short form for dz from above, without building J. What is dz[2]?"
+  promptShort: "Softmax gave p = [0.5, 0.25, 0.25], and the gradient arriving at p is dp = [1, 0, 2]. What is dz[2], the gradient at the score z₂?"
+  answer: 0.25
+  tol: 0.001
+  after: "dp·p = 1 × 0.5 + 0 × 0.25 + 2 × 0.25 = 1. So dz[2] = p₂ × (dp₂ − 1) = 0.25 × 1 = 0.25. The full dz is [0, −0.25, 0.25], and it adds up to 0."
+  hints:
+    - when: { equals: 0.5 }
+      say: "0.5 is p₂ × dp₂. Subtract dp·p from dp₂ first, then multiply by p₂."
+    - when: { equals: 1 }
+      say: "1 is dp·p, the number subtracted from every dpᵢ. Now compute p₂ × (dp₂ − 1)."
+    - when: { equals: -0.5 }
+      wrong: "0.25 * 2 - 1"
+      say: "That is p₂ × dp₂ − dp·p. Subtract dp·p from dp₂ before you multiply by p₂, not after."
+    - when: { any: true }
+      say: ["First the one number dp·p: multiply dp and p entry by entry and add.", "dp·p = 1 × 0.5 + 0 × 0.25 + 2 × 0.25. Then dz[2] = p₂ × (dp₂ − dp·p)."]
+
+softmax-back-code:
+  type: code
+  prompt: "Write the backward pass of a softmax that ran along each row: return dz = p ⊙ (dp − dp·p), with dp·p computed row by row."
+  template: |
+    def softmax_backward(p, dp):
+        # p: the softmax output, dp: the gradient arriving at p. Both (rows, n).
+        return ____
+
+    def numeric_grad(f, X, h=1e-5):
+        # the numeric slope of f() for every entry of X (level 6, U5)
+        G = np.zeros_like(X)
+        for idx in np.ndindex(X.shape):
+            old = X[idx]
+            X[idx] = old + h
+            up = f()
+            X[idx] = old - h
+            down = f()
+            X[idx] = old
+            G[idx] = (up - down) / (2 * h)
+        return G
+
+    p = np.array([[0.5, 0.25, 0.25]])
+    dp = np.array([[1.0, 0.0, 2.0]])
+    print(softmax_backward(p, dp))     # should be [[0, -0.25, 0.25]]
+
+    # gradient check: L = sum(dp * softmax(z)), so the gradient at p is exactly dp
+    z = np.array([[2.0, -1.0, 0.5, 0.0]])
+    g = np.array([[1.0, 3.0, -2.0, 0.5]])
+    numeric = numeric_grad(lambda: (g * softmax(z)).sum(), z)
+    # the largest difference should be below 1e-8
+    print(np.abs(softmax_backward(softmax(z), g) - numeric).max())
+  solution: "p * (dp - (dp * p).sum(axis=-1, keepdims=True))"
+  after: "`(dp * p).sum(axis=-1, keepdims=True)` is dp·p for every row, kept as a (rows, 1) column so it is subtracted from every entry of its own row. No n × n Jacobian is ever built, and the numeric check agrees."
+  tests:
+    - expr: "softmax_backward(np.array([[0.5, 0.25, 0.25]]), np.array([[1.0, 0.0, 2.0]]))"
+      expect: [[0, -0.25, 0.25]]
+      say: "p = [0.5, 0.25, 0.25], dp = [1, 0, 2]: the page’s example"
+    - expr: "softmax_backward(np.array([[0.5, 0.25, 0.25], [0.1, 0.2, 0.7]]), np.array([[1.0, 0.0, 2.0], [3.0, -1.0, 0.0]]))"
+      expect: [[0, -0.25, 0.25], [0.29, -0.22, -0.07]]
+      say: "two rows: each row uses its own dp·p (1 and 0.1)"
+    - setup: "rng = np.random.default_rng(1); zz = rng.normal(size=(3, 5)); gg = rng.normal(size=(3, 5)); nn = numeric_grad(lambda: (gg * softmax(zz)).sum(), zz)"
+      expr: "float(np.abs(softmax_backward(softmax(zz), gg) - nn).max())"
+      expect: 0
+      tol: 0.000001
+      say: "gradient check on 3 random rows of 5 scores: largest difference from the numeric slope"
+  hints:
+    - when: { error: "operands could not be broadcast|matmul|core dimension" }
+      say: ["dp·p must stay a column, one number per row, so broadcasting matches it with each row of dp.", "`.sum(axis=-1)` drops the last axis. Which argument keeps it as size 1?"]
+    - when: { testFailed: 0 }
+      say: ["Three pieces: the one number dp·p, then dp minus it, then times p entry by entry.", "dp·p for every row is a sum along the last axis.", "Keep that sum as a column, subtract it from dp, then multiply by p."]
+    - when: { testFailed: 1 }
+      say: ["One row works, two rows don’t. Each row must use its own dp·p.", "Sum along the last axis only, and keep that axis with size 1."]
+    - when: { any: true }
+      say: ["Write the formula p ⊙ (dp − dp·p) in NumPy: ⊙ is `*`.", "dp·p row by row is one sum along the last axis of an entry-by-entry product.", "Keep that sum as a column, one number per row, so it subtracts from every entry of its own row. Section 1 shows the argument that does this."]
+
+dv-hand:
+  type: number
+  prompt: "One attention head with 2 tokens: the weights are A = [[0.5, 0.5], [0.5, 0.5]] and the gradient arriving at the output O = A @ V is dO = [[1, 0], [0, 2]]. Use the matrix-product rule from the list above. What is dV[0][1]?"
+  promptShort: "One attention head with 2 tokens: the weights are A = [[0.5, 0.5], [0.5, 0.5]], and the gradient arriving at the output O = A @ V is dO = [[1, 0], [0, 2]]. What is dV[0][1]?"
+  answer: 1
+  tol: 0.001
+  after: "dV[0][1] = A[0][0] × dO[0][1] + A[1][0] × dO[1][1] = 0.5 × 0 + 0.5 × 2 = 1. Row 0 of V was used by both tokens, with weight 0.5 each, so it collects both parts."
+  hints:
+    - when: { equals: 0 }
+      say: "0 is dO[0][1] alone. Row 0 of V was used by both tokens, so dV[0] collects a part from each row of dO."
+    - when: { equals: 0.5 }
+      wrong: "1 * 0.5 + 0 * 0.5"
+      say: "That is (dO @ A)[0][1]: the two matrices are in the wrong order. In O = A @ V, V is the right-hand matrix, and for Y = X @ W the rule gives dW = X.T @ dY."
+    - when: { equals: 2 }
+      wrong: "1 * 0 + 1 * 2"
+      say: "Each token used row 0 of V with weight 0.5, not 1. Multiply by A first."
+    - when: { any: true }
+      say: ["In O = A @ V, V is the right-hand matrix. For Y = X @ W, the rule is dW = X.T @ dY. Here X is A and dY is dO.", "So dV = A.T @ dO. Row 0 of A.T is column 0 of A: dot it with column 1 of dO.", "Column 0 of A is [0.5, 0.5], and column 1 of dO is [0, 2]."]
+
+ds-hand:
+  type: number
+  prompt: "Two tokens. The weights are A = [[0.5, 0.5], [0.5, 0.5]] and the gradient arriving at them is dA = [[2, 1], [0, 2]]. Softmax backward, row by row: dS = A ⊙ (dA − (dA·A for that row)). What is dS[1][0]?"
+  promptShort: "Two tokens. The attention weights are A = [[0.5, 0.5], [0.5, 0.5]], and the gradient arriving at them is dA = [[2, 1], [0, 2]]. Take softmax backward, row by row. What is dS[1][0]?"
+  answer: -0.5
+  tol: 0.001
+  after: "Row 1: dA·A = 0 × 0.5 + 2 × 0.5 = 1. dS[1][0] = 0.5 × (0 − 1) = −0.5. The full row is [−0.5, 0.5], and it adds up to 0, as every row of a softmax backward does."
+  hints:
+    - when: { equals: 0 }
+      say: "dA[1][0] is 0, but its row’s dA·A is subtracted from each entry before the multiplication."
+    - when: { equals: 0.5 }
+      wrong: "0.5 * (1 - 0)"
+      say: "Right size, wrong sign. dA[1][0] = 0 is below the row’s dA·A."
+    - when: { equals: -0.75 }
+      wrong: "0.5 * (0 - 1.5)"
+      say: "That uses row 0’s dA·A = 1.5. Row 1 has its own: 0 × 0.5 + 2 × 0.5."
+    - when: { any: true }
+      say: ["Work in row 1 only: first the one number dA·A of that row.", "Row 1 of dA is [0, 2], row 1 of A is [0.5, 0.5], so dA·A = 1. Then A[1][0] × (dA[1][0] − 1)."]
+
+dq-hand:
+  type: number
+  prompt: "Two tokens, dₖ = 4. The score gradient is dS = [[0.25, −0.25], [−0.5, 0.5]] and the keys are K = [[1, −1, 0, 0], [0, 0, 1, −1]]. The scores were S = Q @ K.T / √dₖ. What is dQ[1][0]?"
+  answer: -0.25
+  tol: 0.001
+  after: "Row 1 of dS times column 0 of K: −0.5 × 1 + 0.5 × 0 = −0.5. Divided by √4 = 2: −0.25. The 1/√dₖ of the forward pass comes back in the backward pass."
+  hints:
+    - when: { equals: -0.5 }
+      wrong: "-0.5 * 1 + 0.5 * 0"
+      say: "That is (dS @ K)[1][0]. The forward pass divided the scores by √dₖ, so the gradient is divided by it too."
+    - when: { equals: -0.125 }
+      wrong: "(-0.5 * 1 + 0.5 * 0) / 4"
+      say: "√4 is 2, not 4."
+    - when: { equals: 0.125 }
+      wrong: "(0.25 * 1 + -0.25 * 0) / 2"
+      say: "That is dQ[0][0], from row 0 of dS. dQ[1] comes from row 1."
+    - when: { any: true }
+      say: ["Q is the left-hand matrix of Q @ K.T. For Y = X @ W, dX = dY @ W.T. Here W is K.T, so W.T is K.", "dQ = dS @ K / √dₖ: dQ[1][0] is (row 1 of dS) · (column 0 of K), divided by √dₖ.", "Row 1 of dS is [−0.5, 0.5] and column 0 of K is [1, 0]."]
+
+dk-hand:
+  type: number
+  prompt: "The same example: Q = [[1, 1, 0, 0], [0, 0, 1, 1]], dₖ = 4, and the score gradient is dS = [[0.25, −0.25], [−0.5, 0.5]]. What is dK[0][2], the gradient at entry 2 of key 0?"
+  promptShort: "One attention head computes the scores S = Q @ K.T / √dₖ, with two tokens and dₖ = 4. Q = [[1, 1, 0, 0], [0, 0, 1, 1]], and the score gradient is dS = [[0.25, −0.25], [−0.5, 0.5]]. What is dK[0][2], the gradient at entry 2 of key 0?"
+  answer: -0.25
+  tol: 0.001
+  after: "Key 0 appears in column 0 of S, so dK[0] collects column 0 of dS, [0.25, −0.5], each entry times its query. Entry 2: 0.25 × 0 + (−0.5) × 1 = −0.5, divided by √4 = 2: −0.25. In NumPy that is dS.T @ Q / √dₖ: the transpose turns column 0 into row 0."
+  hints:
+    - when: { equals: -0.125 }
+      wrong: "(0.25 * 0 + -0.25 * 1) / 2"
+      say: "That uses row 0 of dS. Row 0 belongs to query 0. Key j appears in column j of S."
+    - when: { equals: -0.5 }
+      wrong: "0.25 * 0 + -0.5 * 1"
+      say: "The forward pass divided the scores by √dₖ, so dK is divided by it too."
+    - when: { equals: 0.25 }
+      wrong: "(0.25 * 0 + 0.5 * 1) / 2"
+      say: "Right size, wrong sign. Check the sign of each entry of dS that you used."
+    - when: { any: true }
+      say: ["Key 0 appears in S[0][0] and S[1][0]: column 0 of S.", "So dK[0] collects column 0 of dS, [0.25, −0.5], each entry times its query.", "Entry 2 of query 0 is 0, and of query 1 it is 1: (0.25 × 0 + (−0.5) × 1) / √4."]
+
+dk-shape:
+  type: shape
+  prompt: "One attention head: L = 5 tokens, dₖ = 3, dᵥ = 6. Q and K are (5, 3), V is (5, 6). What shape is dK?"
+  answer: [5, 3]
+  after: "Every gradient has the shape of its value: K is (5, 3), so dK is too. In numbers: dS.T @ Q is (5, 5) @ (5, 3) → (5, 3)."
+  hints:
+    - when: { shape: [5, 5] }
+      say: "(5, 5) is the shape of S, A and their gradients. dK belongs to K."
+    - when: { shape: [5, 6] }
+      say: "(5, 6) is V, so it is the shape of dV. K has width dₖ."
+    - when: { any: true }
+      say: ["A gradient has the same shape as the value it belongs to.", "What shape is K itself?"]
+
+attn-backward:
+  type: code
+  prompt: "Write the backward pass of one attention head: from dO, compute dV and dA, then dS (softmax backward, row by row), then dQ and dK. Several lines, all at the same indent."
+  template: |
+    def attention_forward(Q, K, V):
+        d_k = Q.shape[1]
+        S = Q @ K.T / np.sqrt(d_k)
+        A = softmax(S)                  # softmax of each row
+        O = A @ V
+        return O, (Q, K, V, A)          # what the backward pass will need
+
+    def softmax_backward(p, dp):
+        # your answer to the previous question: softmax backward, row by row
+        return p * (dp - (dp * p).sum(axis=-1, keepdims=True))
+
+    def attention_backward(dO, saved):
+        Q, K, V, A = saved
+        d_k = Q.shape[1]
+        ____
+        return dQ, dK, dV
+
+    def numeric_grad(f, X, h=1e-5):
+        # the numeric slope of f() for every entry of X (level 6, U5)
+        G = np.zeros_like(X)
+        for idx in np.ndindex(X.shape):
+            old = X[idx]
+            X[idx] = old + h
+            up = f()
+            X[idx] = old - h
+            down = f()
+            X[idx] = old
+            G[idx] = (up - down) / (2 * h)
+        return G
+
+    # the page's example: 2 tokens, d_k = 4, d_v = 2
+    Q = np.array([[1.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 1.0]])
+    K = np.array([[1.0, -1.0, 0.0, 0.0], [0.0, 0.0, 1.0, -1.0]])
+    V = np.array([[2.0, 0.0], [1.0, 1.0]])
+    dO = np.array([[1.0, 0.0], [0.0, 2.0]])
+    O, saved = attention_forward(Q, K, V)
+    dQ, dK, dV = attention_backward(dO, saved)
+    print(dQ, dK, dV, sep="\n")
+
+    # gradient check on random numbers: L = sum(G * O), so the gradient at O is G
+    rng = np.random.default_rng(0)
+    Qr, Kr = rng.normal(size=(3, 2)), rng.normal(size=(3, 2))
+    Vr, G = rng.normal(size=(3, 4)), rng.normal(size=(3, 4))
+    loss = lambda: (G * attention_forward(Qr, Kr, Vr)[0]).sum()
+    grads = attention_backward(G, attention_forward(Qr, Kr, Vr)[1])
+    for name, X, g in zip(["dQ", "dK", "dV"], [Qr, Kr, Vr], grads):
+        # the largest difference should be below 1e-8
+        print(name, np.abs(numeric_grad(loss, X) - g).max())
+  solution: "dV = A.T @ dO\n    dA = dO @ V.T\n    dS = softmax_backward(A, dA)\n    dQ = dS @ K / np.sqrt(d_k)\n    dK = dS.T @ Q / np.sqrt(d_k)"
+  after: "Each line is the backward rule of one forward line, starting with the last one: the matrix product O = A @ V gives dA and dV, the softmax gives dS, and S = Q @ K.T / √dₖ gives dQ and dK, each divided by the same √dₖ. The numeric slopes agree to about 1e-11, so all five lines are right."
+  tests:
+    - setup: "_kept = (numeric_grad, attention_forward, softmax)\n_calls = [0]\ndef softmax(x, *a, **k):\n    _calls[0] += 1\n    return _kept[2](x, *a, **k)\ndel numeric_grad, attention_forward\ntry:\n    _out = attention_backward(dO, saved)\nfinally:\n    numeric_grad, attention_forward, softmax = _kept"
+      expr: "_out[2]"
+      expect: [[0.5, 1], [0.5, 1]]
+      say: "dV on the page’s example"
+    - expr: "_out[0]"
+      expect: [[0.125, -0.125, -0.125, 0.125], [-0.25, 0.25, 0.25, -0.25]]
+      say: "dQ on the page’s example"
+    - expr: "_out[1]"
+      expect: [[0.125, 0.125, -0.25, -0.25], [-0.125, -0.125, 0.25, 0.25]]
+      say: "dK on the page’s example"
+    - setup: "chk = [float(np.abs(numeric_grad(loss, X) - g).max()) for X, g in zip([Qr, Kr, Vr], attention_backward(G, attention_forward(Qr, Kr, Vr)[1]))]"
+      expr: "max(chk)"
+      expect: 0
+      tol: 0.000001
+      say: "gradient check with 3 tokens, dₖ = 2, dᵥ = 4: largest difference from the numeric slope"
+    - expr: "_calls[0]"
+      expect: 0
+      say: "calls to softmax inside your backward pass: it should need none, only the saved A"
+    - setup: "_odd = attention_backward(dO, (Q, K, V, np.array([[0.75, 0.25], [0.25, 0.75]])))"
+      expr: "_odd[2]"
+      expect: [[0.75, 0.5], [0.25, 1.5]]
+      say: "dV with a saved A = [[0.75, 0.25], [0.25, 0.75]] that is not softmax(S): the backward pass must use the A it was given"
+    - expr: "_odd[0]"
+      expect: [[0.09375, -0.09375, -0.09375, 0.09375], [-0.1875, 0.1875, 0.1875, -0.1875]]
+      say: "dQ with the same saved A"
+    - expr: "_odd[1]"
+      expect: [[0.09375, 0.09375, -0.1875, -0.1875], [-0.09375, -0.09375, 0.1875, 0.1875]]
+      say: "dK with the same saved A"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Indent every line by 4 spaces, exactly like `d_k = Q.shape[1]`."
+    - when: { error: "'(numeric_grad|attention_forward)' is not defined" }
+      wrong: "f = lambda: (dO * attention_forward(Q, K, V)[0]).sum()\n    dQ, dK, dV = numeric_grad(f, Q), numeric_grad(f, K), numeric_grad(f, V)"
+      say: "The checks run your function without `numeric_grad` and `attention_forward`. Write the five backward rules; the numeric slopes are only for checking them."
+    - when: { error: "is not defined" }
+      say: "The return line needs dQ, dK and dV. Each must get a value, and dS must exist before dQ and dK use it."
+    - when: { error: "not aligned|matmul|shapes" }
+      say: ["Two shapes do not match. Every gradient has the shape of its value: dA is (L, L), dV is (L, dᵥ).", "For Y = X @ W, dX = dY @ W.T and dW = X.T @ dY. Check which matrix is transposed in each of your lines."]
+    - when: { testFailed: 0 }
+      say: ["dV is wrong. O = A @ V, so V is the right-hand matrix of the product.", "For Y = X @ W, the right-hand matrix gets X.T @ dY. Here X is A and dY is dO."]
+    - when: { testFailed: 1 }
+      wrong: "dV = A.T @ dO\n    dA = dO @ V.T\n    dS = softmax_backward(A, dA)\n    dQ = dS.T @ K / np.sqrt(d_k)\n    dK = dS.T @ Q / np.sqrt(d_k)"
+      say: ["dV is right, dQ is not. Go back through the chain: first dA, then the softmax, then the scores.", "If dQ is twice too large, the 1/√dₖ of the forward pass is missing.", "Query i appears only in row i of S, so dQ collects the rows of dS as they are: no transpose.", "If the numbers look unrelated, check dA and the softmax step: `softmax_backward` takes the weights A first, then their gradient dA."]
+    - when: { testFailed: 2 }
+      wrong: ["dV = A.T @ dO\n    dA = dO @ V.T\n    dS = softmax_backward(A, dA)\n    dQ = dS @ K / np.sqrt(d_k)\n    dK = dS.T @ Q", "dV = A.T @ dO\n    dA = dO @ V.T\n    dS = softmax_backward(A, dA)\n    dQ = dS @ K / np.sqrt(d_k)\n    dK = dS @ Q / np.sqrt(d_k)"]
+      say: ["dQ is right, dK is not. dK comes from the same line as dQ: S = Q @ K.T / √dₖ.", "Is dK twice too large? Then it misses the 1/√dₖ that dQ has. If not, look at the transpose: K appears as K.T in the scores.", "Key j is in column j of S, so dK collects the columns of dS. Which form of dS has them as rows?"]
+    - when: { testFailed: 4 }
+      wrong: "dV = A.T @ dO\n    dA = dO @ V.T\n    dS = softmax_backward(softmax(np.log(A)), dA)\n    dQ = dS @ K / np.sqrt(d_k)\n    dK = dS.T @ Q / np.sqrt(d_k)"
+      say: "The numbers are right, but your function calls softmax. The backward pass needs only the saved A and the backward rules. Running the forward pass again (or taking numeric slopes) is not the backward pass."
+    - when: { testFailed: 5 }
+      wrong: "E = np.exp(Q @ K.T / np.sqrt(d_k))\n    A = E / E.sum(axis=-1, keepdims=True)\n    dV = A.T @ dO\n    dA = dO @ V.T\n    dS = softmax_backward(A, dA)\n    dQ = dS @ K / np.sqrt(d_k)\n    dK = dS.T @ Q / np.sqrt(d_k)"
+      say: "The checks give your function a saved A that is not softmax(Q @ K.T / √dₖ). Your answer computes A again from Q and K. The backward pass must use the A that the forward pass saved."
+    - when: { testFailed: 3 }
+      say: "The page’s example passes but the random check does not. On the example, A is the same in every row and dS happens to be easy. Check every transpose against the shapes: 3 tokens, dₖ = 2, dᵥ = 4."
+    - when: { any: true }
+      say: ["Handle the forward lines in reverse order, starting with O = A @ V, then the softmax, then the scores.", "The matrix product gives two gradients, dA and dV. The softmax step is section 1’s formula with A in place of p.", "The scores give dQ and dK. Both keep the 1/√dₖ of the forward pass."]
+
+pred-saved:
+  type: predict
+  prompt: "Softmax backward computes dz = p ⊙ (dp − dp·p). To run it for A = softmax(S), which value from the forward pass must training keep?"
+  options: ["S, the scores before softmax", "A, the weights after softmax", "nothing: dA arrives from the layer after"]
+  answer: 1
+  reveal: "The formula uses only p (here A) and the incoming gradient. So the forward pass keeps A, and S doesn’t need to be kept."
+  hints:
+    - when: { equals: 0 }
+      say: "Look at the formula: which letters appear in it? S isn’t one of them."
+    - when: { equals: 2 }
+      say: "dA arrives during backward, but the formula also multiplies by p. That number exists only during the forward pass."
+
+adam-bytes:
+  type: number
+  prompt: "Training with mixed precision and Adam keeps, for every parameter: the weight in bf16 (2 bytes), its gradient in bf16 (2 bytes), an fp32 master copy (4 bytes), and Adam’s m and v in fp32 (4 bytes each). How many GB does a model with 7 billion parameters need for these alone? (1 GB = 10⁹ bytes)"
+  promptShort: "Training with mixed precision and Adam: bf16 for forward and backward, fp32 for the update. How many GB does a model with 7 billion parameters need for its weights, gradients, master copy and Adam’s m and v? (1 GB = 10⁹ bytes)"
+  answer: 112
+  tol: 0.5
+  after: "2 + 2 + 4 + 4 + 4 = 16 bytes per parameter, and 16 × 7 × 10⁹ = 112 × 10⁹ bytes = 112 GB, before a single activation is saved. The weights alone are only 14 GB of that."
+  hints:
+    - when: { equals: 14 }
+      say: "14 GB is the bf16 weights alone. Training also keeps the gradient, the master copy, m and v."
+    - when: { equals: 28 }
+      wrong: "(2 + 2) * 7"
+      say: "That is weights and gradients only. Add the fp32 master copy and Adam’s m and v."
+    - when: { equals: 84 }
+      say: "84 GB counts only the fp32 pieces: the master copy, m and v. Add the bf16 weight and its gradient too."
+    - when: { any: true }
+      say: ["First the bytes for one parameter: add up the five pieces.", "One parameter needs 16 bytes. Multiply by 7 × 10⁹, then divide by 10⁹."]
+
+scores-mb:
+  type: number
+  prompt: "One attention layer keeps its weights A, of shape (B, h, L, L), for the backward pass. B = 4 sequences, h = 8 heads, L = 1000 tokens, 2 bytes per number. How many MB is that? (1 MB = 10⁶ bytes)"
+  answer: 64
+  tol: 0.5
+  after: "4 × 8 × 1000 × 1000 = 32 × 10⁶ numbers, × 2 bytes = 64 × 10⁶ bytes = 64 MB, for one layer. With 24 layers: about 1.5 GB, for A alone."
+  hints:
+    - when: { equals: 32 }
+      say: "32 million is the count of numbers. Each takes 2 bytes."
+    - when: { equals: 0.064 }
+      say: "0.064 is the size in GB. The question asks for MB."
+    - when: { equals: 64000 }
+      say: "64000 is the size in KB (1 KB = 10³ bytes). The question asks for MB."
+    - when: { any: true }
+      say: ["Multiply the four sizes to count the numbers, then multiply by 2 bytes.", "4 × 8 = 32 and 1000 × 1000 = 10⁶."]
+
+block-saved:
+  type: number
+  prompt: "One pre-norm block keeps the tensors in the table above for its backward pass. Count them in units of one (B, L, `d_model`) tensor: a tensor of width 4 × `d_model` counts as 4. How many units?"
+  promptShort: "A pre-norm block with an FFN of width 4d keeps, for backward: the inputs of both LayerNorms, the input of the Q, K, V products, and Q, K and V. It also keeps the heads’ output, the FFN’s input, and the FFN’s hidden layer before and after ReLU. In units of one (B, L, d) tensor, how many is that?"
+  answer: 16
+  tol: 0.001
+  after: "1 + 1 + 3 + 1 + 1 + 1 + 4 + 4 = 16 units. With B = 4, L = 1000 and `d_model` = 1000, one unit is 8 MB, so the block keeps 128 MB: twice the 64 MB of A. Together, the tensors with one row per token are bigger than A. A real block keeps a few small things more."
+  hints:
+    - when: { equals: 10 }
+      wrong: "1 + 1 + 3 + 1 + 1 + 1 + 1 + 1"
+      say: "The two hidden layers of the FFN are 4 times as wide as `d_model`, so each counts as 4 units."
+    - when: { equals: 12 }
+      wrong: "1 + 1 + 3 + 1 + 1 + 1 + 4"
+      say: "The FFN’s hidden layer is kept twice: before ReLU and after it. Each copy counts as 4."
+    - when: { equals: 14 }
+      wrong: "1 + 1 + 1 + 1 + 1 + 1 + 4 + 4"
+      say: "Q, K and V are three tensors, each of width `d_model`."
+    - when: { any: true }
+      say: ["Go down the table and add the widths, in units of `d_model`.", "Six rows have width `d_model`, but one of them holds three tensors: Q, K and V.", "1 + 1 + 3 + 1 + 1 + 1 for the narrow rows, then 4 + 4 for the two hidden layers."]
+
+pred-double-len:
+  type: predict
+  prompt: "For every layer, training keeps activations of shape (B, L, width) and attention weights of shape (B, h, L, L). You double L from 1000 to 2000 and keep B, h and the width. The activations double. What happens to the saved attention weights?"
+  options: ["they double too", "they grow 4 times", "they stay the same"]
+  answer: 1
+  reveal: "L appears twice in (B, h, L, L), so 2L gives 2 × 2 = 4 times as many numbers: 64 MB becomes 256 MB per layer in the example above. The block’s 16 token tensors only double, from 128 MB to 256 MB. At L = 2000 the two are equal, and for longer sequences A is the larger one."
+  hints:
+    - when: { equals: 0 }
+      say: "Count how many times L appears in the shape (B, h, L, L)."
+    - when: { equals: 2 }
+      say: "Every query keeps one weight for every key. More tokens means more of both."
+
+do-dot-o:
+  type: number
+  optional: true
+  warmup: false
+  prompt: "Section 2’s example: the outputs are O = [[1.5, 0.5], [1.5, 0.5]] and the gradient arriving at them is dO = [[1, 0], [0, 2]]. A fused kernel needs dA·A for each row without keeping A, so it uses dO·O instead. What is dO·O for row 1?"
+  answer: 1
+  tol: 0.001
+  after: "Row 1: 0 × 1.5 + 2 × 0.5 = 1. That is the same number as dA·A for row 1, 0 × 0.5 + 2 × 0.5 = 1, but it needs only O and dO, which have one row per token."
+  hints:
+    - when: { equals: 1.5 }
+      say: "1.5 is row 0. Row 1 of dO is [0, 2]."
+    - when: { any: true }
+      say: ["Multiply row 1 of dO and row 1 of O entry by entry, then add.", "Row 1 of dO is [0, 2], and row 1 of O is [1.5, 0.5]."]

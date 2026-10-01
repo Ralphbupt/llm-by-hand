@@ -1,0 +1,280 @@
+toy-shape:
+  type: shape
+  prompt: "A 6 × 6 picture is cut into patches of size 2 (each patch 2 × 2 pixels). What shape is the token matrix (tokens, numbers per token)?"
+  answer: [9, 4]
+  after: "3 patches across and 3 down make 9 tokens, each with 2 × 2 = 4 pixels."
+  hints:
+    - when: { shape: [3, 3] }
+      say: "That is the grid of patches, 3 across and 3 down. Count all the patches, and the pixels in each one."
+    - when: { shape: [4, 9] }
+      say: "That reads “2 × 2” as a 2 × 2 grid of 4 pieces, each 9 pixels. Here 2 is the patch size: each patch is 2 × 2 pixels. How many of those fit across 6 pixels?"
+    - when: { shape: [36, 1] }
+      say: "That would be one pixel per token. Each token holds a whole 2 × 2 patch."
+    - when: { any: true }
+      say: ["Count patches across: how many 2-pixel patches fit in 6 pixels?", "Rows are tokens, one per patch: patches across × patches down. Columns are the pixels inside one patch."]
+
+tokens-28:
+  type: number
+  prompt: "A 28 × 28 digit is cut into patches of size 7 (each patch 7 × 7 pixels). How many tokens is that?"
+  answer: 16
+  tol: 0
+  after: "28 / 7 = 4 patches across and 4 down, so 16 tokens, each with 49 numbers."
+  hints:
+    - when: { equals: 4 }
+      say: "That is one row of patches. There are 4 rows."
+    - when: { equals: 49 }
+      say: "49 would be a 7 × 7 grid of patches, or the pixels in one patch. Here 7 is the patch size: how many 7-pixel patches fit across 28 pixels?"
+    - when: { any: true }
+      say: ["How many 7-pixel patches fit across 28 pixels?", "Patches across times patches down."]
+
+halve-patch:
+  type: predict
+  prompt: "On a 28 × 28 picture, go from patch size 4 to patch size 2. What happens to the number of attention scores in each layer?"
+  options: ["Doubles", "4 times as many", "16 times as many"]
+  answer: 2
+  hints:
+    - when: { equals: 1 }
+      say: "4 times as many is the token count. Attention scores every token against every token. What happens to tokens × tokens?"
+    - when: { equals: 0 }
+      say: "Halving the patch size halves it in both directions. How many more patches is that? Then think about every token scoring every token."
+  reveal: "16 times as many. Tokens go from 49 to 196, which is 4 times as many. Attention compares every token with every token, so scores go from 49 × 49 = 2,401 to 196 × 196 = 38,416. Smaller patches see finer detail, but the cost grows with the square of the token count."
+
+split-axes:
+  type: code
+  prompt: "Split each axis of an (H, W) picture into (which block, which pixel in the block), for patch size p."
+  template: |
+    def split(x, p):
+        H, W = x.shape
+        return x.reshape(____)
+
+    img = np.arange(16).reshape(4, 4)
+    x4 = split(img, 2)
+    print(x4[0, :, 1, :])   # should be the top-right patch [[2, 3], [6, 7]]
+  solution: "H // p, p, W // p, p"
+  tests:
+    - expr: "split(np.arange(16).reshape(4, 4), 2)[0, :, 1, :]"
+      expect: [[2, 3], [6, 7]]
+      say: "block row 0, block column 1 is the top-right patch"
+    - expr: "list(split(np.zeros((28, 28)), 7).shape)"
+      expect: [4, 7, 4, 7]
+      say: "a 28 × 28 digit with patch size 7: 4 blocks of 7, twice"
+  hints:
+    - when: { error: "cannot reshape" }
+      say: ["The four sizes must multiply to H × W.", "The rows split into blocks of p rows. How many blocks fit in H rows, as a whole number?"]
+    - when: { any: true }
+      say: ["Four numbers, in the order of the comment above: (block row, row in block, block column, column in block).", "Check with the 4 × 4 picture and p = 2: all four sizes are 2. Which sizes come from the height, which from the width, and which are the patch size?", "Use whole-number division: 28 // 7 = 4."]
+  after: "reshape keeps the numbers in reading order and only regroups them. Splitting H into (H // p, p) says: which block of rows, and which row inside it. The columns split the same way, so every pixel now has four coordinates."
+
+patchify:
+  type: code
+  prompt: "Write patchify: an (H, W) picture → (number of patches, p·p), patches left to right, then top to bottom."
+  template: |
+    def patchify(x, p):
+        H, W = x.shape
+        return ____
+
+    img = np.arange(16).reshape(4, 4)
+    print(patchify(img, 2))
+  solution: "x.reshape(H // p, p, W // p, p).transpose(0, 2, 1, 3).reshape(-1, p * p)"
+  tests:
+    - expr: "patchify(np.arange(16).reshape(4, 4), 2)"
+      expect: [[0, 1, 4, 5], [2, 3, 6, 7], [8, 9, 12, 13], [10, 11, 14, 15]]
+      say: "the page’s 4 × 4 example"
+    - expr: "list(patchify(np.zeros((28, 28)), 7).shape)"
+      expect: [16, 49]
+      say: "a 28 × 28 digit with 7 × 7 patches"
+    - expr: "patchify(np.arange(36).reshape(6, 6), 3)[1]"
+      expect: [3, 4, 5, 9, 10, 11, 15, 16, 17]
+      say: "token 1 of a 6 × 6 picture is the top-right 3 × 3 patch"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["If token 0 is [0, 1, 2, 3], you flattened rows of the picture, not patches. Did you move the two block axes to the front before flattening?", "Three steps chained: the split from the last exercise, then transpose so the block axes come first, then reshape to (number of patches, p · p)."]
+    - when: { error: "cannot reshape" }
+      say: "Check the reshape sizes. The split is (H // p, p, W // p, p); the last reshape is (-1, p * p)."
+    - when: { any: true }
+      say: ["Start from the split you wrote in the last exercise.", "After the split, transpose so the order is (block row, block column, row in block, column in block), then flatten each patch with one more reshape."]
+  after: "After the split, transpose(0, 2, 1, 3) puts (block row, block column) first, so the pixels of one patch sit next to each other. The last reshape turns each patch into one row of p · p numbers: one token per patch, left to right, then top to bottom."
+
+dit-shape:
+  type: shape
+  prompt: "Patch size 4 on a 28 × 28 digit gives 49 tokens of 16 numbers. Wᵢₙ is (16, 96). What is the shape of tokens @ Wᵢₙ?"
+  answer: [49, 96]
+  after: "The rule from level 1: (49, 16) @ (16, 96) → (49, 96). The Transformer blocks keep that shape all the way through."
+  hints:
+    - when: { shape: [16, 96] }
+      say: "That is Wᵢₙ itself. Multiply the tokens (49, 16) by it."
+    - when: { shape: [49, 16] }
+      say: "That is the input. The 16s match and disappear."
+    - when: { any: true }
+      say: ["Level 1’s rule: (n, k) @ (k, m) → (n, m).", "Here it is (49, 16) @ (16, 96). Which numbers disappear?"]
+
+scores-49:
+  type: number
+  prompt: "With 49 tokens, how many attention scores does one head compute in one layer?"
+  answer: 2401
+  tol: 0
+  after: "49 × 49 = 2,401: every token scores every token, including itself."
+  hints:
+    - when: { equals: 98 }
+      say: "Not 49 + 49. Every one of the 49 tokens scores all 49 tokens."
+    - when: { equals: 49 }
+      say: "That is one row of scores. There is one row per token."
+    - when: { any: true }
+      say: ["Each token computes one score for every token, itself included.", "The scores form a table with one row and one column per token."]
+
+latent-ratio:
+  type: number
+  prompt: "The autoencoder squeezes 784 pixels into 16 numbers. How many times fewer numbers does diffusion have to work on?"
+  answer: 49
+  tol: 0
+  after: "784 / 16 = 49. Every step of sampling is now on 16 numbers instead of 784."
+  hints:
+    - when: { equals: 768 }
+      say: "That is 784 − 16. “How many times fewer” asks for a ratio: divide."
+    - when: { any: true }
+      say: ["“How many times fewer” asks for a ratio.", "Divide the pixel count by the code size."]
+
+code-scale:
+  type: number
+  prompt: "The 16 code numbers have a std of about 4. Level D1’s formula needs clean data with variance 1, so std 1. You divide every code number by the same number first. Which number?"
+  answer: 4
+  tol: 0
+  after: "Divide by 4. A number with std 4, divided by 4, has std 1 and variance 1. After sampling, multiply by 4 again before decoding."
+  hints:
+    - when: { equals: 16 }
+      say: "16 is the variance (4²). Dividing by 16 would make the std 4 / 16 = 0.25. You want the std to become 1."
+    - when: { equals: 2 }
+      say: "√4 = 2 would leave the std at 4 / 2 = 2. Divide by the std itself."
+    - when: { any: true }
+      say: ["Dividing a number by c divides its std by c.", "The std is 4. What c makes 4 / c = 1?"]
+
+walk:
+  type: predict
+  prompt: "An autoencoder turns each 28 × 28 digit into a 16-number code, and its decoder turns a code back into a picture. Take a 3 and a 7 and go halfway from one to the other. What does mixing the pixels give, compared with mixing the two codes and decoding the result?"
+  options: ["Both look like the same smooth blend of a 3 and a 7", "Pixels: a faint 3 and 7 on top of each other. Codes: a single in-between digit", "Pixels: one in-between digit. Codes: a faint 3 and 7 on top of each other"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Mixing pixels averages the two pictures cell by cell. What does an average of two different drawings look like?"
+    - when: { equals: 2 }
+      say: "Mixing pixels averages two pictures cell by cell, so both drawings stay visible. What does the decoder do with a code halfway between two codes?"
+  reveal: "Mixing pixels just averages two pictures, so you see both, each at half strength. Mixing codes moves through what the decoder has learned digits look like, so every step decodes into one digit-like shape. Slide the walk in the lab to see it."
+
+boss-sampler:
+  type: code
+  prompt: "Write the sampling loop. `eps_exact` is the perfect noise guess for this ring of 8 points. Every sample must land on one of the 8 points, and all 8 must appear."
+  template: |
+    T = 50
+    betas = np.linspace(1e-3, 0.2, T)          # beta_1 .. beta_T  (index 0 is t = 1)
+    alphas = 1 - betas
+    alpha_bar = np.cumprod(alphas)
+    angles = np.arange(8) * np.pi / 4
+    targets = np.stack([np.cos(angles), np.sin(angles)], 1)   # 8 points on a ring
+
+    def eps_exact(x, t):
+        """The best possible noise guess for this dataset. You don't need to change it."""
+        ab = alpha_bar[t - 1]
+        d = ((x[:, None, :] - np.sqrt(ab) * targets[None]) ** 2).sum(-1)   # (n, 8)
+        # how likely each target is
+        w = softmax(-d / (2 * (1 - ab)), axis=1)
+        # the expected clean point
+        x0 = w @ targets
+        return (x - np.sqrt(ab) * x0) / np.sqrt(1 - ab)
+
+    def sample(n, seed=0):
+        rng = np.random.default_rng(seed)
+        x = rng.normal(size=(n, 2))                # pure noise
+        for t in range(T, 0, -1):                  # t = 50, 49, ..., 1
+            eps = eps_exact(x, t)
+            ____
+        return x
+
+    x = sample(8)
+    print(np.round(x, 3))
+  reference: "x = (x - betas[t - 1] / np.sqrt(1 - alpha_bar[t - 1]) * eps) / np.sqrt(alphas[t - 1])\n        if t > 1:\n            x = x + np.sqrt(betas[t - 1]) * rng.normal(size=x.shape)"
+  tests:
+    - expr: "list(sample(5).shape)"
+      expect: [5, 2]
+      say: "5 samples, 2 numbers each"
+    - setup: |
+        def _trace(f, n, seed):
+            # the x that reaches eps_exact at each t, and the final output
+            seen, inner = {}, eps_exact
+            def spy(x, t):
+                seen.setdefault(t, np.array(x, dtype=float).copy())
+                return inner(x, t)
+            globals()["eps_exact"] = spy
+            try:
+                out = f(n, seed)
+            finally:
+                globals()["eps_exact"] = inner
+            return seen, np.array(out, dtype=float)
+        def _ref(n, seed=0):
+            rng = np.random.default_rng(seed)
+            x = rng.normal(size=(n, 2))
+            for t in range(T, 0, -1):
+                x = (x - betas[t - 1] / np.sqrt(1 - alpha_bar[t - 1]) * eps_exact(x, t)) / np.sqrt(alphas[t - 1])
+                if t > 1:
+                    x = x + np.sqrt(betas[t - 1]) * rng.normal(size=x.shape)
+            return x
+        _mine, _mine_out = _trace(sample, 6, 3)
+        _want, _want_out = _trace(_ref, 6, 3)
+        def _same(t):
+            return t in _mine and _mine[t].shape == _want[t].shape and bool(np.allclose(_mine[t], _want[t], atol=1e-6))
+      expr: "_same(49)"
+      expect: true
+      say: "after one step (t = 50): the same points as the reverse step from level D2"
+    - expr: "all(_same(t) for t in range(T, 0, -1))"
+      expect: true
+      say: "after every step from t = 50 down to 2: the same points as the reverse step"
+    - expr: "bool(_mine_out.shape == _want_out.shape and np.allclose(_mine_out, _want_out, atol=1e-6))"
+      expect: true
+      say: "after the last step (t = 1): the same points as the reverse step, which adds no noise there"
+    - expr: "bool(np.sqrt(((sample(300)[:, None, :] - targets[None]) ** 2).sum(-1)).min(1).max() < 0.05)"
+      expect: true
+      say: "every one of 300 samples lands within 0.05 of a ring point"
+    - expr: "len(set(np.argmin(((sample(400, seed=1)[:, None, :] - targets[None]) ** 2).sum(-1), axis=1).tolist()))"
+      expect: 8
+      say: "all 8 ring points get used"
+  hints:
+    - when: { error: "is not defined" }
+      say: "Use the names from the template: betas, alphas, `alpha_bar`, eps, rng. Index them with t - 1, because index 0 is t = 1."
+    - when: { testFailed: 1 }
+      say: ["After the first step, t = 50, your points differ from the reverse step. Print x after one pass through the loop.", "The step is the mean, then noise. Compare your mean with the first formula in level D2, section 1, piece by piece: the number in front of eps uses beta and alpha-bar, and you divide by this step’s alpha. Index 0 is t = 1.", "Then the noise: draw it from rng, the generator made at the top of sample (not np.random), with the shape of x, and scale it by the square root of betas[t - 1]."]
+    - when: { testFailed: 2 }
+      say: ["The first step is right, but a later step is not. Is there anything in your loop that depends on the exact value of t?", "Every step uses the same formula with index t - 1, and noise goes on every step where t > 1."]
+    - when: { testFailed: 3 }
+      say: ["Every step before the last is right; the last one, t = 1, is not.", "On the last step the reverse step gives the mean only: no noise when t == 1."]
+    - when: { any: true }
+      say: ["The loop body is the reverse step from level D2, applied to all points at once.", "Two pieces: the mean (using betas[t - 1], `alpha_bar`[t - 1], alphas[t - 1]; index 0 is t = 1), then fresh noise from rng, but only when t > 1."]
+  after: "Each step removes the guessed noise, scaled by beta and alpha-bar, then divides by √alpha. Fresh noise on every step but the last makes each run take its own path, so the points in the middle steps are spread the same way as in the forward process. Here the noise guess is exact, so even without the noise most points still reach the ring. That is why the tests compare your points with the reverse step itself after every step."
+
+boss-line:
+  type: code
+  prompt: "The boss, part 2. Paste the PASS line that boss.py printed for your own `add_noise`, guide and `step_back`, between the quotes."
+  paste: boss.py
+  template: |
+    line = "____"      # it looks like: D3 PASS 0.900 1a2b3c4d
+    print(line)
+  mustFail: ["D3 PASS 1.000 00000000", "D3 PASS 0.950", "D3 PASS 7 eae66215"]
+  tests:
+    - setup: "import re\n_p = line.split()"
+      expr: "int(len(_p) == 4 and _p[0] == 'D3' and _p[1] == 'PASS' and bool(re.fullmatch(r'0\\.[0-9]{3}|1\\.000', _p[2])))"
+      expect: 1
+      say: "a PASS line from boss.py: D3 PASS, the score, the code"
+    - expr: "['llm-by-hand/D3/' + _p[2], _p[3]]"
+      sha256Pair: true
+      say: "the code matches the score: the line is unchanged"
+    - expr: "int(float(_p[2]) >= 0.7)"
+      expect: 1
+      say: "a score of at least 0.7 (70%)"
+  hints:
+    - when: { error: "IndexError|ValueError" }
+      say: "Paste the whole line, with all four parts: D3, PASS, the score and the code."
+    - when: { testFailed: 0 }
+      say: ["Download boss.py from /files/latents-and-dit/boss.py, complete the three functions marked TODO, and run python boss.py in the same folder.", "Copy the whole line that starts with D3 PASS, and paste it between the quotes."]
+    - when: { testFailed: 1 }
+      say: "The code doesn’t match the score. Copy the line again exactly as boss.py printed it, without editing it."
+    - when: { any: true }
+      say: "Paste the whole line boss.py printed, between the quotes."
+  after: "A tiny Transformer draws digits that a separate classifier can read, with your noise, your guidance and your reverse step. The code at the end only shows that the line was pasted unchanged; this part relies on your honesty."

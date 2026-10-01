@@ -1,0 +1,6 @@
+---
+import Lab from './QkvLab.svelte'
+interface Props { hide?: { carCat?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

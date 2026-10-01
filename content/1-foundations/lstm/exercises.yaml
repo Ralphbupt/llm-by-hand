@@ -1,0 +1,303 @@
+lstm-c:
+  type: number
+  prompt: "cₚᵣₑᵥ = 1.0, f = 0.9, i = 0.5, g = 0.8. What is c = f·cₚᵣₑᵥ + i·g?"
+  answer: 1.3
+  tol: 0.0005
+  after: "0.9 × 1.0 + 0.5 × 0.8 = 0.9 + 0.4 = 1.3. The cell kept 90% of what it had and added half of the candidate."
+  hints:
+    - when: { equals: 0.9 }
+      say: "That is only the part it keeps. Add i·g, the new part."
+    - when: { equals: 0.4 }
+      say: "That is only the new part. Add f·cₚᵣₑᵥ, the part it keeps."
+    - when: { any: true }
+      say: ["Use c = f·cₚᵣₑᵥ + i·g: one part the cell keeps, one part it adds.", "Two products, then add: 0.9 × 1.0 and 0.5 × 0.8."]
+
+lstm-h:
+  type: number
+  prompt: "c = 1.3 and the output gate o = 0.6. Use tanh(1.3) ≈ 0.86. What is h = o·tanh(c)? (2 decimals)"
+  answer: 0.52
+  tol: 0.01
+  after: "0.6 × 0.86 ≈ 0.52."
+  hints:
+    - when: { equals: 0.78 }
+      say: "That is o × c. Apply tanh to c first."
+    - when: { equals: 0.86 }
+      say: "That is tanh(c). The output gate then keeps only 60% of it."
+    - when: { any: true }
+      say: ["h = o·tanh(c). Which number is tanh(1.3)?", "Multiply o = 0.6 by tanh(1.3) ≈ 0.86."]
+
+gate-value:
+  type: number
+  prompt: "The forget gate is f = sigmoid(`w_f`·x + `u_f`·hₚᵣₑᵥ + `b_f`). With `w_f` = 2, x = 1, `u_f` = 0, hₚᵣₑᵥ = 0 and `b_f` = 1, what is f? Use e⁻³ ≈ 0.05. (2 decimals)"
+  answer: 0.95
+  tol: 0.01
+  after: "z = 2 × 1 + 0 × 0 + 1 = 3, and sigmoid(3) = 1 / (1 + e⁻³) = 1 / 1.05 ≈ 0.95. This input tells the cell to keep almost everything."
+  hints:
+    - when: { equals: 3 }
+      say: "That is z. The gate is sigmoid(z), between 0 and 1."
+    - when: { any: true }
+      say: ["First the sum inside: `w_f`·x + `u_f`·hₚᵣₑᵥ + `b_f`.", "z = 3. Then sigmoid(3) = 1 / (1 + e⁻³), and e⁻³ ≈ 0.05."]
+
+keep-10:
+  type: number
+  prompt: "Nothing new is added (i = 0) and f = 0.9 at every step. c starts at 1. Use 0.9⁵ ≈ 0.59. What is c after 10 steps? (2 decimals)"
+  answer: 0.35
+  tol: 0.01
+  after: "0.9¹⁰ = 0.9⁵ × 0.9⁵ ≈ 0.59 × 0.59 ≈ 0.35. After 50 steps it is about 0.005, so even 0.9 forgets over long stretches."
+  hints:
+    - when: { equals: 9 }
+      say: "The cell multiplies by 0.9 each step. Ten steps means 0.9 to the power 10."
+    - when: { equals: 0.59 }
+      say: "That is five steps. Ten steps is 0.9⁵ twice: 0.59 × 0.59."
+    - when: { any: true }
+      say: ["Each step multiplies c by f.", "0.9¹⁰ = 0.9⁵ × 0.9⁵."]
+
+f-half:
+  type: predict
+  prompt: "Nothing new is added. To keep half of c after 50 steps, the forget gate f must be about…"
+  options: ["0.5", "0.9", "0.99"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "0.5 is already halved after one step. After 50 steps, 0.5⁵⁰ is almost nothing."
+    - when: { equals: 1 }
+      say: "With f = 0.9, c is 0.9¹⁰ ≈ 0.35 after 10 steps. Fifty steps is five times longer than that."
+  reveal: "About 0.99 (exactly 0.986): f⁵⁰ = 0.5. With 0.9, almost nothing is left after 50 steps (0.005). Remembering over long stretches needs gates very close to 1."
+
+k80:
+  type: predict
+  prompt: "Two LSTMs differ only in the starting bias of their forget gate: 0 or 2. The task is “remember the first symbol” with k = 80, 1,500 training steps and a 32-number state. A plain RNN only guesses (about 50%). Which LSTM reaches about 100%?"
+  options: ["Both LSTMs: gates are enough", "Only the LSTM whose forget bias starts at 2", "Neither: 80 steps is too long"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "With the forget bias at 0, f starts at 0.5. What does 0.5 to the power 79 look like?"
+    - when: { equals: 2 }
+      say: "Compare f = 0.5 and f ≈ 0.88 over 79 steps. 0.5⁷⁹ is about 2 × 10⁻²⁴. What is 0.88⁷⁹?"
+  reveal: "Only the one whose forget bias starts at 2. With every bias at 0, the forget gates start at 0.5 and the LSTM is stuck at 50.5%, like the RNN. Starting at f ≈ 0.88, the first token still affects the last step: 0.88⁷⁹ ≈ 4 × 10⁻⁵, far more than 0.5⁷⁹ ≈ 2 × 10⁻²⁴. That LSTM reaches 100%. Pick k = 80 in the lab."
+
+chance:
+  type: number
+  prompt: "There are 6 colors. If a model gets the grammar right but picks the second color at random, what fraction of its lines follow every rule? (percent, 1 decimal)"
+  answer: 16.7
+  tol: 0.1
+  after: "1 in 6 = 16.7%. A model must do better than this: a model stuck near 17% has learned the grammar but not the color rule."
+  hints:
+    - when: { equals: 50 }
+      say: "There are 6 colors to pick from, not 2."
+    - when: { equals: 0.167 }
+      say: "That is the fraction. Give it as a percent."
+    - when: { any: true }
+      say: ["The second color matches the first in 1 out of 6 random picks.", "Write 1/6 as a percent, with one decimal."]
+
+rnn-color:
+  type: predict
+  prompt: "Guess before you look: the same training (1,800 steps, a 128-number state), but with a plain RNN. What happens to the color rule?"
+  options: ["It learns it, just later", "It learns the grammar but stays near 1 in 6 for the colors", "It learns neither"]
+  reveal: "Grammar yes, colors no: after 1,800 steps 0% of its lines are broken, but only 13% follow every rule, which is chance level. 17 characters is already too far for it. Switch the lab to “plain RNN” to see it."
+
+lstm-step:
+  type: code
+  prompt: "Write the cell update: keep f of the old c, and add i times the candidate g."
+  template: |
+    def sigmoid(z):
+        return 1 / (1 + np.exp(-z))
+
+    def lstm_step(x, h, c, W, U, b):
+        z = x @ W + h @ U + b              # all four gates at once: 4H numbers
+        H = h.shape[0]
+        f = sigmoid(z[:H])                 # forget
+        i = sigmoid(z[H:2 * H])            # input
+        g = np.tanh(z[2 * H:3 * H])        # candidate
+        o = sigmoid(z[3 * H:])             # output
+        c = ____
+        h = o * np.tanh(c)
+        return h, c
+
+    h, c = lstm_step(np.array([0.]), np.zeros(1), np.array([1.]),
+                     np.zeros((1, 4)), np.zeros((1, 4)), np.array([2., 0, 1, 0]))
+    print("c =", c, " h =", h)
+  solution: "f * c + i * g"
+  tests:
+    - expr: "lstm_step(np.array([0.]), np.zeros(1), np.array([1.]), np.zeros((1, 4)), np.zeros((1, 4)), np.array([2., 0, 1, 0]))[1]"
+      expect: [1.2616]
+      tol: 0.0001
+      say: "f = sigmoid(2) = 0.8808, i = 0.5, g = tanh(1) = 0.7616, cₚᵣₑᵥ = 1"
+    - setup: "rng = np.random.default_rng(0); W = rng.normal(0, 0.5, (8, 3)).T; U = rng.normal(0, 0.5, (8, 2)).T"
+      expr: "lstm_step(np.array([1., 0, 0]), np.zeros(2), np.zeros(2), W, U, np.zeros(8))[1]"
+      expect: [-0.5403, -0.1216]
+      tol: 0.0001
+      say: "H = 2, D = 3, random weights (seed 0)"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["With cₚᵣₑᵥ = 1, f = 0.8808, i = 0.5 and g = 0.7616, c should be 1.2616. Which two products make it?", "The kept part uses the forget gate f; the added part uses the input gate i."]
+    - when: { any: true }
+      say: ["Two parts: what the cell keeps, and what it adds. Look at the formula in section 1.", "The forget gate f decides how much of the old c stays; the input gate i decides how much of g is added."]
+  after: "Both products are element by element: each of the H numbers of c has its own gates. Because f is near 1 and nothing is squeezed on this path, c can carry a number across many steps almost unchanged."
+
+gru-h:
+  type: number
+  prompt: "A GRU step with hₚᵣₑᵥ = 0.6, update gate z = 0.25 and candidate h̃ = −0.2. What is the new h = (1 − z)·hₚᵣₑᵥ + z·h̃?"
+  answer: 0.4
+  tol: 0.0005
+  after: "0.75 × 0.6 + 0.25 × (−0.2) = 0.45 − 0.05 = 0.4. Three quarters of the old state survive; a quarter of the candidate is added."
+  hints:
+    - when: { equals: 0.45 }
+      say: "That is only the kept part. Add z × h̃, which is negative here."
+    - when: { equals: 0.5 }
+      say: "z × h̃ is 0.25 × (−0.2) = −0.05: subtract it, don’t add."
+    - when: { equals: 0 }
+      wrong: "0.25*0.6 + 0.75*(-0.2)"
+      say: "That swaps the weights. The old state gets 1 − z = 0.75, the candidate gets z = 0.25."
+    - when: { any: true }
+      say: ["Two parts: (1 − z) of the old state, z of the candidate.", "0.75 × 0.6, then add 0.25 × (−0.2)."]
+
+gru-params:
+  type: number
+  prompt: "Inputs have D = 10 numbers and the state has H = 20. Each block of a recurrent layer has a (D, H) input matrix, an (H, H) state matrix and H biases: 10×20 + 20×20 + 20 = 620 numbers. An LSTM has 4 blocks. How many numbers does a GRU have?"
+  answer: 1860
+  tol: 0
+  after: "3 blocks (z, r and the candidate) × 620 = 1,860. The LSTM has 4 × 620 = 2,480, a third more."
+  hints:
+    - when: { equals: 2480 }
+      say: "That is the LSTM, with 4 blocks. Count the GRU’s blocks: two gates and the candidate."
+    - when: { equals: 1240 }
+      say: "The two gates are two blocks, but the candidate h̃ needs its own weights too."
+    - when: { any: true }
+      say: ["Count the GRU’s blocks: each gate and the candidate has one.", "A GRU block has the same 620 numbers as an LSTM block."]
+
+bi-read:
+  type: number
+  prompt: "The sentence is “he sat by the bank of the river” (8 words, counting from 0, “bank” is word 4). The backward RNN starts at “river”. When it reaches “bank”, how many words has it read, counting “bank”?"
+  answer: 4
+  tol: 0
+  after: "river, the, of, bank: 4 words. The forward RNN has read he, sat, by, the, bank: 5. Together, the output for “bank” has seen the whole sentence."
+  hints:
+    - when: { equals: 5 }
+      say: "That is the forward RNN, reading from “he”. The backward one starts at the other end."
+    - when: { equals: 3 }
+      say: "Count “bank” itself too: river, the, of, bank."
+    - when: { any: true }
+      say: ["The backward RNN reads from the last word towards the first.", "Start at river (word 7) and count down to bank (word 4)."]
+
+bi-size:
+  type: shape
+  prompt: "Each direction has H = 32. For an 8-word sentence, the output is one row per word, each row the forward and backward states side by side. What shape is it?"
+  answer: [8, 64]
+  after: "8 words, 32 + 32 = 64 numbers each: (8, 64)."
+  hints:
+    - when: { shape: [8, 32] }
+      say: "That is one direction. Each row has both states side by side."
+    - when: { shape: [16, 32] }
+      say: "The two states sit side by side in one row, not in extra rows."
+    - when: { any: true }
+      say: ["One row per word.", "Each row: 32 forward numbers, then 32 backward numbers."]
+
+bi-generate:
+  type: predict
+  prompt: "Two jobs. (1) Label every word of a finished sentence as noun, verb and so on. (2) Write a sentence one word at a time. Which job can a bidirectional RNN do?"
+  options: ["Both jobs", "Only labeling the words", "Only writing", "Neither"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "When the model is about to write word 5, which words can the right-to-left pass read?"
+    - when: { equals: 2 }
+      say: "For writing, the right-to-left pass needs words that come later. Do they exist yet?"
+    - when: { equals: 3 }
+      say: "For labeling, the whole sentence is already there. Can both passes read it?"
+  reveal: "Only labeling. For labeling, the whole sentence exists before you answer, so both passes can read it. For writing, the backward pass would read from the end, and the end is not written yet. Bidirectional RNNs are for jobs where the whole input is there first: labeling words, classifying sentences, or reading the input of a seq2seq model (level N5)."
+
+gru-boss:
+  type: code
+  prompt: "The boss, part 1. Write one GRU step: the update gate z, the reset gate r, the candidate h̃ and the new h, all from section 3. Replace ____ with as many lines as you need."
+  template: |
+    def sigmoid(z):
+        return 1 / (1 + np.exp(-z))
+
+    def gru_step(x, h, P):
+        # rows: x (D,), h (H,).
+        # P holds Wz, Wr, Wh (D, H), Uz, Ur, Uh (H, H) and bz, br, bh (H,)
+        ____
+        return h_new
+
+    P = {k: np.zeros((1, 1)) for k in ["Wz", "Uz", "Wr", "Ur", "Wh", "Uh"]}
+    P.update({k: np.zeros(1) for k in ["bz", "br", "bh"]})
+    print(gru_step(np.array([3.]), np.array([0.8]), P))
+  reference: |-
+    z = sigmoid(x @ P["Wz"] + h @ P["Uz"] + P["bz"])
+        r = sigmoid(x @ P["Wr"] + h @ P["Ur"] + P["br"])
+        h_cand = np.tanh(x @ P["Wh"] + (r * h) @ P["Uh"] + P["bh"])
+        h_new = (1 - z) * h + z * h_cand
+  tests:
+    - setup: "P = {k: np.zeros((1, 1)) for k in ['Wz', 'Uz', 'Wr', 'Ur', 'Wh', 'Uh']}; P.update({k: np.zeros(1) for k in ['bz', 'br', 'bh']})"
+      expr: "gru_step(np.array([3.]), np.array([0.8]), P)"
+      expect: [0.4]
+      tol: 0.0001
+      say: "all weights 0: z = r = 0.5 and h̃ = tanh(0) = 0, so h = 0.5 × 0.8"
+    - setup: "P = {k: np.zeros((1, 1)) for k in ['Wz', 'Uz', 'Wr', 'Ur', 'Wh', 'Uh']}; P.update({k: np.zeros(1) for k in ['bz', 'br', 'bh']}); P['bz'] = np.array([20.])"
+      expr: "gru_step(np.array([0.]), np.array([0.9]), P)"
+      expect: [0]
+      tol: 0.0001
+      say: "z ≈ 1 (update gate fully on) and h̃ = tanh(0) = 0: the new h is almost all h̃"
+    - setup: "P = {k: np.zeros((1, 1)) for k in ['Wz', 'Uz', 'Wr', 'Ur', 'Wh', 'Uh']}; P.update({k: np.zeros(1) for k in ['bz', 'br', 'bh']}); P['bz'] = np.array([20.]); P['Uh'] = np.array([[1.]]); P['br'] = np.array([20.])"
+      expr: "gru_step(np.array([0.]), np.array([0.9]), P)"
+      expect: [0.7163]
+      tol: 0.0001
+      say: "r ≈ 1 (reset gate fully on), z ≈ 1: h = h̃ = tanh(1 × 0.9)"
+    - setup: "P = {k: np.zeros((1, 1)) for k in ['Wz', 'Uz', 'Wr', 'Ur', 'Wh', 'Uh']}; P.update({k: np.zeros(1) for k in ['bz', 'br', 'bh']}); P['bz'] = np.array([20.]); P['Uh'] = np.array([[1.]]); P['br'] = np.array([-20.])"
+      expr: "gru_step(np.array([0.]), np.array([0.9]), P)"
+      expect: [0]
+      tol: 0.0001
+      say: "r ≈ 0 (reset gate fully off): the candidate ignores the old h, so h̃ = tanh(0) = 0"
+    - setup: "rng = np.random.default_rng(3); P = {k: rng.normal(0, 0.5, (3, 2) if k[0] == 'W' else (2, 2) if k[0] == 'U' else (2,)) for k in ['Wz', 'Uz', 'bz', 'Wr', 'Ur', 'br', 'Wh', 'Uh', 'bh']}"
+      expr: "gru_step(np.array([1., 0, -1]), np.array([0.5, -0.5]), P)"
+      expect: [0.0496, -0.4494]
+      tol: 0.0001
+      say: "D = 3, H = 2, random weights (seed 3)"
+  hints:
+    - when: { error: "is not defined" }
+      say: "Set every name before you use it: z and r first, then the candidate, then `h_new`."
+    - when: { error: "KeyError" }
+      wrong: "z = sigmoid(x @ P[\"W_z\"] + h @ P[\"U_z\"] + P[\"b_z\"])\n    r = sigmoid(x @ P[\"Wr\"] + h @ P[\"Ur\"] + P[\"br\"])\n    h_cand = np.tanh(x @ P[\"Wh\"] + (r * h) @ P[\"Uh\"] + P[\"bh\"])\n    h_new = (1 - z) * h + z * h_cand"
+      say: "The weights are P[\"Wz\"], P[\"Uz\"], P[\"bz\"] and so on: W, U or b, then the gate letter."
+    - when: { testFailed: 1 }
+      say: ["Here z ≈ 1 and the candidate is 0, so `h_new` should be about 0. If you got about 0.9, your `h_new` kept the old h instead of taking the candidate.", "z is the fraction of `h_new` that comes from the candidate; 1 − z is the fraction that comes from the old h. Check which of h and h̃ each one multiplies."]
+    - when: { testFailed: 2 }
+      say: ["With r = 1 (reset gate fully on), the candidate should see the old h. Where does r go?", "The candidate multiplies (r * h), not h, by Uh."]
+    - when: { testFailed: 3 }
+      say: "With r = 0 (reset gate fully off), the candidate must not see the old h. Check that r multiplies h inside the candidate."
+    - when: { testFailed: 0 }
+      say: ["With all weights 0, both gates are 0.5 and the candidate is 0. Which part of h survives?", "`h_new` mixes the old h and the candidate h̃, using 1 − z and z."]
+    - when: { any: true }
+      say: ["Four lines: z, r, the candidate, `h_new`. Section 3 has the formulas.", "Each gate is sigmoid(x @ W + h @ U + b) with its own W, U, b."]
+  after: "z and r are two small layers with sigmoid, so each is between 0 and 1 for every number of the state. r decides how much of the old h the candidate sees; z mixes the old h and the candidate. With z near 0 the GRU keeps its state, like an LSTM whose forget gate is near 1."
+
+boss-line:
+  type: code
+  prompt: "The boss, part 2. Paste the PASS line that boss.py printed for your own LSTM cell, between the quotes."
+  paste: boss.py
+  template: |
+    line = "____"      # it looks like: N4 PASS 0.900 1a2b3c4d
+    print(line)
+  mustFail: ["N4 PASS 1.000 00000000", "N4 PASS 0.950", "N4 PASS 7 eae66215"]
+  tests:
+    - setup: "import re\n_p = line.split()"
+      expr: "int(len(_p) == 4 and _p[0] == 'N4' and _p[1] == 'PASS' and bool(re.fullmatch(r'0\\.[0-9]{3}|1\\.000', _p[2])))"
+      expect: 1
+      say: "a PASS line from boss.py: N4 PASS, the score, the code"
+    - expr: "['llm-by-hand/N4/' + _p[2], _p[3]]"
+      sha256Pair: true
+      say: "the code matches the score: the line is unchanged"
+    - expr: "int(float(_p[2]) >= 0.9)"
+      expect: 1
+      say: "a score of at least 0.9 (90%)"
+  hints:
+    - when: { error: "IndexError|ValueError" }
+      say: "Paste the whole line, with all four parts: N4, PASS, the score and the code."
+    - when: { testFailed: 0 }
+      say: ["Download boss.py from /files/lstm/boss.py, complete LSTMCell.forward, and run python boss.py in the same folder.", "Copy the whole line that starts with N4 PASS, and paste it between the quotes."]
+    - when: { testFailed: 1 }
+      say: "The code doesn’t match the score. Copy the line again exactly as boss.py printed it, without editing it."
+    - when: { any: true }
+      say: "Paste the whole line boss.py printed, between the quotes."
+  after: "Your own LSTM cell, trained by you, writes lines that follow every rule. The code at the end only shows that the line was pasted unchanged; this part relies on your honesty."

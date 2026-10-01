@@ -1,0 +1,6 @@
+---
+import Lab from './PickLab.svelte'
+interface Props { hide?: { prob?: string; renorm?: string; cum?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

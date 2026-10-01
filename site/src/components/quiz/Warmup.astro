@@ -1,0 +1,112 @@
+---
+/**
+ * Warm-up (spaced retrieval): two questions from earlier levels at the top of a level.
+ * The eligible questions are embedded at build time; the browser picks two (lib/warmup.ts) and mounts
+ * the real Blank / Predict islands into the slot, in practice mode with their "<page>/<id>" ids,
+ * so answering updates the stats exactly as the mistake book does. Never blocks anything; hidden on level 1.
+ * Starts folded to one line when the learner jumped here (nothing tried on the level before), in reading mode,
+ * on phones, or when they folded it before.
+ */
+import { toJsonScript, warmData } from '@lib/score'
+
+interface Props { slug: string }
+const data = await warmData(Astro.props.slug)
+---
+{data.items.length > 0 && (
+  <>
+    <details class="warmup" data-warmup hidden>
+      <summary>
+        <span class="wu-tag">Warm-up</span>
+        <span class="wu-sub" data-warm-count>2 questions from earlier levels</span>
+        <span class="wu-chev" aria-hidden="true"></span>
+      </summary>
+      <div class="wu-body">
+        <p class="wu-lede">A quick review before you start. Optional. Nothing here locks the level.</p>
+        <div data-warm-slot></div>
+      </div>
+    </details>
+    <script type="application/json" id="warm-data" set:html={toJsonScript(data)} />
+  </>
+)}
+
+<script>
+  import { mount } from 'svelte'
+  import Blank from './Blank.svelte'
+  import Predict from './Predict.svelte'
+  import { readingMode, snapshot } from '@lib/progress'
+  import { pickWarmup, type WarmData } from '@lib/warmup'
+
+  const box = document.querySelector<HTMLDetailsElement>('[data-warmup]')
+  const raw = document.getElementById('warm-data')?.textContent
+  const CLOSED = 'llmbh-warmup-closed'
+  if (box && raw) {
+    const data = JSON.parse(raw) as WarmData
+    const { progress, stats } = snapshot()
+    const picks = pickWarmup(data, progress, stats, 2)
+    if (picks.length) {
+      const levelOf = new Map(data.levels.map((l) => [l.slug, l]))
+      // jumped ahead: nothing tried on the main level just before this one
+      const prevMain = [...data.levels].reverse().find((l) => l.main !== false)
+      const jumped = !!prevMain && !Object.keys(progress).some((k) => k.startsWith(`${prevMain.slug}/`))
+      box.querySelector('[data-warm-count]')!.textContent =
+        `${picks.length === 1 ? 'One question' : `${picks.length} questions`} from earlier levels${jumped ? ' you may have skipped' : ''}`
+      const slot = box.querySelector<HTMLElement>('[data-warm-slot]')!
+      for (const it of picks) {
+        const l = levelOf.get(it.page)
+        const item = document.createElement('div')
+        item.className = 'wu-item'
+        const from = document.createElement('a')
+        from.className = 'wu-from'
+        from.href = `/learn/${it.page}/`
+        from.textContent = l ? `From level ${l.level} · ${l.title}` : 'From an earlier level'
+        const host = document.createElement('div')
+        item.append(from, host)
+        slot.append(item)
+        const id = `${it.page}/${it.id}`
+        if (it.type === 'predict') mount(Predict, { target: host, props: { id, ex: it as any, practice: true } })
+        else mount(Blank, { target: host, props: { id, ex: it as any, practice: true } })
+      }
+      let closed = false
+      try { closed = localStorage.getItem(CLOSED) === '1' } catch { /* ignore */ }
+      const phone = window.matchMedia('(max-width: 760px)').matches
+      box.open = !closed && !jumped && !readingMode() && !phone
+      box.hidden = false
+      box.addEventListener('toggle', () => {
+        try {
+          if (box.open) localStorage.removeItem(CLOSED)
+          else localStorage.setItem(CLOSED, '1')
+        } catch { /* ignore */ }
+      })
+    }
+  }
+</script>
+
+<style>
+  .warmup { margin: 0 0 1.4rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  summary {
+    display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem; cursor: pointer; list-style: none;
+    min-height: 2.5rem; border-radius: 8px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wu-tag {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); white-space: nowrap;
+  }
+  .wu-sub { color: var(--dim); font-size: 0.88rem; }
+  .wu-chev {
+    margin-left: auto; width: 0.5rem; height: 0.5rem; border-right: 1.5px solid var(--dim); border-bottom: 1.5px solid var(--dim);
+    transform: rotate(45deg) translate(-2px, -2px); transition: transform 0.18s ease;
+  }
+  .warmup[open] .wu-chev { transform: rotate(-135deg) translate(-1px, -1px); }
+  :global(html[data-motion='reduce']) .wu-chev { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .wu-chev { transition: none; } }
+  .wu-body { padding: 0 0.9rem 0.2rem; border-top: 1px solid var(--line); }
+  .wu-lede { margin: 0.6rem 0 0; color: var(--dim); font-size: 0.82rem; }
+  .wu-body :global(.wu-item) { margin: 0.7rem 0 0.8rem; }
+  .wu-body :global(.wu-from) {
+    display: inline-block; font-size: 0.75rem; color: var(--dim); text-decoration: none; font-variant-numeric: tabular-nums;
+  }
+  .wu-body :global(.wu-from:hover), .wu-body :global(.wu-from:focus-visible) { color: var(--accent); text-decoration: underline; }
+  /* the mounted question sits flat inside the warm-up card */
+  .wu-body :global(.blank), .wu-body :global(.predict) { margin: 0.25rem 0 0; background: var(--bg); }
+</style>

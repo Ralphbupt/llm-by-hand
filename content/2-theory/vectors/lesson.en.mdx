@@ -1,0 +1,241 @@
+---
+title: Embeddings and similarity
+level: "13"
+order: 13
+part: theory
+question: How does a token id become a list of numbers that means something?
+run: browser
+checkpoint: mix-code
+testOut: [lookup-shape, dot-5, cat-dog, count-code, mix-code]
+recap:
+  can:
+    - "Turn a list of token ids into an `(L, d)` array by taking rows of the embedding table."
+    - "Compute a dot product by hand and read its sign: same way, right angle, opposite way."
+    - "Count neighbors to give each word a row, and average a sentence’s vectors with equal weights."
+  keys:
+    - "Embedding = taking row `id` of `E`; `onehot @ E` gives the same rows"
+    - "n ids looked up in `E` of shape `(V, d)` → `(n, d)`"
+    - "$a \\cdot b = |a|\\,|b|\\cos\\theta$: [2, 1] · [1, 3] = 5"
+    - "`E[ids].mean(axis=0)`: an equal-weight mix, shape `(d,)`"
+    - "Words used in the same places get similar vectors"
+  mistakes:
+    - "Expecting the table to give a word a different vector in a different sentence: the lookup always returns the same row."
+    - "Putting the table first in `E @ onehot`: the one-hot rows `(L, 4)` go first."
+---
+
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import TokenLab from '@viz/TokenLab.astro'
+import DotLab from '@viz/DotLab.astro'
+import ContextLab from '@viz/ContextLab.astro'
+import Embed3DLab from '@viz/Embed3DLab.astro'
+import Word2vecLab from '@viz/Word2vecLab.astro'
+
+Level 12 turned text into token ids. For `hello`, cut into characters, the vocabulary is e, h, l, o
+(ids 0 to 3), and the word becomes `[1, 0, 2, 2, 3]`.
+
+A network can't use those ids as they are. It would treat them as amounts: `l` (2) would be "twice" `h` (1).
+So each id is replaced by a short list of numbers, a **vector**, looked up in a table. This is called **embedding**.
+
+## 1. The embedding table
+
+The table has **one row per id**. Embedding a token means taking its row. Here each row has 2 numbers;
+real models use hundreds or thousands. So a sentence of L tokens becomes an array of shape (L, d): one row per token.
+
+<Blank id="lookup-shape" />
+
+<Predict id="same-l" />
+
+<Gate requires="same-l">
+
+<TokenLab />
+
+"Take row 2" can also be written as a matrix multiplication. Make a **one-hot** row: all zeros,
+except a 1 at position 2. Multiply it by the table, and every row except row 2 is multiplied by 0.
+Select a token in the lab and look at the one-hot column.
+
+<CodeBlank id="embed" />
+
+<Stuck q="Why not give the ids to the network as numbers? h = 1, l = 2 are already numbers.">
+
+Because the network would treat them as amounts. It would "think" `l` (2) is twice `h` (1),
+and that `o` (3) is somewhere past `l`. None of that is true. The ids are only names, in alphabetical order.
+
+A vector of several numbers per token, which the network is free to learn, avoids this. Two tokens can
+become close or far apart for real reasons, and there are many directions to be close in.
+
+</Stuck>
+
+<Deeper title="Where the numbers in the table come from">
+
+With the BPE tokens of level 12, the table has tens of thousands of rows, and each row has hundreds to
+thousands of numbers. The idea is the same as here: an id picks a row.
+
+The rows start as random numbers. They are weights, exactly like the weights in level 3, and training
+moves them with gradient descent. Tokens used in similar ways get similar rows, because that helps
+the model predict the next token. Nobody writes the meaning in by hand. Section 3 shows why this happens.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="embed">
+
+## 2. Comparing two vectors: the dot product
+
+If similar tokens get similar vectors, you need a number for “how similar”. The simplest is the
+**dot product**: multiply the two vectors number by number and add up. You did exactly this in level 1:
+it is one cell of a matrix multiplication.
+
+<DotLab />
+
+<Blank id="dot-5" />
+
+<Predict id="dot-sign" />
+
+<TryIt>
+
+cat·car starts at exactly 0: cat and car are at a right angle. Now make dog·car exactly 0 without touching dog. Then drag dog farther from the center, in the same direction.
+Its dot product with cat grows, but cos(angle) stays the same. The dot product mixes two things:
+**direction** (the angle) and **length**.
+
+</TryIt>
+
+<Deeper title="Dot product, length, and angle">
+
+For two vectors $a$ and $b$:
+
+$$a \cdot b = |a|\,|b|\cos\theta$$
+
+$\cos\theta$ is 1 when they point the same way, 0 at a right angle, and −1 when they point opposite ways.
+Dividing the dot product by both lengths gives just the angle part, called **cosine similarity**.
+
+Attention, in the next level, uses the plain dot product. Length matters there: a longer vector gets bigger scores.
+
+</Deeper>
+
+### More than two numbers
+
+Real embeddings have hundreds of numbers per token, and the dot product works the same way: multiply number by
+number and add up. With three numbers you can still see the vectors. Turn the picture and pick two words.
+The three axes are simply the 1st, 2nd and 3rd number of each vector. They have no names: training decides what they mean.
+
+<Embed3DLab />
+
+</Gate>
+
+<Gate requires="dot-sign">
+
+## 3. Where do the vectors come from?
+
+The table starts as random numbers, and training moves them. But what pushes “cat” and “dog” together?
+The idea is short: **the meaning of a word comes from the words around it**. Cat and dog appear in the same places (“the … sleeps”,
+“my … is hungry”), so a model that has to predict a word’s neighbors does best if it gives them similar vectors.
+
+You can see this with nothing but counting. Take four tiny sentences: “cat eats fish”, “dog eats meat”, “cat drinks milk”,
+“car needs fuel”. For each word, count how often each of eats, drinks and needs sits right next to it (one word before or after).
+
+<Blank id="cat-count" />
+
+<Gate requires="cat-count">
+
+So cat = [1, 1, 0] over (eats, drinks, needs). The same count gives dog = [1, 0, 0] and car = [0, 0, 1].
+These counts are already vectors, and the dot product from section 2 compares them.
+
+<Blank id="cat-dog" />
+
+<Gate requires="cat-dog">
+
+<Predict id="closest" />
+
+<Gate requires="closest">
+
+Our own rules wrote 3,850 short sentences about animals, foods and vehicles. Count every word within two words of every
+other, and each word gets a long row of counts. Comparing those rows (with cosine similarity) and drawing them in 2D places the words like this:
+
+<Word2vecLab />
+
+Nobody said which words are animals. The three groups appear because each group is used in its own kind of sentence.
+Inside a group the words are close but not equal: each word also has a few sentences of its own (“the dog barks at night”).
+
+<TryIt>
+
+Pick “fish”. Its most frequent neighbors mix two uses: “people” (people eat fish) next to “swims”, “drinks” and “water”.
+Our rules sometimes use fish as an animal. Its point sits between the foods and the animals, closest to the foods. One vector has to serve both uses,
+which is the problem of the next section.
+
+</TryIt>
+
+Here is the counting step in code. `C[i, j] += 1` adds 1 to row i, column j of the table.
+
+<CodeBlank id="count-code" />
+
+<Deeper title="Counting versus predicting">
+
+This level counts neighbors and then compresses the counts (the compression step is a matrix factorization; it keeps the
+directions in which the rows differ most). The more famous method predicts instead: a tiny network gets a word and is
+trained to give high probability to the words around it, and its embedding table is the result. Both finish with
+similar vectors, because both are driven by the same thing: which words share neighbors.
+
+A language model (level 11, and the GPT of level 21) does the same without being asked to. Its embedding table is trained only to
+help predict the next token, and words used in similar ways get similar vectors.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="count-code">
+
+## 4. One vector per word is not enough
+
+A lookup table always returns the same row for the same token, whatever the sentence.
+That is a problem for a word like **apple**: a fruit in one sentence, a company in another.
+
+Here the four numbers have readable meanings: fruit, tech, sweet, action. The table gives apple = [1, 1, 0, 0]:
+one on the fruit number and one on the tech number, because the same row has to serve both meanings.
+Take the two sentences "sweet apple" and "apple releases phone".
+
+<Predict id="static-apple" />
+
+<Gate requires="static-apple">
+
+<ContextLab hide={{ mix: "mix-fruit" }} />
+
+Check the box to mix each sentence's words together with equal weights. In the table, sweet = [1, 0, 1, 0],
+releases = [0, 1, 0, 1], phone = [0, 1, 0, 0].
+
+<Blank id="mix-fruit" />
+
+Now write the step in code, with one change: the words don't have to count equally. Each word gets a **weight**,
+the weights add up to 1, and the mix is the weighted sum of the rows. Equal weights (1/2 and 1/2, or 1/3 each) give the
+plain average from the lab. Indexing a table with a list of ids takes those rows, in that order:
+
+```python
+T = np.array([[1, 2], [3, 4], [5, 6]])
+T[[2, 0]]                 # [[5, 6], [1, 2]]   rows 2 and 0, shape (2, 2)
+0.75 * T[2] + 0.25 * T[0] # [4, 5]   weights 0.75 and 0.25: 0.75·[5, 6] + 0.25·[1, 2]
+```
+
+Writing one term per word only works for a fixed number of words. Level 1 has a shorter way: a vector of weights
+`@` a matrix gives exactly this weighted sum of its rows, for any number of rows.
+
+<CodeBlank id="mix-code" />
+
+</Gate>
+
+Averaging with equal weights is too simple: every neighbor counts the same, even unrelated words.
+The next level fixes exactly this. Each word computes **how much** to take from each neighbor,
+using the dot product you just learned.
+
+</Gate>

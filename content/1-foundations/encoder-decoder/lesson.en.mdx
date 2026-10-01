@@ -1,0 +1,379 @@
+---
+title: The 2017 encoder–decoder Transformer
+short: "2017 Transformer"
+level: "N7"
+order: 10.7
+part: foundations
+branch: classic
+question: How did the first Transformer turn one sequence into another, with two stacks?
+run: browser
+checkpoint: three-masks
+testOut: [cross-weights, cross-out, memory-shape, mask-6, decoder-mask-count, three-masks]
+recap:
+  can:
+    - "Name the sublayers of an encoder layer and a decoder layer, and say where cross-attention takes Q, K and V from."
+    - "Give the shape of every attention’s scores and mask in an encoder–decoder, `<bos>` included."
+    - "Build the three masks of one example in NumPy."
+  keys:
+    - "Cross-attention: Q from the decoder, K and V from memory; scores `(B, h, L_tgt, L_src)`"
+    - "`tgt_in = <bos> + answer`, `tgt_out = answer + <eos>`: position t guesses word t + 1"
+    - "Only the decoder’s self-attention is causal; encoder self-attention and cross-attention block PAD source tokens only"
+    - "The 2017 placement wraps each sublayer as `LayerNorm(x + sublayer(x))` (post-norm)"
+  mistakes:
+    - "Making the decoder’s causal mask from the source length: it follows the decoder input, `<bos>` included."
+    - "Swapping the axes of cross-attention: rows are the decoder’s tokens (Q), columns the source tokens (K)."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import LayerFlowLab from '@viz/LayerFlowLab.astro'
+import FullModelLab from '@viz/FullModelLab.astro'
+import DecodeLab from '@viz/DecodeLab.astro'
+import MicroscopeLab from '@viz/MicroscopeLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+import ThreeMasks from '@viz/ThreeMasks.astro'
+
+This level prepares you to read the original 2017 Transformer design. Its diagram has two stacks, and this level builds both.
+
+Level 17’s model is one stack: the digits, then `=`, then the words, all in one sequence, with masked self-attention
+everywhere. The first Transformer, from 2017, was built differently. It was made for **translation**: read a
+**source sentence** in one language, write a **target sentence** in another. So it has two stacks, an **encoder** that reads
+and a **decoder** that writes. (On this page, “target” means the sentence to write. It is not the training target y.)
+
+This level builds that design and runs it on level 17’s task, reading a number aloud, with the same 900 training numbers
+and the same 100 held-out ones:
+
+```
+"427"  →  four hundred twenty seven
+```
+
+If you did side trip N5, you solved this kind of task there with two LSTMs and attention between them. This model
+keeps that plan (an encoder, a decoder, and attention from one to the other) and replaces the LSTMs with attention
+layers. N5 is optional; you don’t need it for this level.
+
+[`demo.py`](/files/encoder-decoder/demo.py) prints every number on this page. To run it yourself, download it into a
+folder of its own and run `python demo.py` there ([setup](/setup/)). It needs PyTorch and takes about 20 seconds.
+
+## 1. Two stacks
+
+The two stacks split the work:
+
+- the **encoder** reads the whole source at once: every source token may look at every other source token;
+- the **decoder** writes the target one word at a time. It looks at the words written so far, and at the source.
+
+An encoder layer is self-attention, then the FFN. A decoder layer has three sublayers: masked self-attention over
+the words written so far, **cross-attention** to read the source, and the FFN.
+
+Cross-attention is ordinary attention, with one difference: its Q comes from one sequence and its K and V from another.
+The encoder’s final output is called **memory**: one vector per source token. It is what the decoder reads.
+
+<Predict id="cross-kv" />
+
+<Gate requires="cross-kv">
+
+The 2017 design also puts the LayerNorm in a different place from level 17. Each sublayer is wrapped as
+`LayerNorm(x + sublayer(x))`, “add & norm”: add the residual first, then normalize. That is the wrapping of level 16,
+section 3. It is called post-norm. Level 17 normalizes what goes *into* each sublayer instead (pre-norm), and
+[level 19](/learn/modern-llm/) shows why that trains deep stacks better.
+
+<LayerFlowLab variant="encdec" />
+
+<Stuck q="What exactly is “memory”?">
+
+It is the output of the last encoder layer: one vector per source token, shape `(B, L_src, d_model)`.
+It is computed once per source. Every decoder layer reads the same memory through its cross-attention,
+using it for K and V. Nothing is stored or trained in it. It is a name for “the encoder’s answer”.
+It is not the hidden state of an RNN (level N3). On this page, “memory” alone means the encoder’s output.
+The “GPU memory” of U6 and level 20 is something else.
+
+</Stuck>
+
+Q decides the rows of the attention weights and K the columns, as in level 14. In cross-attention, Q comes from the
+decoder input and K from memory.
+
+The decoder input always begins with a **start token**, written `<bos>` (“beginning of sequence”). It gives the
+decoder a first input before it has written any word. Section 4 shows how the decoder uses it.
+
+<Blank id="cross-weights" />
+
+</Gate>
+
+<Gate requires="cross-weights">
+
+Now compute one cross-attention by hand. The steps are those of level 14: one score per key, softmax, then a weighted
+average of the values. Only the place each table comes from is new.
+
+<Blank id="cross-out" />
+
+</Gate>
+
+<Gate requires="cross-out">
+
+## 2. The whole machine
+
+The encoder reads the digits. The decoder writes the words. While it writes, it reads the encoder’s output (memory)
+through cross-attention. Select a block to see its input, its output, and how many parameters it holds. The shapes are for one
+number (“427”) and a decoder input of 5 tokens: the start token `<bos>` and up to 4 words.
+
+<FullModelLab variant="encdec" />
+
+<Blank id="memory-shape" />
+
+<Gate requires="memory-shape">
+
+<Predict id="dec-extra" />
+
+<Gate requires="dec-extra">
+
+<Deeper title="Where the 171,232 parameters are">
+
+At the default size (`d_model` 64, 4 heads, 2 layers, `d_ff` 128):
+
+| part | parameters |
+|---|---|
+| one attention block: W<sub>Q</sub>, W<sub>K</sub>, W<sub>V</sub> (64 × 64 each) + W<sub>O</sub> (64 × 64 + 64) | 16,448 |
+| one FFN | 16,576 |
+| one encoder layer: attention + FFN + 2 LayerNorms (128 each) | 33,280 |
+| one decoder layer: 2 attention blocks + FFN + 3 LayerNorms | 49,856 |
+| both embedding tables: (13 + 32) × 64 | 2,880 |
+| output layer: 64 × 32 + 32 | 2,080 |
+| **total: 2 encoder + 2 decoder layers + embeddings + output** | **171,232** |
+
+The position numbers are added, not learned, so they have no parameters.
+The number of heads does not appear anywhere in this table. It only decides how the 64 columns are cut into slices,
+so 8 heads instead of 4 still give 171,232.
+The encoder and the decoder have 2 layers each here, but the two numbers are independent and can differ.
+There are two embedding tables: one for the 13 source tokens (digits and 3 special tokens) and one for the 32 target words.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="dec-extra">
+
+## 3. Under the microscope
+
+Below, a tiny copy of this model (1 layer, 1 head, `d_model` = 6, `d_ff` = 12) reads “89” and writes the next word.
+All the sizes are different, so each axis can be recognized by its size. Each step shows the tensor’s
+shape with named axes, its numbers, and the shape of the same tensor in the full model on this page.
+
+<MicroscopeLab data="encoder-decoder" />
+
+Here is the encoder layer of the same tiny model as a picture, with the numbers from the microscope. The line
+under the blocks is the residual path. In this 2017 layer, a LayerNorm follows each add.
+
+<ArchLab which="encdec" />
+
+<Stuck q="Why is the embedding multiplied by a factor before the position is added?">
+
+Look at steps 3 and 4 in the microscope. Every position number is between −1 and 1. The factor decides how strong
+the token is compared with its position.
+
+This model’s token tables start with numbers of size about 1/√d<sub>model</sub>, as in level 17. Multiplying by
+√d<sub>model</sub> makes them about size 1, the same as the position numbers. So neither one is much bigger than the
+other. With `d_model` = 64, the factor is √64 = 8. As in level 17, a token’s row is then about 8 long, and a position’s
+row about 5.7.
+
+The 2017 design is usually explained the same way. There, the output layer shares its weights with the embedding table.
+That is one reason for a table with small numbers.
+
+It matters. Suppose the table starts at size 1 instead. A token’s row is then about 64 long, 11 times longer than its
+position’s row, as in level 17. Here is the fraction of unseen numbers each model gets right:
+
+- level 17’s one-stack model, after 60 epochs: 55% to 79% with the size-1 table, 99% to 100% with the small table;
+- this two-stack model, after 20 epochs: 71% with the size-1 table, 98% with the small table;
+- this two-stack model, after 60 epochs: 99% with the size-1 table, 100% with the small table.
+
+So with the size-1 table, this model needs more epochs to reach the same result.
+
+</Stuck>
+
+With several heads, attention scores have the shape `(B, h, L_q, L_k)`: batch, heads, then the length of Q and the length of K.
+
+<Blank id="cross-shape" />
+
+</Gate>
+
+<Gate requires="cross-shape">
+
+## 4. One word at a time, with a source
+
+The decoder writes the way level 17’s model does: run, take the last row, pick the top word, append it, run again.
+One thing is new. Level 17’s model starts from the digits and `=`, which are already in its sequence. This decoder’s
+input holds only words, so it starts from the start token `<bos>`. The digits reach it only through
+cross-attention, and the encoder reads them once, before the first word.
+
+Press **Next step** and watch each stage. The bars under the digits show which digit cross-attention looked at for each word.
+
+<DecodeLab data="encoder-decoder" />
+
+<Blank id="step-rows" />
+
+<Gate requires="step-rows">
+
+<Blank id="cross-cache" />
+
+<Gate requires="cross-cache">
+
+This decoder uses two caches. The cross-attention cache holds memory’s keys and values: one row per source token,
+made once. The self-attention cache gets one new row at every step. [Level 20](/learn/inference-cost/) counts what such
+a cache costs in memory and time.
+
+</Gate>
+
+</Gate>
+
+<TryIt>
+
+Switch the model to **after 2 epochs** and read 896 aloud. It says “six hundred eighty”.
+It has learned the shape of an answer (a digit, “hundred”, a tens word) but not which digit goes where.
+Look at the cross-attention bars. They are spread out, almost even.
+
+Then switch back to **after 60 epochs** and read 896 again. Now each word looks at its own digit: “eight” puts all its
+weight on the 8, and “six” puts 0.92 on the 6. The trained model gets all 100 unseen numbers right.
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="step-rows">
+
+## 5. Three attentions, three masks
+
+In training, the decoder gets the whole correct answer at once, shifted by one:
+
+```
+427:    tgt_in   <bos>  four     hundred  twenty  seven
+        tgt_out  four   hundred  twenty   seven   <eos>
+```
+
+<Stuck q="Why are the decoder’s input and its targets the same words, shifted by one?">
+
+Because position t has to guess the next word. Write them one under the other: under `<bos>` the answer is “four”;
+under “four” the answer is “hundred”. `tgt_out` is `tgt_in` moved one step to the left,
+with `<eos>` at the end. Level 17 does the same shift on its one sequence; here the shift only covers the words.
+
+</Stuck>
+
+The model uses three attentions, and each one has its own mask. A mask always has the shape of the scores it blocks,
+(length of Q, length of K). `L_src` is the source length and `L_tgt` the decoder input length, `<bos>` included.
+Every head uses the same mask:
+
+| attention | Q from | K and V from | mask |
+|---|---|---|---|
+| encoder <span class="vec-nw">self-attention</span> | the digits | the digits | blocks PAD digits only |
+| decoder <span class="vec-nw">self-attention</span> | `tgt_in` | `tgt_in` | causal, and blocks PAD words |
+| <span class="vec-nw">cross-attention</span> | `tgt_in` | memory | blocks PAD digits only |
+
+Their scores have these shapes:
+
+- encoder self-attention: `(B, h, L_src, L_src)`;
+- decoder self-attention: `(B, h, L_tgt, L_tgt)`;
+- cross-attention: `(B, h, L_tgt, L_src)`.
+
+Here are the three masks for one short example, side by side. Rows are the tokens that Q comes from; columns are the
+tokens that K comes from.
+
+<ThreeMasks />
+
+<Blank id="mask-6" />
+
+<Gate requires="mask-6">
+
+<Stuck q="Which length decides the size of the causal mask?">
+
+The causal mask is used only in the decoder’s self-attention, where both Q and K come from the decoder input:
+`<bos>` plus the 5 target words, 6 tokens. The source length never enters a causal mask.
+
+</Stuck>
+
+</Gate>
+
+<Stuck q="Why don’t the encoder and cross-attention use a causal mask?">
+
+The causal mask stops a position from seeing the word it has to guess. Only the decoder guesses words, and only the
+decoder’s own input contains them. The digits are the question, not the answer: every word may read the whole number,
+and every digit may read every other digit.
+
+</Stuck>
+
+<Blank id="decoder-mask-count" />
+
+<Gate requires="decoder-mask-count">
+
+Now build all three masks for one example. True means blocked, as in level 15. Level 15’s padding mask had one entry per
+column; to give it the shape of the scores, stretch that row over every query row. `np.broadcast_to(row, (n, len(row)))`
+does it: `np.broadcast_to(np.array([False, True]), (3, 2))` is a (3, 2) table whose three rows are all `[False, True]`.
+`|` combines two True/False tables cell by cell: a cell is True if either one is True. For the causal part, recall
+level 15’s `np.triu`.
+
+<CodeBlank id="three-masks" />
+
+<Gate requires="three-masks">
+
+Now use the cross mask inside cross-attention. Write one head, with the PAD source tokens blocked.
+
+<CodeBlank id="cross-attn-code" />
+
+</Gate>
+
+<Deeper title="Label smoothing, and why the loss never reaches 0">
+
+This model uses `label_smoothing=0.1`, as the 2017 design did. The target for each position is not “100% the right
+word”, but “90% the right word, and the remaining 10% spread over all 32 words”. It stops the model from becoming
+completely certain, which tends to help it on unseen inputs.
+
+Because of this, even a perfect model can’t reach a loss of 0. The lowest possible loss is the entropy of the
+smoothed target. The right word gets 0.9 + 0.1 / 32 = 0.903125, and each of the other 31 words gets
+0.1 / 32 = 0.003125. So the lowest loss is −(0.903125 ln 0.903125 + 31 × 0.003125 ln 0.003125) ≈ 0.651. This run ends at a loss of 0.652, only 0.001 above it, while
+getting 100% of the unseen numbers right. Unseen accuracy over the run: 0% after epoch 1, 89% after 10, 98% after 20,
+98% after 40, 100% after 60.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="three-masks">
+
+## 6. Reading the original 2017 design
+
+You now know every part of the original 2017 Transformer. Its diagram and its text use these names.
+The right column says where this course teaches each one. You may not have done some of those levels yet.
+
+| name in the 2017 design | what it is | where this course teaches it |
+|---|---|---|
+| Input Embedding, Output Embedding | the token tables: one for the source, one for the target | [level 13](/learn/vectors/#1-the-embedding-table); [section 2](#2-the-whole-machine) |
+| multiply the embeddings by √d<sub>model</sub> | scale the token before the position is added | [level 16, section 1](/learn/transformer-parts/#1-positional-encoding-attention-cant-see-order); [section 3](#3-under-the-microscope) |
+| Positional Encoding (sine and cosine) | a fixed table of position numbers, added to the tokens | [level 16, section 1](/learn/transformer-parts/#1-positional-encoding-attention-cant-see-order) |
+| Scaled Dot-Product Attention | softmax(Q Kᵀ / √dₖ) V | [level 14](/learn/attention/) |
+| Multi-Head Attention, h = 8 | the attention split into 8 heads, then joined with W<sub>O</sub> | [level 15, section 2](/learn/masks-and-heads/#2-many-heads); [level 21](/learn/write-a-gpt/) |
+| Masked Multi-Head Attention | the decoder’s self-attention with the causal mask | [level 15, section 1](/learn/masks-and-heads/#1-masks-who-is-not-allowed-to-look); [level 17](/learn/full-model/) |
+| encoder–decoder attention | cross-attention: Q from the decoder, K and V from the encoder output | [section 1](#1-two-stacks) |
+| Add & Norm | residual, then LayerNorm (post-norm) | [level 16, section 3](/learn/transformer-parts/#3-residuals-and-layernorm-keeping-deep-stacks-stable); [level 19](/learn/modern-llm/) |
+| Position-wise Feed-Forward Networks | the FFN, applied to each position separately | [level 16, section 2](/learn/transformer-parts/#2-the-feed-forward-network-each-word-is-processed-separately) |
+| N× (N = 6) | the number of stacked layers in the encoder and in the decoder | [level 17](/learn/full-model/); [section 2](#2-the-whole-machine) |
+| Outputs (shifted right) | the decoder input `tgt_in`: the target moved one step right, starting with `<bos>` | [section 5](#5-three-attentions-three-masks) |
+| Linear, Softmax | the output layer and the probabilities over the vocabulary | [level 17](/learn/full-model/) |
+| shared embedding and output weights | the output layer reuses the embedding table (this course doesn’t) | [section 3](#3-under-the-microscope) |
+| label smoothing, 0.1 | 90% on the right token, 10% spread over all tokens | [section 5](#5-three-attentions-three-masks) |
+| warmup, then a decaying learning rate | the learning-rate schedule | [level 7, section 4](/learn/optimization/#4-learning-rate-schedules) |
+| dropout, 0.1 | set some numbers to 0 at random while training | [level 8, section 2](/learn/generalization/#2-regularization) |
+| beam search, width 4 | keep the 4 best partial answers | [level 18, section 4](/learn/generation/#4-beam-search-the-best-word-is-not-always-the-best-start) |
+
+The original sizes: `d_model` = 512, h = 8 heads, so dₖ = 512 / 8 = 64; `d_ff` = 2048 = 4 × `d_model`; 6 layers on each side.
+
+Today’s chat models keep only the decoder stack, as level 17 does: the “source” is simply the start of the sequence.
+The encoder–decoder design is still used where the input and the output are clearly two different things, for example
+translation or speech to text.
+
+</Gate>

@@ -1,0 +1,6 @@
+---
+import Lab from './AttnStepLab.svelte'
+interface Props { hide?: { score?: string; weight?: string; ctx?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

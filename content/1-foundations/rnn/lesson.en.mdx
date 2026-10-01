@@ -1,0 +1,176 @@
+---
+title: Recurrent networks
+level: "N3"
+order: 10.3
+part: foundations
+branch: classic
+question: How can a network read a sequence one step at a time?
+run: browser
+checkpoint: rnn-all
+testOut: [h1, h2, weights, rnn-all]
+recap:
+  can:
+    - "Run an RNN by hand: mix the input and the old hidden state, then take tanh."
+    - "Explain why the gradient vanishes or explodes over many steps: it is a product of one factor per step."  # en-ok: explod
+    - "Write an RNN loop in NumPy that keeps every hidden state, shape (L, H)."
+  keys:
+    - "$h_t = \\tanh(x_t \\, W_x + h_{t-1} \\, W_h + b)$, with $W_x$ (D, H), $W_h$ (H, H), b (H,)"
+    - "Every step uses the same $W_x$, $W_h$ and $b$: the number of weights does not depend on the length"
+    - "One step back multiplies the gradient by $w_h (1 - h^2)$; many such factors shrink to 0 or grow very large"
+  mistakes:
+    - "Counting new weights for every step: the steps share one set of weights."
+    - "Adding the factors instead of multiplying them: 29 factors of 1.5 give about 128,000, not 45."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import RnnStepLab from '@viz/RnnStepLab.astro'
+import RnnGradLab from '@viz/RnnGradLab.astro'
+import MemoryLab from '@viz/MemoryLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+An MLP takes a fixed number of inputs. A sentence does not have a fixed length, and the order of its words matters.
+A **recurrent network** (RNN) reads a sequence one item at a time. It carries a short list of numbers, the **hidden state** h, from one step to the next.
+The hidden state is how the network remembers what it has read so far.
+
+## 1. One step at a time
+
+At every step the network mixes the new input with the hidden state, then passes the result through tanh, which keeps it between −1 and 1:
+
+$$
+h_t = \tanh(w_x \, x_t + w_h \, h_{t-1} + b)
+$$
+
+Below, the hidden state is a single number. The sequence is 1, 0, 0, 0, and h starts at 0. Press **Next step** to run it.
+
+<RnnStepLab hide={[{ id: "h1", t: 1 }, { id: "h2", t: 2 }]} />
+
+<Blank id="h1" />
+
+<Gate requires="h1">
+
+Starting at step 2, the input is 0. The only thing that carries the 1 forward is $w_h \, h_{t-1}$.
+
+<Blank id="h2" />
+
+<Gate requires="h2">
+
+Each step keeps about half of what was there, so the 1 from step 1 gets smaller and smaller: 0.76, 0.36, 0.18, 0.09.
+
+<Blank id="weights" />
+
+<Stuck q="Is there a separate network for every step?">
+
+No. Drawings often show the network copied once per step, side by side. That drawing is called **unrolling**,
+and it helps to see the flow. But every copy uses the same $w_x$, $w_h$ and $b$. A sequence of 4 steps and a sequence of 4,000 steps
+use the same 3 weights in this lab. With vectors, it is the same 3 matrices.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 2. Training through time
+
+<Gate requires="weights">
+
+To train the network, the loss at the last step has to tell step 1 what to change. Backpropagation walks back through the unrolled steps.
+At every step it multiplies by the same kind of factor: $w_h$ times the slope of tanh there, which is $1 - h^2$.
+
+$$
+\frac{\partial h_4}{\partial h_1} = \big(w_h (1 - h_2^2)\big)\big(w_h (1 - h_3^2)\big)\big(w_h (1 - h_4^2)\big)
+$$
+
+<Predict id="grad-4" />
+
+The next question leaves tanh out, so every factor is just $w_h$.
+
+<Predict id="explode" />
+
+<RnnGradLab />
+
+Each factor is $w_h$ times a tanh slope, and the slope $1 - h^2$ is always between 0 and 1.
+
+- If $|w_h|$ is below 1, every factor is below 1, and a long product shrinks toward 0.
+  This is the **vanishing gradient**: the first steps get almost no training signal.
+- If $|w_h|$ is well above 1, a factor can stay above 1 and the product grows very large: an **exploding gradient**.
+  tanh does not prevent that. It only helps where h is near ±1, because there the slope is close to 0.
+
+Either way, a product of many factors almost never stays near 1. The `explode` question above left tanh out to make the
+arithmetic easy, but the gradient grows the same way with tanh whenever $w_h (1 - h^2)$ stays above 1.
+
+<Deeper title="An exploding gradient is easy to fix, a vanishing one is not">
+
+For an exploding gradient there is a simple fix: if its length is above some limit, scale it down to the limit.
+That is **gradient clipping**, and [`demo.py`](/files/rnn/demo.py) uses it (`clip_grad_norm_(…, 1.0)`).
+
+A vanishing gradient has no such fix. Making a number like 1e-9 bigger also makes the noise from every other step.
+The information about step 1 is simply lost on the way back. The fix has to change the network itself. That is level N4.
+
+</Deeper>
+
+Here is the same chain drawn as a network: the sequence 1, 0, 0, 0 with $w_x = 1$, $w_h = 0.5$, $b = 0$, as in the lab of section 1.
+
+<ArchLab which="rnn" />
+
+</Gate>
+
+## 3. Remember the first symbol
+
+<Gate requires="explode">
+
+Here is a task where the network must remember. A sequence starts with A or B, then k − 1 random extra symbols (c, d or e).
+At the end the network must say which symbol came first. Guessing gives 50%.
+
+<Predict id="k40" />
+
+<MemoryLab kinds={["rnn"]} />
+
+Up to k = 20, the RNN learns the task perfectly. At k = 40 it stays at guessing, even though the rule is just as simple.
+
+<Stuck q="Why not train longer, or with a bigger learning rate?">
+
+The training signal that should reach step 1 is a product of 39 factors, each well below 1. It is far smaller than the
+noise coming from the random symbols near the end. More steps or a bigger learning rate amplify that noise just as much.
+The network never “hears” that step 1 mattered.
+
+</Stuck>
+
+<TryIt>
+
+In the step lab, set $w_h$ to 1 and run all 4 steps. The 1 now shrinks much more slowly. Then set $w_h$ to −1. What happens to the sign of h at each step?
+
+</TryIt>
+
+## 4. Write it yourself
+
+With vectors, x is a list of D numbers and h is a list of H numbers. As in every level since level 1, vectors are rows
+and a layer is “row @ matrix”:
+
+$$
+h_t = \tanh(x_t \, W_x + h_{t-1} \, W_h + b)
+$$
+
+So $W_x$ is (D, H): it turns D input numbers into H. $W_h$ is (H, H), and b has H numbers. In code that is
+`x @ Wx + h @ Wh + b`. With a one-number hidden state, $x_t W_x$ is just $w_x x_t$, the formula from section 1.
+
+Write the one line inside the loop.
+
+<CodeBlank id="rnn-step" />
+
+<Gate requires="rnn-step">
+
+`rnn` keeps only the last h. Often you need the hidden state after every step, for example to read the whole sequence again
+later (level N5 does that). Collect them in a list: start with `hs = []`, and after each update call `hs.append(h)`.
+At the end, `np.stack(hs)` turns a list of L rows of H numbers into one array of shape (L, H).
+
+<CodeBlank id="rnn-all" />
+
+</Gate>
+
+</Gate>

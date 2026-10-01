@@ -1,0 +1,776 @@
+# Glossary: one entry per core term in the course.
+#   term     how the term is written in the lessons
+#   aliases  other spellings that should also be recognized in lesson text (plurals are matched automatically)
+#   def      one or two plain sentences for a beginner
+#   level    slug of the level that teaches it
+#   mark     false = list it on the glossary page and in search, but don't underline it in lessons
+#            (for everyday words like “value” that mean something else on many pages)
+#   only     list of level slugs: underline the term only on those pages (for a word like “code” that means
+#            something else on every other page)
+#   senses   the term's other meaning(s), for a word that is also an everyday word or means something else
+#            elsewhere in the course. scripts/check_english.py then lists the line that gets the card on every
+#            page, so a card with the wrong meaning is caught (fix with glossarySkip or a reworded line).
+# Lesson pages underline the first use of each term and show `def` in a small card.
+
+- term: matrix
+  aliases: [matrices]
+  def: "A table of numbers with rows and columns. Almost every step inside a neural network is a matrix multiplication."
+  level: matrices
+- term: shape
+  senses: "the form of a curve, a surface or a sentence"
+  def: "The size of an array along each axis, written like (3, 4) for 3 rows and 4 columns. Most bugs in model code are shapes that don’t line up."
+  level: matrices
+- term: matrix multiplication
+  aliases: [matmul]
+  def: "Each cell of the result is a row of the left matrix times a column of the right one, multiplied number by number and added up. (n, k) @ (k, m) gives (n, m)."
+  level: matrices
+- term: transpose
+  def: "Flipping a matrix so its rows become columns. A (3, 2) matrix becomes (2, 3); in code it is written `X.T`."
+  level: matrices
+- term: broadcasting
+  def: "The rule that lets arrays of different shapes be added or multiplied by stretching size-1 axes to match. A (4, 1) column plus a (1, 5) row gives a (4, 5) table."
+  level: matrices
+- term: batch
+  senses: "any group of things"
+  aliases: [mini-batch]
+  def: "Several examples processed together in one step, stacked along an extra first axis. A batch of 32 sentences of 10 tokens is a (32, 10, …) tensor."
+  level: matrices
+- term: loss
+  def: "One number that says how wrong the model is on the data. Training means making this number smaller."
+  level: gradient-descent
+- term: gradient
+  def: "The list of slopes of the loss, one per parameter. It points in the direction where the loss grows fastest, so training steps the other way."
+  level: gradient-descent
+- term: gradient descent
+  def: "Repeatedly changing every parameter a small step against its gradient, so the loss goes down."
+  level: gradient-descent
+- term: learning rate
+  def: "How big each gradient-descent step is. Too small and training is very slow; too big and the loss goes up and down from step to step, or grows very large."
+  level: gradient-descent
+- term: neuron
+  def: "The basic unit of a network. It takes a weighted sum of its inputs, adds a bias, and passes the result through an activation function."
+  level: neurons-and-loss
+- term: weight
+  mark: false
+  def: "A number the network learns that says how strongly one input counts. Weights and biases together are the network’s parameters."
+  level: neurons-and-loss
+- term: bias
+  senses: "the exponent bias of a float; a tendency or preference"
+  def: "A learned number added after the weighted sum. It moves the point where a neuron starts to give a nonzero output."
+  level: neurons-and-loss
+- term: activation function
+  senses: "activations = the values computed inside the network (that card is “activation”)"
+  aliases: [activation]
+  def: "A simple non-linear (curved) function applied after each weighted sum. Without it, stacked layers would become one linear layer."
+  level: activations
+- term: sigmoid
+  def: "An activation that squeezes any number into the range 0 to 1, along an S-shaped curve. σ(0) = 0.5."
+  level: neurons-and-loss
+- term: decision boundary
+  def: "The line where a classifier switches from one answer to the other. For one neuron it is the straight line where z = 0."
+  level: neurons-and-loss
+- term: binary cross-entropy
+  def: "The loss for a yes/no answer: −ln p when the target is 1 and −ln(1 − p) when it is 0, averaged over the examples."
+  level: neurons-and-loss
+- term: tanh
+  def: "An S-shaped activation like sigmoid, but centered on 0, with outputs between −1 and 1."
+  level: activations
+- term: ReLU
+  def: "The activation max(0, x). It passes positive numbers through and turns negative numbers into 0."
+  level: activations
+- term: layer
+  def: "Several neurons side by side that all read the same inputs. A layer turns a (batch, n_in) array into a (batch, n_out) array."
+  level: activations
+- term: slope
+  def: "How fast a function's output changes when its input grows a little: the output change divided by the input change. Training is driven by slopes."
+  level: activations
+- term: saturation
+  def: "When a sigmoid or tanh input is far from 0, the curve is almost flat there, so its slope is nearly 0 and almost no gradient passes back."
+  level: activations
+- term: dead ReLU
+  def: "A ReLU neuron whose input is below 0 for every example. Its output and its slope are always 0, so its weights stop learning."
+  level: activations
+- term: GELU
+  def: "A smooth version of ReLU that lets small negative values through a little. Most modern language models use it or a similar function."
+  level: activations
+- term: vanishing gradient
+  aliases: [vanishing gradients]
+  def: "Gradients that shrink layer after layer (or step after step) until the early parts of a network barely learn."
+  level: activations
+- term: MLP
+  aliases: [multilayer perceptron]
+  def: "A network made of layers of neurons, each layer a matrix multiplication followed by an activation function."
+  level: mlp
+- term: hidden layer
+  def: "A layer between the input and the output. Its numbers are not given by the data; the network learns what they should mean."
+  level: mlp
+- term: hidden unit
+  def: "One neuron in a hidden layer, and the one number it outputs. A hidden layer with 8 hidden units outputs 8 numbers."
+  level: mlp
+- term: parameter
+  senses: "a setting of a function or a lab (a slider, an argument)"
+  def: "Any number the model learns during training, such as a weight or a bias. Model size is usually counted in parameters."
+  level: mlp
+- term: backpropagation
+  aliases: [backprop, backward pass]
+  def: "The way to compute every gradient in a network: start at the loss and go backward layer by layer, multiplying local slopes with the chain rule."
+  level: backprop
+- term: chain rule
+  def: "To find how the loss changes with an early number, multiply the rates of change along the way from that number to the loss."
+  level: backprop
+- term: gradient check
+  def: "Testing a computed gradient by changing one input a tiny bit and measuring how much the loss moves. The two numbers should match."
+  level: backprop
+- term: forward pass
+  def: "Running the inputs through the network from start to end to get the output and the loss."
+  level: backprop
+- term: autograd
+  def: "Code that records every operation in the forward pass and then computes all the gradients automatically by walking that record backward."
+  level: autograd
+- term: computation graph
+  def: "The record of which numbers were combined into which, drawn as nodes and arrows. Backpropagation walks it in reverse."
+  level: autograd
+- term: optimizer
+  def: "The rule that turns gradients into parameter updates. Plain gradient descent, momentum and Adam are all optimizers."
+  level: optimization
+- term: momentum
+  senses: "the physics quantity mass × velocity; speed in everyday talk"
+  def: "An optimizer trick that keeps a running average of past gradients, so steps get faster where the slope keeps the same direction and stop going back and forth."
+  level: optimization
+- term: Adam
+  def: "The most common optimizer. It combines momentum with a step size per parameter that adapts to how big that parameter’s gradients have been."
+  level: optimization
+- term: running average
+  def: "An average that is updated at every step: keep most of the old value and add a little of the newest value. Adam keeps two of them."
+  level: optimization
+- term: fan-in
+  def: "The number of inputs that feed one neuron (n). Good starting weights are scaled by it, for example std √(2/n) for ReLU."
+  level: optimization
+- term: initialization
+  def: "How the weights are set before training starts. Too large and the layer outputs grow very large through the layers; too small and they shrink toward 0."
+  level: optimization
+- term: learning-rate schedule
+  def: "A rule that changes the learning rate during training, usually rising for a short warmup and then falling slowly toward 0."
+  level: optimization
+- term: warmup
+  def: "The first part of a learning-rate schedule: start with a tiny learning rate and raise it over the first few hundred steps."
+  level: optimization
+- term: learning-rate decay
+  aliases: [decay]
+  only: [optimization]
+  def: "Lowering the learning rate as training goes on, so the noisy mini-batch steps end close to the lowest point."
+  level: optimization
+- term: overfitting
+  def: "When a model memorizes its training examples instead of learning the pattern, so it does well on them and badly on new data. Overfitting one small batch on purpose is a different thing: a quick test that the training code works (level U5)."
+  level: generalization
+- term: generalization
+  def: "How well a model works on new data it has never seen, not only on the examples it trained on."
+  level: generalization
+- term: regularization
+  def: "Any method that stops a model from memorizing the noise in its training data, such as weight decay or dropout."
+  level: generalization
+- term: held-out set
+  aliases: [held-out data, validation set, test set]
+  def: "Examples held out and never trained on, used only to measure how well the model works on data it has not seen."
+  level: generalization
+- term: weight decay
+  def: "At each step, every weight is made a little smaller, closer to 0. It discourages extreme weights and helps against overfitting."
+  level: generalization
+- term: AdamW
+  def: "Adam with weight decay done separately: instead of adding the decay to the loss, it shrinks every weight directly after each step."
+  level: generalization
+- term: dropout
+  aliases: [inverted dropout]
+  def: "During training, setting some units to 0 at random on each step, so the network can’t rely on any single one. The kept units are divided by 1 − p (inverted dropout), so nothing changes at test time."
+  level: generalization
+- term: early stopping
+  def: "Stopping training when the loss on held-out data stops improving, even if the training loss is still going down."
+  level: generalization
+- term: capacity
+  senses: "how much something holds (memory, a buffer)"
+  def: "How complicated a pattern a model can fit. More parameters give more capacity; too much capacity for the data leads to overfitting."
+  level: generalization
+- term: tensor
+  def: "An array with any number of axes. A number, a list, a table and a stack of tables are all tensors; PyTorch’s main data type is the tensor."
+  level: numpy-to-pytorch
+- term: softmax
+  def: "Turns a list of scores into probabilities that are all positive and add up to 1. A bigger score gets a bigger probability."
+  level: probability
+- term: temperature
+  senses: "heat"
+  def: "A number the scores are divided by before softmax. Low temperature makes the top choice dominate; high temperature makes the probabilities more even."
+  level: probability
+- term: cross-entropy
+  def: "The usual loss for picking one right answer among many. It is −log of the probability the model gave to the correct answer."
+  level: probability
+- term: entropy
+  def: "How uncertain a probability distribution is, measured as the average surprise of its outcomes."
+  level: probability
+- term: perplexity
+  def: "e to the power of the average cross-entropy. A perplexity of 4 means the model is as unsure as if it were choosing among 4 equally likely words."
+  level: probability
+- term: nat
+  only: [probability]
+  def: "The unit of surprise when you use the natural log ln. 1 nat is the surprise of an event with probability 1/e."
+  level: probability
+- term: bit
+  only: [probability]
+  senses: "the unit of surprise with log₂, not a binary digit (0 or 1) of a stored number"
+  def: "Here: the unit of surprise when you use log₂. 1 bit is the surprise of an event with probability 1/2."
+  level: probability
+- term: geometric mean
+  def: "The n-th root of the product of n numbers. The geometric mean of 2 and 8 is √(2 · 8) = 4."
+  level: probability
+- term: Gaussian
+  aliases: [Gaussian noise, normal distribution]
+  def: "The bell-shaped distribution. Gaussian noise means random numbers that are usually near the mean and rarely far from it."
+  level: probability
+- term: language model
+  def: "A model that gives a probability to every possible next token, given the tokens so far. Writing text means picking a token and repeating."
+  level: language-models
+- term: bigram
+  def: "A pair of neighboring words. A bigram model predicts the next word from the current word alone, using counts."
+  level: language-models
+- term: token
+  senses: "a coin or ticket"
+  def: "One piece of text the model reads or writes: a character, a word, or a word fragment, depending on the tokenizer. In image models, one patch of a picture."
+  level: tokenization
+- term: tokenizer
+  def: "The rule that cuts text into tokens and maps each token to an id number."
+  level: tokenization
+- term: vocabulary
+  def: "The full list of tokens a model knows. Each one has an id, and the model’s output has one score per vocabulary entry."
+  level: tokenization
+- term: id
+  aliases: [token id]
+  only: [tokenization]
+  def: "The number that stands for one token: 0 up to the vocabulary size minus one."
+  level: tokenization
+- term: context window
+  def: "The largest number of tokens the model can read at once."
+  level: tokenization
+- term: BPE
+  aliases: [byte-pair encoding]
+  def: "A tokenizer that starts from characters and repeatedly merges the most frequent neighboring pair into a new token."
+  level: tokenization
+- term: embedding
+  def: "The list of numbers that stands for a token. The embedding table has one learned row per vocabulary entry."
+  level: vectors
+- term: one-hot
+  def: "A vector that is all zeros except a single 1 at a token’s id. Multiplying it by the embedding table gives exactly that token’s row."
+  level: vectors
+- term: dot product
+  def: "Multiply two vectors number by number and add up. It is large when the vectors point the same way, near 0 when they are unrelated."
+  level: vectors
+- term: attention
+  senses: "paying attention (everyday sense)"
+  aliases: [self-attention]
+  def: "Each token builds a new vector as a weighted average of all the tokens it may look at, with weights the model computes from their similarity."
+  level: attention
+- term: query
+  senses: "a database query; a question"
+  aliases: [queries]
+  def: "In attention, the vector a token uses to ask “what am I looking for?” Scores are queries dotted with keys."
+  level: attention
+- term: key
+  mark: false
+  aliases: [keys]
+  def: "In attention, the vector that other words compare their query against. A query matches keys that point the same way."
+  level: attention
+- term: value
+  mark: false
+  aliases: [values]
+  def: "In attention, what a token gives to the tokens that look at it. The output is a weighted average of values."
+  level: attention
+- term: mask
+  senses: "a face cover"
+  def: "A table that blocks some attention scores before softmax, for example so a token can’t look at tokens that come after it, or at padding."
+  level: masks-and-heads
+- term: multi-head attention
+  senses: "head = the top or start of something"
+  aliases: [head, heads, attention head]
+  def: "Running several smaller attentions side by side, each with its own Q, K and V, then joining their outputs. Each head can track a different relation."
+  level: masks-and-heads
+- term: concat
+  def: "Short for concatenate: placing arrays next to each other along one axis. Concat of the heads' outputs gives one wider table."
+  level: masks-and-heads
+- term: positional encoding
+  def: "Numbers added to each token’s embedding that say where it is in the sequence. Attention alone does not know the word order."
+  level: transformer-parts
+- term: feed-forward network
+  aliases: [FFN, position-wise feed-forward network]
+  def: "The small MLP applied to every token separately, after attention, inside each Transformer layer. Because it works on each position separately, it is also called position-wise."
+  level: transformer-parts
+- term: residual connection
+  senses: "residual = what is left over (a remainder, an error)"
+  aliases: [residual, residuals]
+  def: "Adding a layer’s input back to its output, so each layer only has to learn a change, and the values and the gradients pass easily through deep stacks."
+  level: transformer-parts
+- term: LayerNorm
+  def: "Rescaling each token’s vector to mean 0 and std 1, then applying a learned gain and shift (γ and β). It keeps numbers in a stable range."
+  level: transformer-parts
+- term: encoder
+  senses: "an autoencoder's encoder (the same word, a different model)"
+  def: "The part of the original two-stack Transformer that reads the whole source sentence at once and produces its vectors (the memory)."
+  level: encoder-decoder
+- term: decoder
+  senses: "an autoencoder's decoder (the same word, a different model)"
+  def: "A stack of blocks with masked self-attention that writes the output one token at a time, looking only at tokens already written. In the original two-stack design it also reads the encoder’s memory."
+  level: transformer-parts
+- term: cross-attention
+  def: "Attention where the queries come from one sequence and the keys and values from another, such as the decoder reading the encoder’s memory."
+  level: encoder-decoder
+- term: start token
+  aliases: ["<bos>"]
+  def: "A special token, written <bos> (“beginning of sequence”), that starts a sequence. It gives the model a first input before any word is written. Used in level N7 and level 21."
+  level: encoder-decoder
+- term: end token
+  aliases: ["<eos>"]
+  def: "A special token, written <eos> (“end of sequence”), that ends a sequence. The model writes it when its answer is complete, so generation knows when to stop. Used in level N7 and level 21."
+  level: write-a-gpt
+- term: logits
+  def: "The raw scores the model gives each vocabulary token before softmax. Larger means more likely."
+  level: full-model
+- term: greedy decoding
+  senses: "greedy = wanting too much"
+  aliases: [greedy]
+  def: "Generating text by always taking the single most likely next token."
+  level: full-model
+- term: label smoothing
+  def: "Training with a target that gives the right token slightly less than 100% and spreads the rest over other tokens, so the model doesn’t become too certain."
+  level: encoder-decoder
+- term: beam search
+  def: "Keeping the few best partial sentences at each step instead of just one, and finally choosing the sequence with the best total score."
+  level: generation
+- term: top-k
+  def: "A sampling rule that keeps only the k most likely tokens and picks among them."
+  level: generation
+- term: top-p
+  aliases: [nucleus sampling]
+  def: "A sampling rule that keeps the most likely tokens until their probabilities add up to p, and picks among those."
+  level: generation
+- term: repetition penalty
+  def: "Lowering the scores of tokens that were already used, so generation doesn’t repeat the same words again and again."
+  level: generation
+- term: decoder-only
+  def: "A Transformer with only the decoder stack and masked self-attention. Today’s large language models are built this way."
+  level: full-model
+- term: decoder block
+  aliases: [decoder blocks]
+  def: "Masked self-attention, then the FFN, each with its own residual and LayerNorm. A decoder-only model is a stack of these blocks."
+  level: transformer-parts
+- term: prompt
+  senses: "the question text of an exercise"
+  def: "The tokens you give the model at the start. The model continues them one token at a time, and the tokens it writes are the answer."
+  level: full-model
+- term: pre-norm
+  def: "Putting the normalization before each sublayer instead of after it, so nothing rescales the residual path and deep stacks train reliably."
+  level: transformer-parts
+- term: post-norm
+  def: "The 2017 order: add the sublayer's output to x, then normalize, LayerNorm(x + f(x)). Deep post-norm stacks need a long warmup to train."
+  level: modern-llm
+- term: residual path
+  aliases: [residual stream]
+  def: "The plain x that goes directly from the input to the output of the stack. Each layer beside it (in a Transformer, each sublayer) reads x and adds its output to x: x + f(x). Gradients go back along this path without being made smaller."
+  level: transformer-parts
+- term: RMSNorm
+  def: "A simpler LayerNorm that only divides by the root-mean-square of the vector and skips subtracting the mean."
+  level: modern-llm
+- term: RoPE
+  aliases: [rotary position embedding]
+  def: "Encoding position by rotating pairs of numbers in the queries and keys, so attention scores depend on how far apart two tokens are."
+  level: modern-llm
+- term: SwiGLU
+  def: "A feed-forward network with a gate: one matrix product of x (the gate, after SiLU) decides how much of another matrix product (the value) passes."
+  level: modern-llm
+- term: SiLU
+  def: "The activation z · sigmoid(z). It looks like ReLU but is smooth and has a small dip below 0."
+  level: modern-llm
+- term: FLOPs
+  def: "Floating-point operations: the number of multiplications and additions a computation needs. A way to count how much arithmetic a model needs."
+  level: inference-cost
+- term: memory bandwidth
+  aliases: [bandwidth]
+  def: "How many bytes per second a GPU can read from its memory. When a model writes one token at a time, every weight is read once per token, so the bandwidth often limits the speed more than the arithmetic does."
+  level: inference-cost
+- term: GQA
+  aliases: [grouped-query attention]
+  def: "Attention where several query heads share one key head and one value head, which saves GPU memory when generating."
+  level: inference-cost
+- term: GPT
+  def: "A decoder-only Transformer trained to predict the next token. Level 21 builds a tiny one that learns two-digit addition."
+  level: write-a-gpt
+- term: convolution
+  def: "Sliding a small filter over a picture and taking a dot product at each position, so the same pattern can be found anywhere."
+  level: convolutions
+- term: filter
+  mark: false
+  aliases: [kernel]
+  def: "The small grid of learned weights a convolution slides over the input, such as a 3×3 edge detector."
+  level: convolutions
+- term: weight sharing
+  def: "Using the same weights at many positions. A convolution uses the same 9 filter weights at every position of the picture."
+  level: convolutions
+- term: stride
+  senses: "a long step when walking; how far one step along an axis moves in memory (stride (memory))"
+  def: "How many pixels a convolution filter moves between positions. A stride of 2 halves the output size."
+  level: convolutions
+- term: padding
+  senses: "zeros around an image (padding (convolution)) vs. filler tokens"
+  def: "Extra placeholder tokens (often written <PAD>) added to the end of short sequences so every sequence in a batch has the same length. Masks and the loss ignore them."
+  level: masks-and-heads
+- term: receptive field
+  def: "The patch of the original input that one output number can see. It grows as convolution layers are stacked."
+  level: convolutions
+- term: pooling
+  def: "Shrinking a feature map by keeping one number (often the largest) from each small block."
+  level: convolutions
+- term: feature map
+  def: "The output of one convolution filter over a whole picture: a grid that is bright wherever the filter’s pattern appears."
+  level: convolutions
+- term: RNN
+  aliases: [recurrent network, recurrent neural network]
+  def: "A network that reads a sequence one step at a time, carrying a hidden state forward and using the same weights at every step."
+  level: rnn
+- term: hidden state
+  def: "The vector an RNN carries from one step to the next. Everything it remembers about the sequence so far has to fit in it."
+  level: rnn
+- term: backpropagation through time
+  def: "Training an RNN by unrolling it over the sequence and backpropagating through every step. Gradients to early steps tend to shrink or grow very large."
+  level: rnn
+- term: LSTM
+  def: "A recurrent network with gates and a separate cell state, which lets it keep information over many more steps than a plain RNN."
+  level: lstm
+- term: gate
+  mark: false
+  def: "A sigmoid between 0 and 1 that multiplies a signal, deciding how much of it to keep (1 keeps all of it, 0 keeps none)."
+  level: lstm
+- term: forget gate
+  def: "In an LSTM, the gate f (between 0 and 1) that decides how much of the old cell state c to keep at each step."
+  level: lstm
+- term: input gate
+  def: "In an LSTM, the gate i (between 0 and 1) that decides how much of the new candidate g to add to the cell state."
+  level: lstm
+- term: output gate
+  def: "In an LSTM, the gate o (between 0 and 1) that decides how much of the cell state to show as the output h."
+  level: lstm
+- term: cell state
+  def: "The LSTM’s long-term memory, a vector passed along almost unchanged from step to step unless the gates edit it."
+  level: lstm
+- term: GRU
+  def: "A simpler version of the LSTM with two gates (the update gate and the reset gate) and no separate cell state."
+  level: lstm
+- term: diffusion
+  aliases: [diffusion model]
+  def: "A way to generate data by learning to undo noise: add noise to examples step by step, then train a network to remove it."
+  level: noise-and-denoise
+- term: noise schedule
+  aliases: [alpha-bar]
+  def: "The plan for how much noise each step adds. Alpha-bar says how much of the original signal is left after t steps."
+  level: noise-and-denoise
+- term: sampling
+  mark: false
+  def: "Picking at random according to probabilities. A language model samples the next token from its softmax; a diffusion model samples a new picture by starting from noise and running the denoising steps."
+  level: probability
+- term: guidance
+  senses: "advice"
+  aliases: [classifier-free guidance]
+  def: "Pushing generation toward what was asked for by comparing the network’s noise guess with and without the request and moving further in that direction."
+  level: sampling-and-guidance
+- term: latent
+  senses: "hidden, not yet visible"
+  aliases: [latent space]
+  def: "A short code that stands for a much larger input, such as 16 numbers for a 784-pixel picture. Diffusing in latent space is much cheaper."
+  level: autoencoders
+- term: autoencoder
+  def: "A network that squeezes its input into a small latent code and then rebuilds the input from that code."
+  level: autoencoders
+- term: code
+  only: [autoencoders]
+  def: "In an autoencoder, the few numbers the encoder outputs (also called the latent). Not program code."
+  level: autoencoders
+- term: mean squared error
+  aliases: [MSE]
+  def: "A loss: subtract the target from the prediction, square each difference, and take the average."
+  level: autoencoders
+- term: patch
+  mark: false
+  def: "A small square cut from a picture. A Transformer for images treats each patch as one token."
+  level: latents-and-dit
+- term: DiT
+  def: "A diffusion Transformer: it cuts a noisy picture into patch tokens and uses Transformer layers to guess the noise."
+  level: latents-and-dit
+# ---- added in round 2 (missing terms, second senses) ----
+- term: variance
+  def: "The average squared distance of numbers from their mean. It measures how spread out they are; its square root is the standard deviation."
+  level: probability
+- term: standard deviation
+  aliases: [std]
+  def: "How far numbers typically are from their mean: the square root of the variance. Written std or σ."
+  level: probability
+- term: epoch
+  aliases: [epochs]
+  def: "One pass of training over the whole training set."
+  level: optimization
+- term: bottleneck
+  senses: "anything that slows a system down"
+  def: "A place where all information must pass through a small vector. In a plain seq2seq model the whole source sentence must fit into one fixed-size state."
+  level: seq2seq-attention
+- term: seq2seq
+  aliases: [sequence-to-sequence]
+  def: "A model that reads one sequence and writes another, such as digits in and words out: an encoder reads, a decoder writes."
+  level: seq2seq-attention
+- term: alignment
+  senses: "making a model's behavior match human goals; lining things up"
+  aliases: [alignments]
+  def: "In seq2seq attention, which source position each output step looks at most. Drawn as a table of attention weights."
+  level: seq2seq-attention
+- term: exploding gradient
+  aliases: [exploding gradients]
+  def: "When gradients get multiplied by numbers bigger than 1 at every step, so they grow very large and training fails."
+  level: rnn
+- term: unrolling
+  aliases: [unroll, unrolled]
+  def: "Drawing an RNN as one copy per time step, all copies sharing the same weights, so you can see the whole computation as one long network."
+  level: rnn
+- term: plateau
+  senses: "a flat high area of land"
+  aliases: [plateaus]
+  def: "A part of training where the loss or accuracy stays flat for a while before it starts to improve again."
+  level: write-a-gpt
+- term: self-attention
+  def: "Attention where the queries, keys and values all come from the same sequence, so every token looks at the tokens of its own sentence."
+  level: attention
+- term: causal mask
+  def: "A mask that blocks every position from looking at later positions, so a model that writes left to right cannot see the future."
+  level: masks-and-heads
+- term: inference
+  senses: "a conclusion drawn by reasoning"
+  def: "Using a trained model to produce outputs. The weights stay fixed; only the activations are computed again for each new input."
+  level: attention
+- term: activation
+  only: [attention, transformer-parts]
+  aliases: [activations]
+  def: "A value computed inside the network for one input, such as a hidden layer’s output. Unlike a parameter, it is computed again for every input and is not saved with the model. Training keeps it in memory until the backward pass has used it."
+  level: mlp
+- term: channel
+  senses: "a TV channel; a path for messages"
+  aliases: [channels]
+  def: "One of the stacked 2D maps in a convolution input or output, such as red, green and blue in a color picture, or one filter’s feature map."
+  level: convolutions
+- term: padding (convolution)
+  senses: "filler tokens that make sequences the same length"
+  aliases: [zero padding]
+  def: "Extra border cells (usually zeros) added around an input so the filter can sit on the edges and the output keeps its size."
+  level: convolutions
+- term: BatchNorm
+  aliases: [batch normalization, batch norm]
+  def: "Normalizing each feature using the mean and std over the batch. Works well for pictures, but depends on the batch size."
+  level: residuals-and-norms
+- term: VAE
+  aliases: [variational autoencoder]
+  def: "An autoencoder whose encoder outputs a mean and a std for each code number, trained so that random codes decode into plausible examples."
+  level: autoencoders
+- term: KL divergence
+  aliases: [KL term]
+  def: "A number that measures how different one probability distribution is from another. A VAE uses it to keep its codes close to a standard Gaussian."
+  level: autoencoders
+- term: reparameterization trick
+  def: "Writing a random code as z = μ + σ·ε with ε drawn from a standard Gaussian, so gradients can flow through μ and σ."
+  level: autoencoders
+- term: bidirectional RNN
+  aliases: [bidirectional]
+  def: "Two RNNs, one reading left to right and one right to left, with their states joined. Good for labeling a whole sentence; not usable for writing text one token at a time."
+  level: lstm
+- term: context vector
+  def: "In seq2seq attention, the weighted average of the encoder states that the decoder uses at one step."
+  level: seq2seq-attention
+- term: KV cache
+  aliases: [KV-cache]
+  def: "Saving the keys and values of earlier tokens during generation, so each new token only computes its own query, key and value."
+  level: generation
+- term: memory
+  senses: "computer memory (RAM)"
+  only: [encoder-decoder]
+  def: "In the encoder–decoder Transformer, the encoder’s final output: one vector per source token. Every decoder layer reads it through cross-attention. (Not an RNN’s hidden state.)"
+  level: encoder-decoder
+- term: teacher forcing
+  def: "Training a decoder by giving it the correct previous tokens as input, instead of its own guesses, so every position can be trained at once."
+  level: full-model
+- term: word vector
+  aliases: [word vectors, word2vec]
+  def: "An embedding learned from which words appear near each other, so words used in similar places get similar vectors."
+  level: vectors
+- term: seed
+  senses: "the starting gradient ∂L/∂L = 1 of a backward pass"
+  aliases: [random seed]
+  def: "The number a random generator starts from. The same seed gives the same “random” numbers every time, so a run can be repeated exactly."
+  level: data-pipeline
+- term: random generator
+  def: "An object that makes random numbers, starting from a number called the seed. The same seed gives the same numbers."
+  level: data-pipeline
+- term: data pipeline
+  def: "The code that turns raw examples into batches for training: shuffle, split, group into batches and pad to the same length."
+  level: data-pipeline
+- term: DataLoader
+  aliases: [Dataset]
+  only: [data-pipeline]
+  def: "PyTorch's two parts of a data pipeline. A Dataset gives example i; a DataLoader groups examples into batches, one batch at a time."
+  level: data-pipeline
+- term: bucket
+  only: [data-pipeline]
+  def: "A group of examples with about the same length, batched together so little padding is needed."
+  level: data-pipeline
+- term: collate function
+  def: "The function that turns a list of examples into one batch array, padding the shorter sequences and returning the padding mask with it."
+  level: data-pipeline
+- term: NaN
+  def: "“Not a number”: the result of a calculation with no answer, like inf − inf or 0 × inf. Once a NaN appears, everything computed from it is NaN too."
+  level: debugging
+- term: mantissa
+  def: "The bits of a float that hold its digits: the part after “1.” in 1.5 × 2². More mantissa bits mean finer steps between neighboring numbers."
+  level: numbers-in-a-computer
+- term: exponent
+  senses: "the power in x², not the exponent field of a float"
+  def: "In a float, the bits that say which power of 2 the number is multiplied by. More exponent bits mean a wider range, from tiny to huge."
+  level: numbers-in-a-computer
+- term: exponent bias
+  def: "A fixed number added to the power of 2 before it is stored in a float, so that negative powers need no sign. Not the bias of a neuron."
+  level: numbers-in-a-computer
+- term: overflow
+  senses: "text that does not fit its box"
+  def: "When a result is bigger than the largest number a format can hold, so it becomes inf. In float16, e¹² already overflows."
+  level: numbers-in-a-computer
+- term: underflow
+  def: "When a result is closer to 0 than the smallest number a format can hold, so it becomes exactly 0."
+  level: numbers-in-a-computer
+- term: mixed precision
+  def: "Training with most multiplications in 16-bit numbers for speed, while the weights, sums and the loss stay in 32-bit numbers."
+  level: numbers-in-a-computer
+- term: log-sum-exp
+  def: "ln of the sum of e to the power of each score. Subtracting the largest score first keeps it from overflowing; cross-entropy is log-sum-exp minus the target’s score."
+  level: numbers-in-a-computer
+- term: smoothing
+  def: "Adding a small number (often 1) to every count before dividing, so a pair that was never seen still gets a small probability instead of 0."
+  level: language-models
+- term: cosine similarity
+  def: "The dot product of two vectors divided by both lengths. It depends only on the angle: 1 for the same direction, 0 for a right angle, −1 for opposite directions."
+  level: vectors
+- term: topological order
+  def: "A list of the nodes of a computation graph where each node comes after all of its inputs. Walking it backwards runs the backward pass in a valid order."
+  level: autograd
+- term: depth-first walk
+  def: "Visiting a graph by following one path to its end before trying the next. Autograd uses it to build the topological order."
+  level: autograd
+- term: surprise
+  senses: "the everyday feeling of being surprised"
+  def: "−ln p for the word that actually came. A probability of 1 gives surprise 0; a small probability gives a large surprise. Cross-entropy is the average surprise."
+  level: probability
+- term: update gate
+  def: "In a GRU, the gate z that decides how much of the new candidate to take; the rest, 1 − z, is the old hidden state kept as it was."
+  level: lstm
+- term: reset gate
+  def: "In a GRU, the gate r that decides how much of the old hidden state to use when making the new candidate. With r = 0 the candidate uses only the input."
+  level: lstm
+- term: stride (memory)
+  only: [tensors-in-memory]
+  aliases: [stride]
+  def: "How many places to move in memory for one step along an axis. A (3, 4) array in row order has strides (4, 1): one row down is 4 places, one column right is 1."
+  level: tensors-in-memory
+- term: view
+  only: [tensors-in-memory, numpy-to-pytorch, write-a-gpt]
+  senses: "a way of looking at something; one tab of a lab (the Map view)"
+  def: "An array that reads another array’s memory with its own shape and strides. Nothing is copied, so writing into a view changes the original."
+  level: tensors-in-memory
+- term: contiguous
+  def: "Stored in plain row order: reading the array row by row walks through memory one step at a time. `.contiguous()` makes a copy in that order."
+  level: tensors-in-memory
+- term: local gradient
+  def: "How one operation’s output moves when its input moves, found for that operation alone. The chain rule multiplies the local gradients along the path."
+  level: backprop
+- term: normalization
+  aliases: [normalize, normalizes, normalized, normalizing]
+  def: "Rescaling numbers so they stay in a stable range: subtract the mean, divide by the standard deviation. BatchNorm and LayerNorm differ only in which numbers they average over."
+  level: residuals-and-norms
+- term: precision
+  only: [numbers-in-a-computer]
+  senses: "how exact a float is (how close neighboring numbers are), not the precision of a classifier"
+  def: "How exact a float format is: how many numbers it has between one power of 2 and the next. More mantissa bits give more precision."
+  level: numbers-in-a-computer
+- term: range
+  only: [numbers-in-a-computer]
+  senses: "how big and how small a float can be; also the everyday “range of values”"
+  def: "How big and how small a number a float format can hold. More exponent bits give a wider range."
+  level: numbers-in-a-computer
+- term: master copy
+  def: "In mixed-precision training, the float32 copy of the weights. Each update is added there, so small changes are not rounded away; the 16-bit weights are made from it."
+  level: numbers-in-a-computer
+- term: loss scaling
+  def: "Multiplying the loss by a big number (such as 1024) before the backward pass, so tiny 16-bit gradients do not become 0, then dividing the gradients by the same number."
+  level: numbers-in-a-computer
+- term: vector
+  aliases: [vectors]
+  def: "A list of numbers in a fixed order, such as [0.5, −1, 2]. A word’s vector is the row of numbers that stands for it."
+  level: vectors
+- term: padding mask
+  def: "A mask that blocks every PAD token (the extra tokens that make short sequences as long as the longest one), so no word looks at padding."
+  level: masks-and-heads
+- term: numeric gradient
+  def: "A gradient found with no calculus: move one weight by a tiny h, run the forward pass again, and divide the change in the loss by h."
+  level: backprop
+- term: in place
+  only: [debugging]
+  def: "Changing an array’s own numbers instead of making a new array. `w[i] += h` changes w in place."
+  level: debugging
+- term: steepness
+  only: [neurons-and-loss]
+  def: "In this level’s lab, the number k in sigmoid(k · z). A bigger k makes the S-curve go from 0 to 1 faster."
+  level: neurons-and-loss
+- term: running mean
+  only: [residuals-and-norms]
+  def: "In BatchNorm, an average of the batch means that is updated after each batch (keep 0.9 of the old value, add 0.1 of the new one). It is used instead of the batch mean when the model runs on new data."
+  level: residuals-and-norms
+- term: Jacobian
+  def: "The table of every slope between the inputs and the outputs of one operation: row i, column j says how fast output i moves when input j moves. For softmax it is diag(p) − pᵀp."
+  level: attention-backward
+- term: saved activations
+  aliases: [saved activation]
+  def: "Values from the forward pass that training keeps in GPU memory because a backward rule needs them later, such as the attention weights A. They grow with the batch size and the sequence length."
+  level: attention-backward
+- term: fused kernel
+  aliases: [fused kernels, fused attention kernel, fused attention kernels]
+  def: "One GPU program that does several steps, such as the scores, the softmax and the weighted sum, without saving the values between them in GPU memory."
+  level: attention-backward
+- term: recomputation
+  def: "Keeping only each layer’s input during the forward pass, and running that layer’s forward pass again during backward to get the other values back. It saves GPU memory at the cost of about one extra forward pass."
+  level: attention-backward
+- term: sublayer
+  aliases: [sublayers]
+  def: "One of the parts inside a Transformer block that gets its own residual: the attention or the FFN. A decoder block has two sublayers. A decoder layer of the 2017 design has three."
+  level: transformer-parts
+- term: translation
+  only: [encoder-decoder]
+  def: "Turning a sentence in one language into a sentence in another language. The first Transformer was built for this task."
+  level: encoder-decoder
+- term: source sentence
+  aliases: [source sequence]
+  only: [encoder-decoder]
+  def: "In translation, the sentence the model is given. The encoder reads it. In level N7 it is the digits, such as 427."
+  level: encoder-decoder
+- term: target sentence
+  aliases: [target sequence]
+  only: [encoder-decoder]
+  def: "In translation, the sentence the model must write. The decoder writes it. This is not the same as the training target y: tgt_in and tgt_out are both made from the target sentence."
+  level: encoder-decoder
+- term: decode
+  aliases: [decoding]
+  only: [inference-cost]
+  senses: "turning a code back into data (an autoencoder’s decoder), or turning token ids back into text"
+  def: "Writing the answer one token per step. Each step reads every weight and the KV cache once for one new token per user, so memory bandwidth, not arithmetic, usually limits it."
+  level: inference-cost
+- term: prefill
+  def: "Reading the whole prompt in one forward pass before the answer starts. The weights are read once for all prompt tokens. So for a long prompt, arithmetic limits it, not memory: on the example GPU of level 20, longer than about 100 tokens. It also fills the KV cache."
+  level: inference-cost
+- term: crossover
+  def: "The number of users B at which the arithmetic of one decode step takes as long as reading the weights. Below it, reading is the limit; above it, the arithmetic is. It depends on the GPU and the bytes per weight, not on the size of the model."
+  level: inference-cost

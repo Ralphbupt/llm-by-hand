@@ -1,0 +1,6 @@
+---
+import Lab from './SoftmaxJacobianLab.svelte'
+interface Props { hide?: Record<string, string> }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

@@ -1,0 +1,6 @@
+---
+import Lab from './PositionLab.svelte'
+interface Props { hide?: { pe10?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

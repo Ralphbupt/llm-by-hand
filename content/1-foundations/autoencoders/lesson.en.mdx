@@ -1,0 +1,223 @@
+---
+title: Autoencoders and VAEs
+short: Autoencoders
+level: "N6"
+order: 10.6
+part: foundations
+branch: classic
+question: Can a network learn to squeeze a picture into a few numbers and back?
+run: browser
+checkpoint: vae-loss
+testOut: [code-shape, recon, reparam, kl-two, vae-loss]
+recap:
+  can:
+    - "Follow the shapes through an autoencoder: (B, 784) → (B, 2) codes → (B, 784) pixels."
+    - "Compute the rebuild loss and a VAE’s KL term by hand."
+    - "Write a VAE’s sampling step and its full loss in NumPy."
+  keys:
+    - "Mean squared error: `np.mean((x - x_hat) ** 2)`"
+    - "Sampling: $z = \\mu + \\sigma \\cdot \\varepsilon$, with ε from N(0, 1)"
+    - "$\\text{KL} = \\tfrac{1}{2}\\left(\\mu^2 + \\sigma^2 - 1 - \\ln \\sigma^2\\right)$, 0 exactly when μ = 0 and σ = 1"
+    - "VAE loss: rebuild loss summed over the pixels + KL summed over the code numbers"
+  mistakes:
+    - "Averaging the rebuild loss over the pixels: the KL term then wins, and every code decodes to the same unclear digit."
+    - "Expecting random codes of a plain autoencoder to decode well: they often land in gaps between the clusters."
+glossarySkip: [encoder, decoder]
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import LatentSpaceLab from '@viz/LatentSpaceLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+A handwritten digit is 784 numbers, but most of those numbers are predictable: dark background, a stroke that bends a certain way.
+How few numbers are enough to describe it? This level trains a network to squeeze a digit into **2 numbers** and rebuild it from them.
+Those few numbers are called the **code** (or the **latent**). The same idea lets image generators work on small codes
+instead of millions of pixels (level D3).
+
+## 1. Squeeze and rebuild
+
+An **autoencoder** is two small networks, one after the other:
+
+1. the **encoder** maps 784 pixels → 128 hidden numbers → a code of 2 numbers;
+2. the **decoder** maps the 2-number code → 128 → 784 pixels, each between 0 and 1.
+
+The narrow middle is called the **bottleneck**. Everything the decoder knows about the picture has to pass through it.
+
+<Blank id="compress" />
+
+<Gate requires="compress">
+
+Batches work as in level 5: a batch of pictures is a table with one row per picture, and each layer is `X @ W + b`.
+
+<Blank id="code-shape" />
+
+<Stuck q="If the target is the input itself, why can’t the network just copy it?">
+
+It would, if it could: copying gives zero loss. The bottleneck forbids it. 784 numbers can’t pass through 2 unchanged, so the encoder
+has to keep what matters most (which digit, how slanted, how thick) and drop the rest. Nobody tells it what matters; minimizing the
+rebuild loss decides. No labels are used anywhere: the picture is its own target.
+
+</Stuck>
+
+</Gate>
+
+## 2. Training: rebuild the input
+
+<Gate requires="code-shape">
+
+Here is the whole autoencoder. Each block has one cell per number.
+
+<ArchLab which="autoencoder" />
+
+The loss compares the rebuilt picture $\hat{x}$ with the original $x$, pixel by pixel. The easiest one to read is the
+**mean squared error**: subtract, square, average.
+
+<Blank id="recon" />
+
+<Gate requires="recon">
+
+The real autoencoder in `demo.py` trains for 6 **epochs** (an epoch is one pass over all 60,000 training digits) and takes
+about 12 seconds on a laptop CPU, for this autoencoder and a second model together. Afterwards its mean squared error on test digits it never saw is 0.044 per pixel.
+
+To train, `demo.py` uses a different rebuild loss. Every pixel is between 0 and 1, so it treats each pixel like a yes/no
+answer and uses the binary cross-entropy from level 3, $-(x \ln \hat{x} + (1 - x)\ln(1 - \hat{x}))$, **summed** over the 784 pixels.
+It reports the mean squared error only because that number is easy to read. Both losses are 0 for a perfect rebuild.
+To run it yourself, download [demo.py](/files/autoencoders/demo.py) into a folder of its own and run `python demo.py` there ([setup](/setup/)).
+
+`np.mean` averages every number in an array, and `**` squares each number.
+
+<CodeBlank id="recon-code" />
+
+</Gate>
+
+</Gate>
+
+## 3. Move through the code space
+
+<Gate requires="recon-code">
+
+Because the code is 2 numbers, every code is a point on a flat map, and every point on the map is a picture: give it to the decoder and
+it draws something. Codes of real digits fall somewhere on that map. To make a **new** digit, you would pick a random point
+and decode it, using the same mean and standard deviation as the real codes.
+
+<Predict id="holes" />
+
+<Gate requires="holes">
+
+<LatentSpaceLab start="ae" />
+
+Real codes form clusters, one per digit, with gaps between them. Press **Draw 200**: about a third of the random codes land
+far from every real code (the crosses). The lab keeps only 400 real codes, so its gaps look bigger than they are; `demo.py`
+compares with 4,000 real codes and finds 11%.
+Nothing in the loss asks the codes to fill the map or to stay near any center: this autoencoder spread them with a std of 5.2 and 3.9,
+wherever rebuilding was easiest. A code in a gap decodes to something the decoder never had to draw, which is why made-up digits from a plain autoencoder often look strange.
+
+<TryIt>
+
+Drag the cross into a gap between two clusters, for example between the 1s and the 0s. What does the decoder draw on the way across?
+Then press **Random code** ten times and count how often it lands in an empty region.
+
+</TryIt>
+
+</Gate>
+
+</Gate>
+
+## 4. VAE: codes that fill the space
+
+<Gate requires="holes">
+
+A **variational autoencoder** (VAE) changes two things.
+
+**First, the encoder gives a range, not a point.** For each code number it outputs a mean μ and a standard deviation σ. During training the code is
+drawn at random from that range, using a standard normal number ε (mean 0, std 1, from level 10):
+
+$$
+z = \mu + \sigma \cdot \varepsilon
+$$
+
+<Blank id="reparam" />
+
+<Gate requires="reparam">
+
+So the decoder learns to draw a sensible picture for a whole neighborhood of codes, not just one exact point.
+
+**Second, a penalty pulls every picture’s range toward the standard normal, N(0, 1).** It is called the **KL term**. For one code number,
+
+$$
+\text{KL} = \tfrac{1}{2}\left(\mu^2 + \sigma^2 - 1 - \ln \sigma^2\right)
+$$
+
+It is 0 exactly when μ = 0 and σ = 1, and grows as μ moves away from 0 or σ moves away from 1. (ln is the natural log; ln 1 = 0.)
+
+<Blank id="kl-two" />
+
+The total loss for one picture is the rebuild loss **summed over its 784 pixels**, plus the KL term **summed over its code numbers**.
+The rebuild part wants codes far apart and precise, so two different pictures never get the same code.
+The KL part wants every code close to 0 with a std of 1. The compromise packs the codes tightly around 0, overlapping, with no big gaps.
+
+The balance between the two parts depends on that sum. Summed over 784 pixels, a typical rebuild loss is in the hundreds,
+while the KL term for 2 code numbers is a few units.
+
+<Predict id="kl-wins" />
+
+<Predict id="vae-holes" />
+
+<Gate requires="vae-holes">
+
+<LatentSpaceLab start="vae" />
+
+The cost is that pictures are a little less sharp: the VAE’s test loss is 0.046 per pixel against the plain autoencoder’s 0.044.
+In return, a random code from N(0, 1) almost always decodes to something digit-like. Press **Draw 200** again: about
+1 in 7 random codes land far from every real code, against about a third for the plain autoencoder. (`demo.py`, with
+4,000 real codes, finds 1% against 11%.)
+
+<Deeper title="Why write the sample as μ + σ·ε?">
+
+Training needs the gradient of the loss with respect to μ and σ (level 6). “Draw z at random from a normal with mean μ and std σ” has
+no slope, because of the random draw. Writing $z = \mu + \sigma \varepsilon$ moves the randomness into ε, which doesn’t depend on anything.
+Then $\partial z/\partial \mu = 1$ and $\partial z/\partial \sigma = \varepsilon$, and backpropagation works as usual.
+This rewrite is called the **reparameterization trick**. In code the encoder usually outputs $\ln \sigma^2$ instead of σ, so that any number it outputs gives a valid σ (always positive).
+
+</Deeper>
+
+Now write the sampling step. `*` and `+` work number by number on arrays of the same shape.
+
+<CodeBlank id="sample-code" />
+
+<Gate requires="sample-code">
+
+Last, the whole VAE loss for one picture. `np.log` is the natural log, ln. `.sum()` adds up every number of an array.
+
+<CodeBlank id="vae-loss" />
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+## 5. Where this goes next
+
+Image generators don’t run diffusion (level D1) on millions of pixels. They first train an autoencoder, then add and remove noise on the
+small codes, and decode at the end. In level D3 a 784-pixel digit becomes a 16-number code: 49 times fewer numbers to denoise.
+
+Two details connect this level to D3. First, real image models use a VAE-style encoder with a small KL term, so their codes are
+smooth and about size 1. Diffusion (D1) assumes the signal has a variance of about 1, so the codes are also scaled to std 1
+before noise is added. Second, their codes are not one flat list: a big picture becomes a small grid of codes (for example
+64 × 64 positions with 4 numbers each), so D3’s idea of cutting into patches still applies to the codes.
+
+<Stuck q="Is this the same encoder and decoder as in the Transformer?">
+
+Same words, different jobs. Here the encoder **compresses** a picture into a code and the decoder **rebuilds** the picture from it.
+In the 2017 Transformer (side trip [N7](/learn/encoder-decoder/)), the encoder **reads** a source sentence into one vector per word, and the decoder **writes** a new
+sentence while looking at them. Neither of those squeezes anything into a bottleneck.
+
+</Stuck>

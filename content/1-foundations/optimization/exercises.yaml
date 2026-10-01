@@ -1,0 +1,292 @@
+full-grad:
+  type: number
+  prompt: "Points (1, 3), (2, 3), (3, 7), (4, 7); w = 0.5, b = 0, so the errors are −2.5, −2, −5.5, −5. Using all four points, what is dL/dw = mean of 2·error·x?"
+  answer: -21.5
+  tol: 0.01
+  after: "2·(−2.5·1 − 2·2 − 5.5·3 − 5·4) / 4 = 2·(−43) / 4 = −21.5. Negative: increasing w lowers the loss."
+  hints:
+    - when: { equals: 21.5 }
+      say: "Right size, wrong sign. The errors are negative, so the gradient is too."
+    - when: { equals: -10.75 }
+      say: "Don’t forget the 2 in 2·error·x."
+    - when: { equals: -86 }
+      say: "That is the sum. Divide by the 4 points to get the mean."
+    - when: { any: true }
+      say: ["For each point compute 2 · error · x, then take the mean of the four numbers.", "The four error · x values are −2.5·1, −2·2, −5.5·3 and −5·4."]
+
+one-grad:
+  type: number
+  prompt: "A line ŷ = w·x + b with w = 0.5, b = 0. Use a batch of just one point, (3, 7). Its error is −5.5. What is dL/dw = 2·error·x for this batch?"
+  answer: -33
+  tol: 0.01
+  after: "2 · (−5.5) · 3 = −33. A batch of one point is just that point’s own gradient."
+  hints:
+    - when: { equals: -21.5 }
+      say: "That is the full-data gradient. This batch only has the point (3, 7)."
+    - when: { equals: -16.5 }
+      say: "Don’t forget the 2."
+    - when: { any: true }
+      say: ["With one point, the mean is just that point’s 2 · error · x.", "Its error is −5.5 and its x is 3."]
+
+noisy-steps:
+  type: predict
+  prompt: "Batch size 1, learning rate 0.02, start w = 0.5, b = 0. After each step you measure the loss on all four points. Does it go down on every step?"
+  options: ["Yes: every step lowers the loss on all four points", "No: many steps raise it, and it never stays at the bottom", "No: it rises on every step and never comes down"]
+  reveal: "It goes down overall, but each step only follows one point. In 200 steps the full loss goes up on about half of them, and it keeps moving back and forth near the bottom instead of settling. With batch size 4 it goes down on every step."
+
+epoch-steps:
+  type: number
+  prompt: "A training set has 1,000 examples and you use mini-batches of 50. How many steps make one epoch?"
+  answer: 20
+  tol: 0
+  after: "1,000 / 50 = 20 steps, and after them every example has been seen once. 10 epochs would be 200 steps."
+  hints:
+    - when: { equals: 50000 }
+      say: "That multiplies. One epoch sees every example once, 50 at a time: divide."
+    - when: { equals: 1000 }
+      say: "That is one step per example. Each step uses a batch of 50."
+    - when: { any: true }
+      say: ["An epoch sees every example exactly once.", "Each step uses 50 examples. How many steps cover 1,000?"]
+
+sgd-w2:
+  type: number
+  prompt: "f(w1, w2) = 0.5·(w1² + 25·w2²), start at (−4, 1), gradient (−4, 25). One SGD step with lr = 0.03: what is the new w2?"
+  answer: 0.25
+  tol: 0.001
+  after: "w2 ← 1 − 0.03·25 = 1 − 0.75 = 0.25. And w1 ← −4 − 0.03·(−4) = −3.88."
+  hints:
+    - when: { equals: 0.75 }
+      say: "0.75 is how far w2 moved. Subtract it from the starting value 1."
+    - when: { equals: 0.97 }
+      say: "The gradient for w2 is 25·w2 = 25, not w2 = 1."
+    - when: { any: true }
+      say: ["new w2 = w2 − lr · (gradient for w2).", "The gradient for w2 is 25 here, and lr is 0.03."]
+
+sgd-big-lr:
+  type: predict
+  prompt: "The loss is f(w1, w2) = 0.5·(w1² + 25·w2²), with gradient (w1, 25·w2). Start at (−4, 1). SGD with lr = 0.09 instead of 0.03, to make w1 move faster. What happens to w2?"
+  options: ["It reaches the bottom faster", "w2 jumps from side to side, further each time, and grows very large", "It stops moving"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Compute one step for w2: w2 − 0.09 × 25 × w2. Is the new w2 closer to 0 than 1 is?"
+    - when: { equals: 2 }
+      say: "The gradient for w2 is 25·w2, and it is not 0 at w2 = 1. Compute one step: w2 − 0.09 × 25 × w2."
+  reveal: "Each step does w2 ← w2 − 0.09·25·w2 = −1.25·w2. The sign flips and the size grows by 1.25 every step, so w2 grows very large, even though w1 alone would have been fine. Any lr above 2/25 = 0.08 does this."
+
+adam-move:
+  type: number
+  prompt: "Adam with lr = 0.3 starts at (−4, 1), gradient (−4, 25). On step 1, m̂ = g and v̂ = g², so the step is 0.3·g/√(g²). By how much does w1 change? (Give the size of the move, not the new position.)"
+  answer: 0.3
+  tol: 0.001
+  after: "0.3 · 4/4 = 0.3. And w2 moves 0.3 · 25/25 = 0.3 too. Adam moves both weights the same distance, whatever the size of their gradients. New point: (−3.7, 0.7)."
+  hints:
+    - when: { equals: 1.2 }
+      say: "That is lr·g, plain SGD’s move. Adam divides by √v̂ = |g|."
+    - when: { equals: 0.12 }
+      say: "That is SGD’s move with lr 0.03. Here it’s Adam with lr 0.3."
+    - when: { equals: -0.3 }
+      say: "It asks how far, so give the distance. (w1 does go up: −4 → −3.7.)"
+    - when: { equals: -3.7 }
+      say: "−3.7 is where w1 lands. The question asks for the size of the move: from −4 to −3.7."
+    - when: { any: true }
+      say: ["The step is lr · g / √(g²). What is √(g²) when g = −4?", "√((−4)²) = 4, so g/√(g²) is just the sign of g."]
+
+momentum-code:
+  type: code
+  prompt: "Write momentum’s step: first update the velocity u from the new gradient g, then move w by lr times u. Return both."
+  template: |
+    def momentum_step(w, u, g, lr=0.03, beta=0.9):
+        ____
+        return w, u
+
+    w, u = momentum_step(np.array([-4.0, 1.0]), np.zeros(2), np.array([-4.0, 25.0]))
+    print("w:", w, "u:", u)
+  solution: |-
+    u = beta * u + g
+        w = w - lr * u
+  tests:
+    - expr: "momentum_step(np.array([-4.0, 1.0]), np.zeros(2), np.array([-4.0, 25.0]))[0]"
+      expect: [-3.88, 0.25]
+      tol: 0.0001
+      say: "from u = 0 the first step is the same as SGD: (−3.88, 0.25)"
+    - expr: "momentum_step(np.array([1.0, 1.0]), np.array([2.0, -2.0]), np.array([1.0, 1.0]), lr=0.1)[1]"
+      expect: [2.8, -0.8]
+      tol: 0.0001
+      say: "u = 0.9·[2, −2] + [1, 1] = [2.8, −0.8]"
+    - expr: "momentum_step(np.array([1.0, 1.0]), np.array([2.0, -2.0]), np.array([1.0, 1.0]), lr=0.1)[0]"
+      expect: [0.72, 1.08]
+      tol: 0.0001
+      say: "w moves by lr times the new u: 1 − 0.1·2.8 = 0.72 and 1 + 0.1·0.8 = 1.08"
+  hints:
+    - when: { error: "is not defined" }
+      say: "Use the names in the function: w, u, g, lr and beta."
+    - when: { testFailed: 0 }
+      say: ["With u = 0 the step should equal SGD’s step. Is w changed at all?", "Two lines: one sets the new u, the next uses it to change w. With u = 0 and beta = 0.9, the new u is just g."]
+    - when: { testFailed: 1 }
+      say: ["The returned u is wrong. The old velocity keeps the fraction beta, then the gradient is added.", "Check that you add g, not subtract it, and that beta multiplies the old u."]
+    - when: { testFailed: 2 }
+      say: ["u is right but w is not. Move w with the new u, not the old u or g.", "Update u first, then w on the next line."]
+    - when: { any: true }
+      say: ["Copy the two formulas from section 2, one per line.", "The first line updates u from the old u and g. The second line moves w with the new u."]
+  after: "u keeps the fraction beta of its old value and adds the new gradient, so it remembers the past directions. Then w moves by lr × u, not lr × g. With u = 0 the first step is the same as SGD."
+
+adam-code:
+  type: code
+  prompt: "Write Adam’s update. mₕₐₜ and vₕₐₜ are already computed."
+  template: |
+    def adam_step(w, g, m, v, t, lr=0.1, beta1=0.9, beta2=0.999, eps=1e-8):
+        m = beta1 * m + (1 - beta1) * g
+        v = beta2 * v + (1 - beta2) * g**2
+        m_hat = m / (1 - beta1**t)
+        v_hat = v / (1 - beta2**t)
+        w = w - ____
+        return w, m, v
+
+    w, g = np.array([1.0, 1.0]), np.array([4.0, 0.01])
+    w, m, v = adam_step(w, g, np.zeros(2), np.zeros(2), t=1)
+    print("after one step:", w)
+  solution: "lr * m_hat / (np.sqrt(v_hat) + eps)"
+  tests:
+    - expr: "adam_step(np.array([1.0, 1.0]), np.array([4.0, 0.01]), np.zeros(2), np.zeros(2), 1)[0]"
+      expect: [0.9, 0.9]
+      tol: 0.0001
+      say: "gradients 4 and 0.01 both move their weight by lr = 0.1"
+    - expr: "(lambda r: adam_step(r[0], np.array([4.0, 0.01]), r[1], r[2], 2)[0])(adam_step(np.array([1.0, 1.0]), np.array([4.0, 0.01]), np.zeros(2), np.zeros(2), 1))"
+      expect: [0.8, 0.8]
+      tol: 0.0001
+      say: "with the same gradient again, step 2 moves another 0.1"
+    - expr: "(lambda r: np.round(adam_step(r[0], np.array([-4.0, 0.01]), r[1], r[2], 2)[0], 4))(adam_step(np.array([1.0, 1.0]), np.array([4.0, 0.01]), np.zeros(2), np.zeros(2), 1))"
+      expect: [0.9053, 0.8]
+      tol: 0.0002
+      say: "step 2 with the first gradient flipped to −4: the first weight moves back only a little"
+  hints:
+    - when: { error: "unsupported operand type.*\\^|bitwise_xor" }
+      wrong: "lr * m_hat / (v_hat ^ 0.5 + eps)"
+      say: "Python writes a power as **, not ^. For example x ** 2 squares x."
+    - when: { testFailed: 0 }
+      say: ["Each weight should move about lr on step 1. Which two quantities does Adam divide?", "On step 1, mₕₐₜ = g and vₕₐₜ = g². So the division should give the sign of g, 1 or −1."]
+    - when: { testFailed: 2 }
+      say: ["Same gradient twice works, but when the first gradient flips from 4 to −4 on step 2, your first weight moves back a full lr. Adam’s step should remember step 1.", "Use the running averages mₕₐₜ and vₕₐₜ, not the gradient g of this step."]
+    - when: { any: true }
+      say: ["Adam divides mₕₐₜ by the size of the gradient, then multiplies by lr. Which name holds the squared gradient?", "The size of the gradient is the square root of vₕₐₜ. np.sqrt works on arrays. Add eps so you never divide by 0."]
+  after: "mₕₐₜ is the average direction and √vₕₐₜ is the typical size of the gradient. Their ratio is about ±1, so every weight moves about lr, whatever the size of its gradient. eps only stops a division by 0."
+
+init-std:
+  type: number
+  prompt: "A layer has 100 inputs (fan-in n = 100). Using the rule s = 1/√n, what standard deviation should its weights have?"
+  answer: 0.1
+  tol: 0.0001
+  after: "1/√100 = 1/10 = 0.1. Then a sum of 100 terms, each with std 0.1, has std √100 · 0.1 = 1."
+  hints:
+    - when: { equals: 0.01 }
+      say: "That is 1/n. The rule uses the square root: 1/√n."
+    - when: { equals: 10 }
+      say: "That is √n. Take one over it."
+    - when: { any: true }
+      say: ["s = 1/√n with n = 100.", "√100 = 10."]
+
+deep-std:
+  type: number
+  prompt: "Inputs have std 1. They pass through 10 layers with no activation, width 100, weights with std 0.2. Each layer multiplies the std by √100 · 0.2. What is the std after 10 layers?"
+  answer: 1024
+  tol: 0.5
+  after: "√100 · 0.2 = 2 per layer, and 2¹⁰ = 1024. Twice the right weight size makes the numbers a thousand times too big. With 0.01 instead, they shrink to 0.1¹⁰ = 10⁻¹⁰."
+  hints:
+    - when: { equals: 2 }
+      say: "That is one layer. There are 10 of them, and the factors multiply."
+    - when: { equals: 20 }
+      say: "The factor multiplies, layer after layer: 2 × 2 × … × 2, ten times."
+    - when: { equals: 1048576 }
+      say: "That is 4¹⁰, the growth of the variance. The question asks for the std, which grows by 2 per layer."
+    - when: { any: true }
+      say: ["Each layer multiplies the std by the same factor √n · s.", "√100 · 0.2 = 2 per layer, and there are 10 layers."]
+
+tanh-small:
+  type: predict
+  prompt: "A network has 10 layers of width 100 with tanh after every layer. The weights have std 0.01, and the inputs have std 1. Without tanh, each layer would multiply the std by √100 · 0.01. After 10 layers the outputs are…"
+  options: ["About the same size as the inputs", "Almost exactly 0", "Huge"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Compute the factor per layer: √100 · 0.01 = 0.1. What do ten factors of 0.1 give?"
+    - when: { equals: 2 }
+      say: "Each layer multiplies the std by 0.1, so the numbers get smaller. tanh never makes a number larger in size."
+  reveal: "Almost exactly 0, around 10⁻¹⁰. Each layer shrinks by √100 · 0.01 = 0.1, and near 0 tanh is almost a straight line, so it can’t make the numbers larger again. Gradients flowing back shrink the same way, so the early layers barely learn."
+
+lr-warm:
+  type: number
+  prompt: "A schedule with peak = 0.004, warmup = 100 and total = 1000. Step 25 is still in warmup, so lr = peak · t / warmup. What is lr at step 25?"
+  answer: 0.001
+  tol: 0.00001
+  after: "0.004 × 25 / 100 = 0.001: a quarter of the way through warmup, a quarter of the peak."
+  hints:
+    - when: { equals: 0.004 }
+      say: "0.004 is the peak, reached only at step 100. Step 25 is a quarter of the way there."
+    - when: { equals: 0.1 }
+      say: "That is 0.004 × 25. Divide by warmup = 100 too."
+    - when: { any: true }
+      say: ["During warmup the rate grows in a straight line from 0 to the peak.", "Step 25 is 25 / 100 = 0.25 of the way through warmup. Multiply the peak by that fraction."]
+
+lr-decay:
+  type: number
+  prompt: "A schedule has peak = 0.004, warmup = 100, total = 1000. Step 550 is after warmup, so lr = peak · (total − t) / (total − warmup). What is lr at step 550?"
+  answer: 0.002
+  tol: 0.00001
+  after: "0.004 × (1000 − 550) / (1000 − 100) = 0.004 × 450 / 900 = 0.002. Step 550 is halfway through the decay, so the rate is half the peak."
+  hints:
+    - when: { equals: 0.022 }
+      say: "That is the warmup formula, 0.004 × 550 / 100. Step 550 is past warmup: use the second line."
+    - when: { equals: 0.0018 }
+      say: "You divided by total = 1000. The decay runs over total − warmup = 900 steps."
+    - when: { any: true }
+      say: ["After warmup the rate falls in a straight line from the peak at step 100 to 0 at step 1000.", "total − t = 450 and total − warmup = 900. Multiply the peak by 450 / 900."]
+
+lr-code:
+  type: code
+  prompt: "Write the body of a training loop for the loss (w − 3)², with momentum and a learning-rate schedule: each step gets its own learning rate from `lr_at`. Several lines."
+  template: |
+    def lr_at(step, peak, warmup, total):
+        if step < warmup:
+            return peak * step / warmup
+        return peak * (total - step) / (total - warmup)
+
+    def grad(w):
+        return 2 * (w - 3)                  # gradient of the loss (w − 3)²
+
+    def train(w, total, peak=0.1, warmup=10, beta=0.9):
+        u = 0.0
+        for t in range(total):
+            ____
+        return w
+
+    print("after 2 steps:  ", train(0.0, 2, warmup=2))
+    print("after 200 steps:", train(0.0, 200))
+  solution: "g = grad(w)\n        lr = lr_at(t, peak, warmup, total)\n        u = beta * u + g\n        w = w - lr * u"
+  tests:
+    - expr: "train(0.0, 2, warmup=2)"
+      expect: 0.57
+      tol: 0.0001
+      say: "step 0 has lr 0, so only u changes (to −6); step 1 has lr 0.05 and u = 0.9·(−6) − 6 = −11.4, so w = 0.57"
+    - expr: "train(1.0, 3, peak=0.2, warmup=1)"
+      expect: 3.3
+      tol: 0.0001
+      say: "another schedule: peak 0.2, warmup 1, total 3 lands at 3.3"
+    - expr: "train(0.0, 200)"
+      expect: 3.0
+      tol: 0.001
+      say: "after 200 steps w has settled at the bottom, 3"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Indent every line of the body by 8 spaces, like the line where ____ was."
+    - when: { error: "is not defined" }
+      say: "Use the names you have: w, u, t, total, peak, warmup, beta, and the functions grad and `lr_at`. Make g and lr before you use them."
+    - when: { equals: 0.3 }
+      say: "That is plain SGD: w moved by lr times g. With momentum, w moves by lr times the velocity u, and u remembers the old gradients."
+    - when: { equals: 1.62 }
+      say: "That is a fixed learning rate of peak. Get each step's rate from `lr_at`(t, peak, warmup, total)."
+    - when: { testFailed: 0 }
+      say: ["Two steps from w = 0 should land at 0.57. Step 0 has learning rate 0, so w does not change, but u does.", "Update u first, from the new gradient, then move w with the new u."]
+    - when: { any: true }
+      say: ["Four lines: the gradient g = grad(w), this step's learning rate from `lr_at`, the new velocity u, then the new w.", "The momentum step is the one you wrote in section 2: first u = beta·u + g, then w moves by lr times u.", "The learning rate changes every step, so call `lr_at` with this step's t inside the loop."]
+  after: "Each step mixes the new gradient into the velocity, then moves w by the scheduled rate times the velocity. During warmup the rate starts at 0, so the first steps barely move w while u grows. At the end the rate falls to 0 and w settles near the bottom instead of moving back and forth around it. Training a real model is this same loop, with more weights."

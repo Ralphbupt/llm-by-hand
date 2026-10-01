@@ -1,0 +1,6 @@
+---
+import Lab from './ActivationLab.svelte'
+interface Props { hide?: { gelu?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

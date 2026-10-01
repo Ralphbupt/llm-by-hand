@@ -1,0 +1,297 @@
+---
+title: Generation strategies
+level: "18"
+order: 18
+part: theory
+question: Given the model’s scores, how do you actually pick the next word?
+run: browser
+checkpoint: filter-code
+testOut: [top2-sofa, topp-count, beam-best, filter-code]
+recap:
+  can:
+    - "Turn scores into the next word with greedy, temperature, top-k or top-p, and compute the kept probabilities by hand."
+    - "Score whole sentences in beam search and see when it beats greedy."
+    - "Count the work a KV cache saves: one new q, k and v per step instead of all of them."
+  keys:
+    - "Temperature: softmax of `scores / T`; small T sharpens, large T flattens"
+    - "Top-k and top-p: drop words, then divide the kept ones by their total so they add up to 1"
+    - "Top-p keeps a word if the words above it add up to less than p: `cum - sorted_p < p`"
+    - "Sentence probability = product of word probabilities; in code, add the ln values"
+    - "Writing n tokens, key computations: $1 + 2 + \\dots + n = \\tfrac{n(n+1)}{2}$ without a cache, $n$ with one"
+  mistakes:
+    - "Forgetting to divide by the new total after a cut, so the kept probabilities don’t add up to 1."
+    - "Dropping the word that crosses p in top-p (`cum < p` instead of `cum - sorted_p < p`)."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import PickLab from '@viz/PickLab.astro'
+import BeamLab from '@viz/BeamLab.astro'
+import RepeatLab from '@viz/RepeatLab.astro'
+import TradeoffLab from '@viz/TradeoffLab.astro'
+
+Level 17 always took the word with the top score (greedy). This level shows the other ways to pick.
+The model’s job ends with one score per word in its vocabulary. Turning those scores into the next word is
+a separate decision, and it changes the text a lot. The same model can write plain text, random text, or the same words again and again,
+depending only on how you pick.
+
+This level uses one tiny example from start to end: after “the cat sat on the”, five candidates with these scores.
+
+| word | mat | sofa | rug | roof | moon |
+|---|---|---|---|---|---|
+| score | 2.0 | 1.5 | 1.0 | 0.0 | −1.0 |
+
+## 1. Greedy: always take the top word
+
+The simplest rule: turn the scores into probabilities with softmax (level 10) and take the most likely word.
+No randomness at all. ★ marks greedy’s pick.
+
+<PickLab hide={{ prob: "greedy-p", renorm: "top2-sofa", cum: "topp-count" }} />
+
+<Blank id="greedy-p" />
+
+<Gate requires="greedy-p">
+
+Temperature from level 10 still works here: divide every score by T before softmax.
+Small T sharpens the probabilities, large T flattens them.
+
+<Predict id="t-zero" />
+
+</Gate>
+
+## 2. Top-k: only the k best words get a chance
+
+Sampling from all five words means “moon” sometimes wins. With a vocabulary of 50,000 words, there are
+thousands of unlikely words. Together they have a real probability, so sometimes one of them is picked and the sentence stops making sense.
+
+**Top-k** keeps only the k most likely words, sets the rest to 0, and divides by the new total so the kept
+probabilities add up to 1 again. Then it samples. Switch the lab to “top-k”.
+
+<Gate requires="t-zero">
+
+<Blank id="top2-sofa" />
+
+<Stuck q="Why divide again after cutting the words?">
+
+The kept probabilities no longer add up to 1. With k = 2, mat and sofa together have about 0.46 + 0.28 = 0.74.
+A random pick with weights needs weights that add up to 1, so divide each by 0.7439. The order stays the same;
+only the scale changes.
+
+</Stuck>
+
+</Gate>
+
+## 3. Top-p: keep words until they cover p of the probability
+
+A fixed k does not fit every case. After “the cat sat on the”, maybe ten words are reasonable. After “2 + 2 =”, only one is.
+**Top-p** (also called nucleus sampling) adapts:
+
+1. Sort the words by probability, largest first.
+2. Go down the list. Keep a word if the words ranked *above* it add up to less than p.
+   So the word that pushes the total past p is still kept, and every word after it is dropped.
+3. Divide the kept words by their new total.
+
+Switch the lab to “top-p” with p = 0.9.
+
+<Gate requires="top2-sofa">
+
+<Blank id="topp-count" />
+
+Now write it. `np.argsort(-probs)` gives the word indices from most to least likely, and `np.cumsum` gives running
+totals: `np.cumsum([0.5, 0.3, 0.2])` is `[0.5, 0.8, 1.0]`. The total of the words *above* a word is its running total
+minus its own probability.
+
+<CodeBlank id="topp-code" />
+
+</Gate>
+
+## 4. Beam search: the best word is not always the best start
+
+Greedy picks the best *word* at each step. That does not give the best *sentence*. Here is a tree of two steps.
+The first word is a, the or one; each has its own probabilities for the second word.
+
+<Gate requires="topp-code">
+
+<Blank id="beam-greedy" />
+
+<Predict id="beam-wider" />
+
+<Gate requires="beam-wider">
+
+**Beam search** keeps the `width` best partial sentences at every step instead of just one,
+extends each of them, and keeps the best `width` again. Width 1 is greedy.
+
+<BeamLab hide="beam-best" />
+
+<Blank id="beam-best" />
+
+</Gate>
+
+<Gate requires="beam-best">
+
+<Deeper title="In code, beam search adds logs instead of multiplying">
+
+A sentence’s probability is a product of many numbers below 1. A 100-word sentence where every word has p = 0.1 has
+probability 10⁻¹⁰⁰. Models compute with 32-bit numbers, and in them that is already exactly 0 (the smallest is about 10⁻⁴⁵).
+The smallest normal 64-bit number is about 10⁻³⁰⁸, a few hundred words later. Once the products become 0,
+all sentences get the same score.
+
+So beam search adds natural logs (ln) instead: ln(a × b) = ln a + ln b. The 100-word sentence scores
+100 × ln 0.1 ≈ −230.3, an ordinary number, and comparing these sums ranks sentences exactly like comparing the products.
+
+</Deeper>
+
+<Deeper title="Why chat models rarely use beam search">
+
+Beam search finds sentences the model rates as very likely. For translation, where there is roughly one right answer,
+that is what you want. For open-ended writing it gives bad results: the most likely text is short, plain and repetitive,
+because “safe” common words always score well. It also needs `width` times as much arithmetic.
+
+There is a second problem: longer sentences multiply more numbers below 1, so beam search prefers to stop early.
+Implementations divide the sum of the logs by the length to compensate.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 5. Why greedy repeats itself
+
+Now a real model, built in three steps:
+
+1. **Rules.** Sentences follow one pattern, “the ⟨animal⟩ ⟨verb⟩ ⟨on or in⟩ the ⟨place⟩ .”, with cat, sat, on and mat more common than the other choices.
+2. **Text.** `demo.py` writes 3,000 sentences (21,000 words) from those rules.
+3. **Model.** The simplest possible language model: it looks at the last two words, and the probability of each next word is how often it followed those two words in the text. 4% of every prediction is spread over all 14 words, so words that never appeared there are possible but rare.
+
+<Gate requires="beam-best">
+
+<Predict id="repeat-predict" />
+
+<Gate requires="repeat-predict">
+
+<RepeatLab hide="penalty-cat" />
+
+Greedy writes the most common sentence, then lands back on “. the”, which is exactly where it started.
+Same input, same choice, forever. Real models loop the same way, on longer cycles.
+
+A **repetition penalty** lowers the score of words that were already written. The version here subtracts a fixed amount
+for every earlier use: score = ln p − penalty × (times written). This counting version is often called a frequency penalty.
+Another common version lowers a used word’s score only once, no matter how many times the word appeared. Drag the penalty to 1.0 and select
+the second “cat”/“dog” position.
+
+<Blank id="penalty-cat" />
+
+<Stuck q="If the penalty fixes loops, why not make it large?">
+
+Because it lowers the score of every repeated word, including the ones a sentence needs. “the” and “.” must appear in every
+sentence of our rules. Push the penalty to 3 and watch the lab: the rules start to break.
+In practice the penalty stays small, and sampling (sections 2 and 3) does most of the work of avoiding loops.
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 6. Diversity against quality
+
+The sentence rules are ours, so the model’s output can be graded exactly: does every word sit where
+the rules allow? Below, each strategy writes 200 continuations of six words after “the”.
+
+<Gate requires="penalty-cat">
+
+<Predict id="tradeoff-predict" />
+
+<Gate requires="tradeoff-predict">
+
+<TradeoffLab />
+
+From `demo.py` (fixed random numbers, so these do not move):
+
+| strategy | different continuations (of 200) | follow the rules |
+|---|---|---|
+| greedy | 1 | 100% |
+| T = 0.5 | 47 | 100% |
+| T = 1 | 96 | 81% |
+| T = 2 | 192 | 20% |
+| top-k 3 | 53 | 98% |
+| top-p 0.9 | 62 | 100% |
+
+Greedy is perfectly correct and says one thing. High temperature says everything, mostly wrong. Top-p keeps all the
+reasonable words and drops the many unlikely words, which is why it is the usual default, often combined with a temperature a bit below 1.
+
+<TryIt>
+
+Find a setting in the lab with more than 100 different continuations and at least 95% following the rules.
+Is it possible here? Which setting gets you closest?
+
+</TryIt>
+
+<Blank id="topp-trigram" />
+
+</Gate>
+
+</Gate>
+
+## 7. Writing is a loop
+
+Every strategy on this page runs inside the same loop: run the model on everything written so far, pick one token,
+append it, run again. Count tokens from 0. Written naively, the step that predicts token 100 recomputes all the work
+for tokens 0 to 99, which the earlier steps already did.
+
+Most of it doesn’t need redoing. In a model with the causal mask (level 15), each token’s k and v depend only on that token and the ones
+before it, and those never change once they are written. So a real model stores every token’s k and v when it is computed, in a
+**KV cache**. Then each step gives the model only the newest token and computes only that token’s q, k and v.
+
+Take a small case. Tokens 0, 1 and 2 have already been processed by the model, so their k and v are in the cache.
+The model has just picked token 3. To predict token 4, it gives token 3 to the model.
+
+| | without a cache | with a cache |
+|---|---|---|
+| tokens given to the model | 0, 1, 2, 3 | 3 |
+| q computed for | 4 tokens | 1 token |
+| k and v computed for | 4 tokens | 1 token, then 3 rows come from the cache |
+| scores | 4 × 4, but only the last row is used | 1 × 4: exactly that last row |
+
+<Gate requires="topp-trigram">
+
+<Blank id="q-rows" />
+
+<Gate requires="q-rows">
+
+Without a cache, the work grows with every token. Writing tokens 0 to 99 one at a time computes k for 1 token,
+then 2, then 3, and so on up to 100.
+
+<Blank id="kv-total" />
+
+</Gate>
+
+<Gate requires="kv-total">
+
+<Blank id="kv-new" />
+
+[Level 20](/learn/inference-cost/) shows how big that cache gets, and one way models shrink it.
+
+</Gate>
+
+</Gate>
+
+<Gate requires="kv-new">
+
+## 8. Put it together
+
+A real sampler combines two of this page’s tools: divide the scores by the temperature (level 10), keep only the top k,
+and turn the result into probabilities that add up to 1. `np.sort(x)[::-1]` sorts from largest to smallest, so
+`np.sort(x)[::-1][k - 1]` is the k-th largest score. As with masks in level 15, `np.where(cond, a, b)` takes a where
+`cond` is True and b everywhere else, and a score of −∞ gets probability 0 after softmax.
+
+<CodeBlank id="filter-code" />
+
+That is the whole path from scores to text. [Level 19](/learn/modern-llm/) returns to the block itself: three parts that today’s models have changed.
+
+</Gate>

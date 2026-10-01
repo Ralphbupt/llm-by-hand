@@ -1,0 +1,676 @@
+---
+/**
+ * Home page — the notebook map: a hand-computed notebook page, drawn as a quest map.
+ * Uses only the site's own tokens (global.css) and fonts (Bricolage Grotesque, JetBrains Mono, system UI),
+ * so the home page and the lessons feel like one site. Graph paper, ink, pencil and red-pen marks are decoration
+ * drawn in token colors: ink = --accent, pencil = --dim, red pen = --warn, check = --ok.
+ */
+import '../styles/global.css'
+import '@fontsource-variable/bricolage-grotesque'
+import '@fontsource-variable/jetbrains-mono'
+import { settingsBootScript } from '@lib/settings'
+import { toJsonScript } from '@lib/score'
+import Settings from '../components/Settings.svelte'
+import Search from '../components/Search.svelte'
+import SeoHead from '../components/SeoHead.astro'
+import { websiteLd, courseLd } from '@lib/seo'
+import { allLevels } from '@lib/levels'
+import { SITE_DESCRIPTION } from '../config/site'
+import { homeData, later, type Node } from '../components/home/homeData'
+
+const d = await homeData()
+const mainNodes = [...d.foundations, ...d.theory]
+const mainOrder = mainNodes.map((n) => n.id)
+const allSlugs = Object.keys(d.index)
+
+// ---- map geometry (viewBox units) ----
+const W = 1200, TOP = 150, STEP = 92, CX = 600
+type P = Node & { x: number; y: number }
+// the two parts are drawn as two boxes with a clear gap: Theory starts one GAP lower. The gap is wide enough that a
+// side-trip bridge running through it (level 10 → Classic) reads as a path between two borders, not a third stacked line
+const GAP = 100
+const road: P[] = mainNodes.map((n, i) => ({ ...n, x: CX + 210 * Math.sin(i * 0.72 + 0.4), y: TOP + i * STEP + (i >= d.foundations.length ? GAP : 0) }))
+// a hand-drawn road: smooth curve plus a slightly offset second stroke, like a pen going over it twice
+const curve = (pts: { x: number; y: number }[], dx = 0, dy = 0) =>
+  pts.reduce((acc, p, i) => {
+    if (i === 0) return `M ${p.x + dx} ${p.y + dy}`
+    const q = pts[i - 1], my = (q.y + p.y) / 2
+    return `${acc} C ${q.x + dx} ${my + dy}, ${p.x + dx} ${my + dy}, ${p.x + dx} ${p.y + dy}`
+  }, '')
+const pathA = curve(road), pathB = curve(road, 2.5, 1.5)
+const fEnd = road[d.foundations.length - 1].y + STEP / 2
+const lastY = road[road.length - 1].y
+// the road as points (sampled from the same curves), so text can keep clear of it
+const roadPts: { x: number; y: number }[] = []
+road.forEach((p, i) => {
+  if (i === 0) return
+  const q = road[i - 1], my = (q.y + p.y) / 2
+  for (let k = 0; k <= 40; k++) {
+    const t = k / 40, u = 1 - t
+    roadPts.push({ x: u * u * u * q.x + 3 * u * u * t * q.x + 3 * u * t * t * p.x + t * t * t * p.x, y: u * u * u * q.y + 3 * u * u * t * my + 3 * u * t * t * my + t * t * t * p.y })
+  }
+})
+const CH = 7.2 // px per character of a question (14px system font, on average)
+/**
+ * Each stop's question, line by line, beside the stop and away from the road: a line that would run into the road
+ * (the road bends under the stop) starts further out, and wraps to the room left between it and the region border.
+ */
+const qLines = (s: P, right: boolean, y0: number): { x: number; y: number; t: string; cover: boolean }[] => {
+  const base = s.x + (right ? 38 : -38)
+  // where would the road cut a line at height y? (left of it on the left side, right of it on the right side)
+  const pushAt = (y: number) => {
+    const near = roadPts.filter((p) => p.y > y - 16 && p.y < y + 6 && Math.abs(p.y - s.y) > 24 && (right ? p.x > s.x - 30 : p.x < s.x + 30))
+    if (!near.length) return base
+    return right ? Math.max(base, Math.max(...near.map((p) => p.x)) + 18) : Math.min(base, Math.min(...near.map((p) => p.x)) - 18)
+  }
+  const wrap = (x: number) => {
+    const words = s.question.split(' ')
+    const max = Math.max(12, Math.floor((right ? 880 - 16 - x : x - 320 - 16) / CH))
+    const lines: string[] = []
+    while (words.length && lines.length < 3) {
+      let line = ''
+      while (words.length && (line + ' ' + words[0]).trim().length <= max) line = (line + ' ' + words.shift()).trim()
+      lines.push(line || words.shift()!)
+    }
+    if (words.length) lines[lines.length - 1] += ' …'
+    // no lone last word ("… one word at a / time?"): bring one word down from the line above, if it fits
+    const n = lines.length
+    if (n > 1 && !lines[n - 1].includes(' ') && lines[n - 2].split(' ').length > 2) {
+      const prev = lines[n - 2].split(' ')
+      const moved = prev.pop() + ' ' + lines[n - 1]
+      if (moved.length <= max) { lines[n - 2] = prev.join(' '); lines[n - 1] = moved }
+    }
+    return lines
+  }
+  // one left edge for all lines (a ragged block reads badly): the furthest any of them must move
+  let x = base
+  for (let it = 0; it < 3; it++) {
+    const lines = wrap(x)
+    const need = lines.map((_, k) => pushAt(y0 + k * 18))
+    let nx = right ? Math.max(base, ...need) : Math.min(base, ...need)
+    // never squeeze a question into a narrow strip: past that, it keeps its place and a plate hides the road under it
+    if (Math.abs(nx - base) > 70) {
+      // before a plate covers the road: a road that only cuts the second line misses a one-line question, so use
+      // one line when the whole question fits (measured a little tighter than CH, which is a safe upper bound)
+      const room = right ? 880 - 12 - base : base - 320 - 12
+      // (the road may graze the first letter of that line: the glyph halo covers that)
+      if (Math.abs(pushAt(y0) - base) <= 36 && s.question.length * 6.9 <= room) return [line(base, y0, s.question, right)]
+      nx = base
+    }
+    if (nx === x) return lines.map((t, k) => line(x, y0 + k * 18, t, right))
+    x = nx
+  }
+  return wrap(x).map((t, k) => line(x, y0 + k * 18, t, right))
+}
+// a line gets a backing plate only where the road really runs under its text; elsewhere the glyph halo is enough
+// (a plate wider than the words would cut a blank box out of the grid paper)
+const line = (x: number, y: number, t: string, right: boolean) => {
+  const w = t.length * CH
+  const x0 = right ? x - 4 : x - w - 4, x1 = x0 + w + 8
+  return { x, y, t, cover: roadPts.some((p) => p.x > x0 && p.x < x1 && p.y > y - 14 && p.y < y + 6) }
+}
+// side trips: one box per (main level, branch), next to the level it opens after (lib/nav.ts), in the margin on the
+// label side of the road; when that side is taken, the other margin (then the bridge leaves the stop sideways)
+const placed: { left: boolean; bottom: number }[] = []
+/** The height under a stop's question, where a bridge on the label side turns toward its box. */
+const qBottomOf = (at: P) => at.y + 29 + (qLines(at, at.x <= CX, at.y + 29).length - 1) * 18 + 15
+/** Would a bridge at that height, from the stop to the region border on that side, pass behind another stop? */
+const crosses = (at: P, left: boolean) => {
+  const y = qBottomOf(at), border = left ? 320 : 880
+  const between = (x: number) => (x - at.x) * (border - at.x) > 0 && Math.abs(x - at.x) < Math.abs(border - at.x)
+  // ... or cross the road itself on its way to the border (17 → N7: the road to 18 bends under 17's question)
+  return road.some((s) => s !== at && Math.abs(s.y - y) < 30 && between(s.x)) || roadPts.some((p) => Math.abs(p.y - y) < 4 && Math.abs(p.x - at.x) > 30 && between(p.x))
+}
+const trips = d.trips.map((b) => {
+  const at = road.find((p) => p.id === b.after)!
+  const pref = at.x > CX
+  const iw = 290, ih = b.levels.length * 62 + 86
+  const topOn = (left: boolean) => {
+    let top = at.y - 30
+    for (const q of placed) if (q.left === left && top < q.bottom + 24) top = q.bottom + 24
+    return top
+  }
+  const tPref = topOn(pref), tOther = topOn(!pref)
+  // a bridge on the label side runs under the stop's question; when that line would pass behind another stop
+  // (16 → D3 crosses 17), the box goes to the other margin and the bridge leaves the stop sideways
+  const left = !crosses(at, pref) && (tPref - (at.y - 30) <= 40 || tPref <= tOther) ? pref : !pref
+  const top = left === pref ? tPref : tOther
+  const cx = left ? 24 + iw / 2 : W - 24 - iw / 2
+  placed.push({ left, bottom: top + ih })
+  const stops = b.levels.map((l, k) => ({ ...l, x: cx - iw / 2 + 36, y: top + 90 + k * 62 }))
+  return { ...b, at, cx, top, iw, ih, stops, left, sideways: left !== pref }
+})
+const fogY = lastY + 110
+const H = fogY + 380
+const label = (s: string, n = 24) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title="LLM by Hand: build your own GPT, by hand" description={SITE_DESCRIPTION} preloadDisplayFont
+      jsonLd={[websiteLd(), courseLd(await allLevels())]} page={{ kind: 'home' }} />
+    <script is:inline set:html={settingsBootScript} />
+  </head>
+  <body class="nbm">
+    <header class="top">
+      <a class="brand" href="/">LLM by Hand</a>
+      <nav aria-label="Site">
+        <a href="#map">The map</a>
+        <a href="/glossary/">Glossary</a>
+        <a href="/review/">Mistakes<span class="miss" data-miss hidden></span></a>
+      </nav>
+      <div class="tools"><Search client:idle /><Settings client:idle /></div>
+    </header>
+
+    <section class="hero paper">
+      <div class="hero-in">
+        <h1>Build your own GPT, <span class="nowrap">by hand.</span></h1>
+        <p class="lede">Start with one dot product. End with a working model you wrote yourself.<span class="try"><br />Every step is small enough for pen and paper. Try the first one right here.</span></p>
+
+        <!-- returning learners: one clear way back in (filled by the progress script) -->
+        <div class="back" data-back hidden>
+          <a class="go" href="#" data-go><span data-go-label>Continue</span> <small data-go-sub></small></a>
+          <span class="stats"><b data-s-cleared>0</b> cleared · <b data-s-stars>0</b> <span data-s-stars-word>stars</span></span>
+          <button type="button" class="again" data-again>Try the first question again</button>
+        </div>
+
+        <figure class="sheet" aria-label="Try one: compute one attention score">
+          <div class="givens">
+            <div><span class="v">cat</span> = <span class="num">[2, 0]</span></div>
+            <div><span class="v">dog</span> = <span class="num">[1, 1]</span></div>
+          </div>
+          <div class="eq">
+            <span class="eq-g"><span class="v">cat · dog</span> <span class="op">=</span></span>
+            <span class="eq-g"><span class="num">2×1 + 0×1</span> <span class="op">=</span>
+              <label class="blank"><input data-in inputmode="numeric" enterkeyhint="done" autocomplete="off" aria-label="cat · dog: type the answer" placeholder="?" /></label>
+              <span class="pen" data-pen aria-live="polite"></span></span>
+          </div>
+          <div class="margin" data-hint-wrap>
+            <span class="note red" data-hint>multiply the pairs, then add</span>
+            <svg class="arrow" viewBox="0 0 90 46" aria-hidden="true"><path d="M4 40 C 30 40, 60 30, 80 8" /><path d="M70 7 L81 7 L80 18" /></svg>
+          </div>
+          <div class="after" data-after hidden>
+            <p class="note">That is one attention score. Do the same for every pair:</p>
+            <div class="row">cat·cat = <b>4</b> &nbsp; cat·dog = <b class="yours">2</b> &nbsp; cat·car = <b>0</b></div>
+            <p class="note">Turn cat’s row (4, 2, 0) into shares that add up to 1, and you get attention: how much cat looks at each word.</p>
+            <div class="bars">
+              <div><span>cat</span><i style="--w:0.87"></i><em>0.87</em></div>
+              <div><span>dog</span><i style="--w:0.12"></i><em>0.12</em></div>
+              <div><span>car</span><i style="--w:0.02"></i><em>0.02</em></div>
+            </div>
+            <a class="go" href={`/learn/${d.foundations[0].id}/`}><span>Start with level 1</span> <small>{d.foundations[0].title}</small></a>
+          </div>
+        </figure>
+        <div class="start" data-skip>
+          <a class="go" href={`/learn/${d.foundations[0].id}/`}><span>Start level 1</span> <small>{d.foundations[0].title}</small></a>
+          <a class="see" href="#map">See the map of all {d.written} levels</a>
+        </div>
+        <p class="skip">Know the basics? Each level opens with “Skip it with a short test”: answer a few questions and the level counts as cleared. Or turn on reading mode (in ⚙ settings) to just read, or <a href={`/learn/${d.theory[0].id}/`}>start at level {d.theory[0].level}</a>.</p>
+      </div>
+    </section>
+
+    <section class="mapwrap" id="map" aria-labelledby="map-h">
+      <div class="map-head">
+        <h2 id="map-h">The map</h2>
+        <p class="map-sub">Foundations, then Theory. Side trips are optional (the main levels never need them) and sit next to the level they open after. Three more parts are planned.</p>
+      </div>
+      <div class="map-paper paper">
+        <p class="legend"><span class="lg-node"></span>a level <span class="lg-boss"></span>boss: build it yourself <span class="lg-star">★★★</span>stars you earned</p>
+        <dl class="trip-notes">
+          {d.trips.filter((t) => t.note).map((t) => (
+            <div><dt>Side trip: {t.name}</dt><dd>{t.note}</dd></div>
+          ))}
+        </dl>
+        <svg class="map" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Course map drawn on graph paper">
+          <defs>
+            <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+              <line x1="0" y1="0" x2="0" y2="10" class="hatch-line" />
+            </pattern>
+          </defs>
+          <!-- regions: pencil outlines -->
+          <rect class="region-box" x="320" y={TOP - 95} width="560" height={fEnd - TOP + 95 + 22} rx="28" />
+          <rect class="region-box" x="320" y={fEnd + GAP} width="560" height={lastY - fEnd - GAP + 52} rx="28" />
+          <text class="region" x="344" y={TOP - 54}>Foundations</text>
+          <text class="region" x="344" y={fEnd + GAP + 44}>Theory</text>
+          <!-- side trips -->
+          {trips.map((t) => (
+            <g class="trip">
+              {(() => {
+                // leave the stop downward (under its label), turn, and cross the region border at a right angle
+                // through a small gap in the pencil line, ending at the side trip's inner edge.
+                // A box in the other margin: leave the stop sideways (no label on that side), then bend to the box.
+                const ex = t.left ? t.cx + t.iw / 2 : t.cx - t.iw / 2
+                const dir = t.left ? -1 : 1
+                const border = t.left ? 320 : 880
+                // below the stop's question (so the dotted line never runs through its text)
+                const qBottom = qBottomOf(t.at)
+                let ey = t.sideways
+                  ? Math.min(Math.max(t.at.y, t.top + 40), t.top + t.ih - 26)
+                  : Math.min(Math.max(qBottom, t.top + 26), t.top + t.ih - 26)
+                // never run along the bottom edge of the Foundations box (two dashed lines would merge into one thick
+                // one): in that band, take the middle of the gap between the two boxes
+                const inBand = (y: number) => y > fEnd + 22 - 14 && y < fEnd + GAP + 14
+                // the box starts lower than the question (a box above it took the space): bend near the border instead
+                const bend = !t.sideways && ey > qBottom + 4 && !inBand(qBottom)
+                if (inBand(ey)) ey = fEnd + 22 + (GAP - 22) / 2
+                const d = t.sideways
+                  ? `M ${t.at.x + dir * 26} ${t.at.y} L ${border - dir * 30} ${t.at.y} C ${border} ${t.at.y}, ${border - dir * 30} ${ey}, ${border} ${ey} L ${ex} ${ey}`
+                  : !bend
+                    ? `M ${t.at.x} ${t.at.y + 26} C ${t.at.x} ${ey}, ${t.at.x} ${ey}, ${t.at.x + dir * 34} ${ey} L ${ex} ${ey}`
+                    // the box starts lower (a box above it took the space): stay at the question's height, which is
+                    // clear of the next stops, and bend down to the box at the border, like a sideways bridge
+                    : `M ${t.at.x} ${t.at.y + 26} C ${t.at.x} ${qBottom}, ${t.at.x} ${qBottom}, ${t.at.x + dir * 34} ${qBottom} L ${border - dir * 30} ${qBottom} C ${border} ${qBottom}, ${border - dir * 30} ${ey}, ${border} ${ey} L ${ex} ${ey}`
+                return (<>
+                  <rect class="door" x={border - 6} y={ey - 11} width="12" height="22" />
+                  <path class="bridge" d={d} />
+                </>)
+              })()}
+              <rect class="trip-box" x={t.cx - t.iw / 2} y={t.top} width={t.iw} height={t.ih} rx="18" />
+              <text class="trip-name" x={t.cx - t.iw / 2 + 18} y={t.top + 34}>{t.name}</text>
+              <text class="trip-after" x={t.cx - t.iw / 2 + 18} y={t.top + 58}>side trip · opens after level {t.afterLevel}</text>
+              {t.stops.map((s) => (
+                <a href={`/learn/${s.id}/`} class:list={['stop', 'small', { 'is-boss': s.boss }]} data-level={s.id} data-title={s.title} data-q={s.question} data-lv={s.level}>
+                  <title>{s.level}. {s.title}</title>
+                  <circle class="halo" cx={s.x} cy={s.y} r="30" />
+                  {s.boss ? <rect class="node" x={s.x - 14} y={s.y - 14} width="28" height="28" rx="4" transform={`rotate(45 ${s.x} ${s.y})`} /> : <circle class="node" cx={s.x} cy={s.y} r="17" />}
+                  <text class="num" x={s.x} y={s.y + 5} text-anchor="middle">{s.level}</text>
+                  <text class="lbl" x={s.x + 30} y={s.y + 5}>{label(s.short, 25)}</text>
+                  <text class="stars" x={s.x + 30} y={s.y - 13} data-stars></text>
+                </a>
+              ))}
+            </g>
+          ))}
+          <!-- the road, inked twice -->
+          <path class="road ghost" d={pathB} />
+          <path class="road" d={pathA} />
+          {road.map((s) => {
+            const right = s.x <= CX
+            // the name, the stars and the question share one edge: when the question moves out to keep clear of the road,
+            // the name moves with it (level 16), so the question never looks indented under its name
+            const ql = qLines(s, right, s.y + 29)
+            const tx = ql[0]?.x ?? s.x + (right ? 38 : -38)
+            return (
+              <a href={`/learn/${s.id}/`} class:list={['stop', { 'is-boss': s.boss }]} data-level={s.id} data-main data-title={s.title} data-q={s.question} data-lv={s.level}>
+                <title>{s.level}. {s.title}</title>
+                <circle class="halo" cx={s.x} cy={s.y} r="40" />
+                {s.boss ? <rect class="node" x={s.x - 20} y={s.y - 20} width="40" height="40" rx="6" transform={`rotate(45 ${s.x} ${s.y})`} /> : <circle class="node" cx={s.x} cy={s.y} r="23" />}
+                <text class="num" x={s.x} y={s.y + 6} text-anchor="middle">{s.level}</text>
+                <!-- a boss says so on its name's line, so its question gets the same two lines as every other stop -->
+                <text class="lbl" x={tx} y={s.y + 7} text-anchor={right ? 'start' : 'end'}>{label(s.short, 28)}{s.boss && <tspan class="boss-note" dx="12">boss · build it yourself</tspan>}</text>
+                {ql.map((ln) => (<>
+                  {ln.cover && <rect class="q-plate" x={right ? ln.x - 4 : ln.x - ln.t.length * CH - 4} y={ln.y - 13} width={ln.t.length * CH + 8} height="18" rx="4" />}
+                  <text class="q" x={ln.x} y={ln.y} text-anchor={right ? 'start' : 'end'}>{ln.t}</text>
+                </>))}
+                <text class="stars" x={tx} y={s.y - 17} text-anchor={right ? 'start' : 'end'} data-stars></text>
+                <g class="here" transform={`translate(${s.x + (right ? -40 : 40)} ${s.y})`}>
+                  <text x={right ? -12 : 12} y="-14" text-anchor={right ? 'end' : 'start'}>you are here</text>
+                  <path d={right ? 'M -60 -6 Q -30 4 -4 0' : 'M 60 -6 Q 30 4 4 0'} />
+                </g>
+              </a>
+            )
+          })}
+          <!-- the fog: planned parts, not written yet -->
+          <path class="road faint" d={`M ${road[road.length - 1].x} ${lastY + 28} C ${road[road.length - 1].x} ${fogY + 20}, ${CX} ${fogY}, ${CX} ${fogY + 60}`} />
+          {later.map((p, i) => {
+            const cx = 210 + i * 390
+            return (
+              <g class="fog">
+                <rect x={cx - 175} y={fogY + 70} width="350" height="270" rx="36" fill="url(#hatch)" class="fog-box" />
+                <rect x={cx - 150} y={fogY + 92} width="300" height="226" rx="14" class="fog-card" />
+                <text class="fog-name" x={cx} y={fogY + 132} text-anchor="middle">{p.short}</text>
+                <text class="fog-sub" x={cx} y={fogY + 158} text-anchor="middle">{p.items.length} levels · planned</text>
+                {p.items.slice(0, 4).map((it, k) => <text class="fog-item" x={cx - 128} y={fogY + 192 + k * 26}>· {label(it, 34)}</text>)}
+                {p.items.length > 4 && <text class="fog-more" x={cx - 128} y={fogY + 192 + 4 * 26}>and {p.items.length - 4} more</text>}
+              </g>
+            )
+          })}
+        </svg>
+        <div class="peek" data-peek hidden aria-live="polite"></div>
+      </div>
+
+      <!-- phones: the same journey as a path down the page -->
+      <ol class="trail">
+        {mainNodes.map((n, i) => (
+          <>
+            {i === 0 && <li class="t-region">Foundations</li>}
+            {i === d.foundations.length && <li class="t-region">Theory</li>}
+            <li data-level={n.id} data-main class:list={['t-stop', { 'is-boss': n.boss }]}>
+              <a href={`/learn/${n.id}/`}>
+                <span class="t-n">{n.level}</span>
+                <span class="t-body"><span class="t-t">{n.short}</span>{n.boss && <span class="t-boss">boss · build it yourself</span>}<span class="t-q">{n.question}</span></span>
+                <span class="t-s" data-stars></span>
+              </a>
+            </li>
+            {trips.filter((t) => t.after === n.id).map((t) => (
+              <li class="t-trip">
+                <span class="t-trip-h">Side trip: {t.name}</span>
+                <span class="t-trip-after">Opens after level {t.afterLevel}</span>
+                {t.note && <span class="t-trip-note">{t.note.replace(/\s*Opens after level \S+\.$/, '')}</span>}
+                <ol>{t.stops.map((s) => <li data-level={s.id} class:list={['t-stop', 'small', { 'is-boss': s.boss }]}><a href={`/learn/${s.id}/`}><span class="t-n">{s.level}</span><span class="t-body"><span class="t-t">{s.short}</span></span><span class="t-s" data-stars></span></a></li>)}</ol>
+              </li>
+            ))}
+          </>
+        ))}
+        <!-- after level 21 the path is dashed, like the road into the fog on the desktop map: not built yet -->
+        <li class="t-later">
+          <ol>
+            <li class="t-region fogged">Planned</li>
+            {later.map((p) => <li class="t-fog"><b>{p.name}</b> · {p.items.length} levels, planned</li>)}
+          </ol>
+        </li>
+      </ol>
+    </section>
+
+    <footer class="pfoot">
+      <a href="/setup/">Run it on your computer</a><a href="/glossary/">Glossary</a><a href="/review/">Mistakes</a>
+      <span>Progress stays in this browser. Code MIT, lessons CC BY-SA 4.0.</span>
+    </footer>
+
+    <script type="application/json" id="level-index" set:html={toJsonScript(d.index)} />
+    <script type="application/json" id="home-order" set:html={toJsonScript({ mainOrder, allSlugs })} />
+    <script>
+      import { readState, onProgress, starText } from '../components/home/progressClient'
+      const { mainOrder, allSlugs } = JSON.parse(document.getElementById('home-order')!.textContent!)
+
+      // try one: the blank cell
+      const input = document.querySelector<HTMLInputElement>('[data-in]')!
+      const pen = document.querySelector<HTMLElement>('[data-pen]')!
+      const hint = document.querySelector<HTMLElement>('[data-hint]')!
+      let tries = 0
+      function check() {
+        const v = input.value.trim()
+        if (v === '') return
+        if (Number(v) === 2) {
+          pen.textContent = '✓'; pen.className = 'pen ok'; input.readOnly = true
+          document.querySelector<HTMLElement>('[data-hint-wrap]')!.hidden = true
+          document.querySelector<HTMLElement>('[data-skip]')!.hidden = true
+          document.body.classList.add('answered')
+          document.querySelector<HTMLElement>('[data-after]')!.hidden = false
+        } else {
+          tries++
+          pen.textContent = '✗'; pen.className = 'pen bad'
+          hint.textContent = tries > 1 ? '2×1 = 2 and 0×1 = 0 · add them' : 'not quite · multiply the pairs, then add'
+        }
+      }
+      input.addEventListener('keydown', (e) => e.key === 'Enter' && check())
+      input.addEventListener('change', check)
+
+      // the peek card: full title and question for the stop under the pointer (map labels are short)
+      const peek = document.querySelector<HTMLElement>('[data-peek]')!
+      const box = document.querySelector<HTMLElement>('.map-paper')!
+      function showPeek(a: Element) {
+        const el = a as HTMLElement
+        const r = el.getBoundingClientRect(), b = box.getBoundingClientRect()
+        const stars = el.querySelector('[data-stars]')?.textContent
+        peek.innerHTML = `<b>${el.dataset.lv}. ${el.dataset.title}</b><span>${el.dataset.q}</span>${stars ? `<em>${stars}</em>` : ''}`
+        peek.hidden = false
+        const left = Math.min(Math.max(8, r.left - b.left + r.width / 2 - 150), b.width - 308)
+        peek.style.left = `${left}px`
+        peek.style.top = `${r.bottom - b.top + 8}px`
+      }
+      // touch (tablets): the first tap shows the card with an "Open" link, the second tap opens the level
+      let peeked: Element | null = null
+      document.querySelectorAll('.map .stop').forEach((a) => {
+        a.addEventListener('pointerenter', (e) => { if ((e as PointerEvent).pointerType === 'mouse') showPeek(a) })
+        a.addEventListener('focus', () => showPeek(a))
+        a.addEventListener('pointerleave', (e) => { if ((e as PointerEvent).pointerType === 'mouse') peek.hidden = true })
+        a.addEventListener('blur', () => { if (!peek.matches(':hover')) peek.hidden = true })
+        a.addEventListener('click', (e) => {
+          if ((e as PointerEvent).pointerType === 'touch' && peeked !== a) {
+            e.preventDefault()
+            peeked = a
+            showPeek(a)
+            const href = (a as SVGAElement).href?.baseVal ?? a.getAttribute('href')
+            peek.insertAdjacentHTML('beforeend', `<a class="peek-open" href="${href}">Open this level →</a>`)
+          }
+        })
+      })
+      document.addEventListener('pointerdown', (e) => {
+        if (!(e.target as Element).closest?.('.map .stop, [data-peek]')) { peek.hidden = true; peeked = null }
+      })
+      document.querySelector('[data-again]')?.addEventListener('click', () => document.body.classList.toggle('show-try'))
+
+      // progress
+      onProgress(() => {
+        const st = readState(mainOrder, allSlugs)
+        let stars = 0
+        st.cleared.forEach((v) => (stars += v))
+        const nextId = st.next ?? (st.started ? null : mainOrder[0])
+        document.querySelectorAll<Element>('[data-level]').forEach((el) => {
+          const id = (el as HTMLElement).dataset.level!
+          const s = st.cleared.get(id)
+          el.classList.toggle('done', s !== undefined)
+          el.classList.toggle('helped', s !== undefined && s < 3)
+          el.classList.toggle('next', id === nextId)
+          el.querySelectorAll('[data-stars]').forEach((t) => (t.textContent = s !== undefined ? starText(s) : ''))
+        })
+        document.querySelector('[data-s-cleared]')!.textContent = String(st.cleared.size)
+        document.querySelector('[data-s-stars]')!.textContent = String(stars)
+        document.querySelector('[data-s-stars-word]')!.textContent = stars === 1 ? 'star' : 'stars'
+        document.querySelector<HTMLElement>('[data-back]')!.hidden = !(st.started && st.next)
+        // returning learners: the first question folds away behind "Try the first question again"
+        document.body.classList.toggle('returning', st.started)
+        if (st.next) {
+          const n = document.querySelector<HTMLElement>(`.trail li[data-level="${st.next}"]`)!
+          document.querySelector<HTMLAnchorElement>('[data-go]')!.href = n.querySelector('a')!.href
+          document.querySelector('[data-go-label]')!.textContent = `Continue with level ${n.querySelector('.t-n')!.textContent}`
+          document.querySelector('[data-go-sub]')!.textContent = n.querySelector('.t-t')!.textContent
+        }
+        const m = document.querySelector<HTMLElement>('[data-miss]')!
+        m.hidden = st.mistakes === 0
+        m.textContent = String(st.mistakes)
+      })
+    </script>
+
+    <style>
+      /* Layout: top bar; hero on graph paper (promise | the worked example); the map on one big sheet of graph paper; footer.
+         Colors are the site's tokens only. ink = --accent, pencil = --dim, red pen = --warn, check = --ok. */
+      :root {
+        --display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
+        --num: 'JetBrains Mono Variable', var(--mono);
+        --grid: color-mix(in srgb, var(--line) 55%, transparent);
+        --grid-strong: var(--line);
+        --mark: color-mix(in srgb, var(--accent) 16%, transparent);
+      }
+      body.nbm { background: var(--bg); color: var(--fg); }
+      .paper {
+        background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+          linear-gradient(var(--grid-strong) 1px, transparent 1px), linear-gradient(90deg, var(--grid-strong) 1px, transparent 1px);
+        background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+      }
+      .top { max-width: 1180px; margin: 0 auto; padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1.2rem; }
+      .brand { font-family: var(--display); font-weight: 700; font-size: 1.15rem; color: var(--fg); text-decoration: none; margin-right: auto; }
+      .top nav { display: flex; gap: 1.1rem; font-size: 0.92rem; }
+      .top nav a { color: var(--dim); text-decoration: none; }
+      .top nav a:hover { color: var(--fg); }
+      .tools { display: flex; gap: 0.5rem; }
+      .miss { margin-left: 0.3rem; color: var(--warn); font-family: var(--num); font-size: 0.8rem; }
+
+      .hero { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+      /* the grid fades behind the headline so the lines never run through the words */
+      .hero.paper { background-image: radial-gradient(ellipse 62% 42% at 50% 18%, var(--bg) 45%, transparent 100%),
+          linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+          linear-gradient(var(--grid-strong) 1px, transparent 1px), linear-gradient(90deg, var(--grid-strong) 1px, transparent 1px);
+        background-size: 100% 100%, 24px 24px, 24px 24px, 120px 120px, 120px 120px; }
+      .start { display: flex; gap: 1.2rem; align-items: center; justify-content: center; flex-wrap: wrap; margin: 1.6rem 0 0; }
+      .see { color: var(--fg); text-underline-offset: 4px; text-decoration-color: var(--field); }
+      .again { font: inherit; font-size: 0.88rem; color: var(--dim); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+      .returning .sheet, .returning .start, .returning .skip, .returning .lede .try { display: none; }
+      .returning.show-try .sheet { display: block; }
+      .answered .start { display: none; }
+      .eq-g { display: inline-flex; align-items: center; gap: 0.7rem; white-space: nowrap; }
+      .hero-in { max-width: 900px; margin: 0 auto; padding: 3.4rem 1.25rem 3rem; text-align: center; }
+      h1 { font-family: var(--display); font-weight: 750; font-size: clamp(1.9rem, 4.2vw, 3rem); line-height: 1.08; letter-spacing: -0.025em; margin: 0; text-wrap: balance; }
+      .nowrap { white-space: nowrap; }
+      .lede { font-size: 1.08rem; line-height: 1.6; color: var(--dim); margin: 0.9rem auto 1.8rem; max-width: 36rem; }
+      .go { display: inline-flex; align-items: baseline; gap: 0.5rem; padding: 0.65rem 1.25rem; background: var(--accent); color: var(--on-solid); border-radius: 8px; min-height: 44px;
+        text-decoration: none; font-weight: 700; }
+      .go small { font-weight: 500; opacity: 0.85; font-size: 0.85rem; }
+      a:focus-visible, .stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+      .back { display: flex; gap: 1.2rem; align-items: center; justify-content: center; flex-wrap: wrap; margin: -0.6rem 0 1.8rem; }
+      .back .stats { color: var(--dim); font-size: 0.92rem; }
+      .back .stats b { font-family: var(--display); font-size: 1.15rem; color: var(--fg); }
+
+      /* the sheet: one worked line, big, like a page of a notebook */
+      .sheet { margin: 0 auto; max-width: 720px; text-align: left; padding: 1.6rem 2rem 1.7rem; border: 1.5px solid var(--grid-strong);
+        background: color-mix(in srgb, var(--bg) 82%, transparent); border-radius: 4px; box-shadow: 0 1px 0 var(--grid-strong), 0 14px 40px -24px rgb(0 0 0 / 0.5); }
+      .givens { display: flex; gap: 2.4rem; flex-wrap: wrap; font-family: var(--num); font-size: clamp(1.1rem, 2.4vw, 1.45rem); color: var(--accent); margin-bottom: 1rem; }
+      .v { color: var(--fg); }
+      .eq { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; font-family: var(--num); font-size: clamp(1.4rem, 3.6vw, 2.3rem); color: var(--accent); }
+      .op { color: var(--dim); }
+      .blank { display: inline-flex; align-items: center; justify-content: center; width: 4.4rem; height: 3.6rem; border: 2px dashed var(--warn); border-radius: 8px; background: var(--bg); }
+      .blank:focus-within { border-style: solid; box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 20%, transparent); }
+      .blank input { width: 100%; height: 100%; border: 0; background: transparent; font-family: var(--num); font-weight: 700; font-size: 1.15em; color: var(--accent); text-align: center; outline: none; padding: 0; }
+      .blank input::placeholder { color: var(--warn); opacity: 0.9; }
+      .blank:has(input:read-only) { border: 2px solid var(--ok); }
+      .pen { font-family: var(--display); font-weight: 800; font-size: 1.15em; color: var(--warn); }
+      .pen.ok { color: var(--ok); }
+      .pen.bad { text-decoration: line-through; }
+      .margin { display: flex; align-items: flex-end; gap: 0.2rem; margin: 0.1rem 0 0 auto; width: max-content; max-width: 100%; }
+      .row { font-family: var(--num); font-size: 1.05rem; color: var(--dim); margin: 0 0 0.8rem; }
+      .row b { color: var(--accent); }
+      .row b.yours { color: var(--ok); border-bottom: 2px solid var(--ok); }
+      .arrow { width: 70px; height: 36px; flex: none; fill: none; stroke: var(--dim); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transform: scaleX(-1); }
+      .note { font-family: var(--display); font-weight: 500; color: var(--dim); margin: 0 0 0.5rem; font-size: 1rem; }
+      /* a hint is help, not an error: pencil gray (only the ✗ is red) */
+      .note.red { color: var(--dim); margin: 0; font-size: 1.05rem; }
+      .skip { margin: 1.3rem 0 0; color: var(--dim); font-size: 0.92rem; }
+      .skip a { color: var(--fg); text-underline-offset: 3px; }
+      .after .go { margin-top: 0.4rem; }
+      .after { margin-top: 0.8rem; }
+      .bars { display: grid; gap: 0.35rem; margin: 0.5rem 0 0.8rem; }
+      .bars div { display: grid; grid-template-columns: 2.8rem 1fr 3rem; align-items: center; gap: 0.6rem; font-family: var(--num); font-size: 0.95rem; }
+      .bars i { height: 0.9rem; background: var(--accent); border-radius: 3px; width: calc(var(--w) * 100%); min-width: 3px; }
+      .bars em { font-style: normal; color: var(--accent); text-align: right; }
+      @media (prefers-reduced-motion: no-preference) {
+        :root:not([data-motion='reduce']) .work .line { clip-path: inset(0 100% 0 0); animation: write 0.6s ease-out forwards; }
+        :root:not([data-motion='reduce']) .work .line:nth-of-type(2) { animation-delay: 0.45s; }
+        :root:not([data-motion='reduce']) .work .line:nth-of-type(3) { animation-delay: 0.9s; }
+        @keyframes write { to { clip-path: inset(0 0 0 0); } }
+      }
+
+      .mapwrap { max-width: 1180px; margin: 0 auto; padding: 3rem 1.25rem 2rem; }
+      .map-head { display: flex; align-items: baseline; gap: 1.2rem; flex-wrap: wrap; margin-bottom: 1rem; }
+      .map-head h2 { font-family: var(--display); font-size: 1.9rem; letter-spacing: -0.02em; margin: 0; }
+      .map-sub { color: var(--dim); margin: 0; }
+      .map-paper { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+      .map { width: 100%; height: auto; display: block; }
+      .region-box { fill: none; stroke: var(--dim); stroke-width: 2; stroke-dasharray: 10 6; opacity: 0.55; }
+      .region { font-family: var(--display); font-weight: 700; font-size: 30px; fill: var(--dim); }
+      .trip-box { fill: color-mix(in srgb, var(--bg) 85%, transparent); stroke: var(--dim); stroke-width: 1.5; stroke-dasharray: 4 5; }
+      .trip-name { font-family: var(--display); font-weight: 650; font-size: 18px; fill: var(--fg); }
+      .trip-after { font-family: system-ui, sans-serif; font-size: 14px; fill: var(--dim); }
+      .stop .q-plate { fill: var(--bg); opacity: 0.92; }
+      .stop .q { font-family: system-ui, sans-serif; font-size: 14px; fill: var(--dim); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+      .trip-notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.8rem 1.4rem; margin: 2.8rem 0 0; padding: 0 1.2rem; }
+      .trip-notes dt { font-family: var(--display); font-weight: 650; }
+      .trip-notes dd { margin: 0.15rem 0 0; color: var(--dim); font-size: 0.88rem; line-height: 1.45; }
+      .bridge { fill: none; stroke: var(--dim); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; }
+      .road { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; }
+      .road.ghost { stroke-width: 1.5; opacity: 0.35; }
+      .road.faint { stroke-dasharray: 8 8; opacity: 0.45; }
+      .stop .node { fill: var(--bg); stroke: var(--accent); stroke-width: 3; }
+      .stop .num { font-family: var(--num); font-weight: 700; font-size: 16px; fill: var(--accent); pointer-events: none; }
+      .stop.small .num { font-size: 12px; }
+      .stop .lbl { font-family: system-ui, sans-serif; font-weight: 600; font-size: 19px; fill: var(--fg); }
+      .stop.small .lbl { font-size: 15px; font-weight: 500; }
+      .boss-note { font-family: var(--display); font-weight: 500; font-size: 15px; fill: var(--warn); }
+      .stop .stars { font-family: var(--num); font-size: 15px; fill: var(--ok); letter-spacing: 1px; }
+      .stop.is-boss .node { stroke: var(--warn); }
+      .stop.done .node { fill: var(--ok); stroke: var(--ok); }
+      /* cleared with help: an outlined green node (orange is kept for boss levels only) */
+      .stop.done.helped .node { fill: var(--bg); stroke: var(--ok); stroke-width: 3.5; }
+      .stop.done .num { fill: var(--on-solid); }
+      .stop.done.helped .num { fill: var(--ok); }
+      .stop .halo { fill: var(--mark); opacity: 0; }
+      .stop.next .halo { opacity: 1; }
+      .stop .here { display: none; }
+      .stop.next .here { display: block; }
+      .here text { font-family: var(--display); font-weight: 600; font-size: 17px; fill: var(--accent); }
+      .here path { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
+      .stop:hover .node { stroke-width: 5; }
+      .hatch-line { stroke: var(--dim); stroke-width: 1.2; opacity: 0.35; }
+      .fog-box { stroke: var(--dim); stroke-width: 1.5; stroke-dasharray: 6 6; }
+      /* one size for the three planned parts, so they read as one group (the longest name still fits its card) */
+      .fog-name { font-family: var(--display); font-weight: 700; font-size: 24px; fill: var(--fg); }
+      .fog-sub { font-size: 15px; fill: var(--dim); }
+      .fog-card { fill: var(--bg); stroke: none; opacity: 0.92; }
+      .fog-item { font-size: 15px; fill: var(--fg); font-family: system-ui, sans-serif; }
+      .fog-more { font-size: 14px; fill: var(--dim); font-family: system-ui, sans-serif; }
+      .door { fill: var(--bg); }
+      .legend { position: absolute; top: 0.6rem; right: 0.9rem; margin: 0; display: flex; align-items: center; gap: 0.35rem 0.6rem; flex-wrap: wrap;
+        font-size: 0.8rem; color: var(--dim); background: color-mix(in srgb, var(--bg) 85%, transparent); padding: 0.2rem 0.5rem; border-radius: 6px; z-index: 1; }
+      .lg-node { width: 0.8rem; height: 0.8rem; border: 2px solid var(--accent); border-radius: 50%; }
+      .lg-boss { width: 0.7rem; height: 0.7rem; border: 2px solid var(--warn); transform: rotate(45deg); margin-left: 0.4rem; }
+      .lg-star { color: var(--ok); font-family: var(--num); margin-left: 0.4rem; }
+      .peek-open { margin-top: 0.2rem; color: var(--accent); font-weight: 600; }
+      .peek { position: absolute; width: 300px; padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+        box-shadow: 0 6px 20px rgb(0 0 0 / 0.2); font-size: 0.88rem; display: grid; gap: 0.25rem; z-index: 2; }
+      .peek :global(b) { font-family: var(--display); }
+      .peek :global(span) { color: var(--dim); }
+      .peek :global(em) { font-style: normal; color: var(--ok); font-family: var(--num); }
+      /* the one orchestrated moment: the next stop's highlight breathes */
+      @media (prefers-reduced-motion: no-preference) {
+        :root:not([data-motion='reduce']) .stop.next .halo { animation: breathe 2.6s ease-in-out 2; transform-box: fill-box; transform-origin: center; }
+        @keyframes breathe { 50% { transform: scale(0.82); opacity: 0.6; } }
+      }
+
+      .trail { display: none; list-style: none; margin: 0; padding: 0; }
+      .pfoot { max-width: 1180px; margin: 0 auto; padding: 1rem 1.25rem 3rem; display: flex; gap: 1.2rem; flex-wrap: wrap; color: var(--dim); font-size: 0.88rem; }
+      .pfoot a { color: var(--fg); }
+
+      @media (max-width: 900px) {
+        .hero-in { grid-template-columns: minmax(0, 1fr); gap: 2rem; padding-top: 2rem; }
+        .work { transform: none; }
+      }
+      /* phones: the map turns into a path down the page */
+      @media (max-width: 760px) {
+        .top nav { display: none; }
+        .sheet { padding: 1.1rem 1rem 1.2rem; }
+        .givens { gap: 1.2rem; }
+        .eq { gap: 0.4rem 0.6rem; }
+        .legend { display: none; }
+        .map-paper { display: none; }
+        .trail { display: block; position: relative; padding-left: 0.2rem; }
+        .trail::before { content: ''; position: absolute; left: 1.25rem; top: 0.5rem; bottom: 0.5rem; width: 3px; background: var(--accent); opacity: 0.35; border-radius: 2px; }
+        .t-region { font-family: var(--display); font-weight: 700; font-size: 1.3rem; color: var(--dim); margin: 1.4rem 0 0.4rem 3rem; }
+        .t-stop { margin: 0.25rem 0; }
+        .t-stop > a { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto; gap: 0.6rem; align-items: start; color: var(--fg); text-decoration: none; padding: 0.35rem 0; }
+        .t-n { position: relative; z-index: 1; width: 2.4rem; height: 2.4rem; border-radius: 50%; display: grid; place-items: center; background: var(--bg);
+          border: 3px solid var(--accent); font-family: var(--num); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+        /* boss: the same diamond as on the desktop map */
+        .t-stop.is-boss .t-n { border-color: transparent; background: none; }
+        .t-stop.is-boss .t-n::before { content: ''; position: absolute; inset: 0.12rem; border: 3px solid var(--warn); border-radius: 4px; transform: rotate(45deg); background: var(--bg); z-index: -1; }
+        .t-stop.is-boss.done .t-n::before { background: var(--ok); border-color: var(--ok); }
+        .t-stop.done .t-n { background: var(--ok); border-color: var(--ok); color: var(--on-solid); }
+        .t-stop.done.helped .t-n { background: var(--bg); border-color: var(--ok); color: var(--ok); }
+        .t-stop.next .t-n { box-shadow: 0 0 0 6px var(--mark); }
+        .t-body { display: grid; gap: 0.1rem; min-width: 0; padding-top: 0.2rem; }
+        .t-t { font-weight: 650; line-height: 1.3; }
+        .t-q { color: var(--dim); font-size: 0.88rem; line-height: 1.4; }
+        .t-boss { color: var(--warn); font-family: var(--display); font-size: 0.82rem; }
+        .t-s { font-family: var(--num); color: var(--ok); font-size: 0.85rem; padding-top: 0.5rem; }
+
+        .t-trip { margin: 0.4rem 0 0.8rem 3.2rem; padding: 0.6rem 0.7rem; border: 1.5px dashed var(--dim); border-radius: 10px; }
+        .t-trip-h { font-family: var(--display); font-weight: 650; display: block; }
+        .t-trip-after { display: block; margin: 0.1rem 0 0.35rem; color: var(--dim); font-size: 0.85rem; line-height: 1.4; }
+        .t-trip-note { display: block; margin: -0.2rem 0 0.4rem; color: var(--dim); font-size: 0.82rem; line-height: 1.45; }
+        .t-trip ol { list-style: none; margin: 0; padding: 0; }
+        .t-trip .t-n { width: 2rem; height: 2rem; font-size: 0.72rem; border-width: 2px; }
+        .t-trip .t-stop > a { grid-template-columns: 2.2rem minmax(0, 1fr) auto; }
+        /* a side-trip boss: a diamond as wide as the side-trip circles (about 40px corner to corner), so "U5" fits inside */
+        .t-trip .t-stop.is-boss .t-n::before { inset: 0.12rem; border-width: 2px; border-radius: 3px; }
+        .t-trip .t-stop.is-boss .t-n { font-size: 0.66rem; letter-spacing: -0.03em; }
+        .t-later { position: relative; display: flow-root; }
+        .t-later > ol { list-style: none; margin: 0; padding: 0; }
+        /* covers the solid line with dashes of the same colour (the line is the accent at 35%) */
+        .t-later::before { content: ''; position: absolute; left: 1.05rem; top: 0; bottom: 0; width: 3px;
+          background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--accent) 35%, var(--bg)) 0 8px, var(--bg) 8px 16px); }
+        .t-fog { margin: 0.4rem 0 0.4rem 3rem; padding: 0.6rem 0.8rem; border: 1.5px dashed var(--dim); border-radius: 10px; color: var(--dim); }
+        .t-fog b { color: var(--fg); }
+      }
+    </style>
+  </body>
+</html>

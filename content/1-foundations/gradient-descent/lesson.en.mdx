@@ -1,0 +1,174 @@
+---
+title: Gradient descent
+level: "2"
+order: 2
+part: foundations
+question: How does a machine learn from its mistakes?
+run: browser
+checkpoint: final-w
+testOut: [grad-w, new-w, grads, gd-loop, final-w]
+recap:
+  can:
+    - "Compute a mean squared error loss by hand for a few points."
+    - "Compute $\\partial L/\\partial w$ and $\\partial L/\\partial b$ for a line and take one step against them."
+    - "Write the whole training loop: predict, compute the gradients, step, repeat."
+  keys:
+    - "$L = \\text{mean}\\big((w x + b - y)^2\\big)$"
+    - "$\\partial L/\\partial w = \\text{mean}(2 \\cdot \\text{error} \\cdot x)$, $\\partial L/\\partial b = \\text{mean}(2 \\cdot \\text{error})$"
+    - "$w \\leftarrow w - \\text{lr} \\cdot \\partial L/\\partial w$: step against the gradient"
+    - "Too large a learning rate jumps past the minimum and the loss grows"
+  mistakes:
+    - "Adding the gradient instead of subtracting it: minus a negative gradient is plus."
+    - "Forgetting the `x` in the gradient of w, or summing where the loss takes the mean."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import GradientLab from '@viz/GradientLab.astro'
+
+A model is a formula with adjustable numbers called **parameters** (or weights). Learning means changing the
+parameters until the formula's answers match the data. This level uses the smallest model there is,
+a straight line with two parameters:
+
+$$
+\hat y = w \cdot x + b
+$$
+
+$\hat y$ (read "y hat") is the line's prediction for an input $x$. Here “·” between two single numbers is ordinary
+multiplication. (In level 1 it joined two lists; with single numbers it is just ×.)
+
+The data is three points: (1, 2), (2, 4), (3, 6). You can see the answer is w = 2, b = 0. The machine can't.
+It starts from a guess, w = 0.5 and b = 0, and has to reach the answer step by step.
+
+## 1. Measure the mistake
+
+For each point, the **error** is prediction minus truth. Square each error so that misses in either direction
+count as bad, then take the mean. That one number is the **loss**:
+
+$$
+L = \text{mean}\big((w x + b - y)^2\big)
+$$
+
+<GradientLab hide={{ loss: "loss-start", grad: "grad-w", step: "new-w" }} />
+
+<Blank id="loss-start" />
+
+<Gate requires="loss-start">
+
+## 2. Which way is downhill?
+
+The loss is a surface over (w, b): the right panel of the lab draws it. In 3D the height is not the loss itself but a smaller number made from it: more loss is still higher, but the big values are made much smaller, so the low ground stays visible. (For the curious: the height is $\ln(1 + \text{loss})$, and ln is on the [math page](/math/#exp-ln).)
+To lower the loss, you need to know: if you make w a little bigger, does the loss go up or down, and how fast?
+That rate is the **gradient**. In plain words: how much L changes for each tiny step of w.
+It is written $\partial L/\partial w$ and read "the partial derivative of L with respect to w".
+"Partial" means only w moves and everything else stays fixed. $\partial L/\partial b$ is the same with only b moving.
+For a function with only one input, the slope has a short name: $f'(x)$, read "f prime of x". It is the slope of $f$ at $x$.
+(New to derivatives? The [math page](/math/#derivative) shows one with numbers.) For this loss the two gradients are:
+
+$$
+\frac{\partial L}{\partial w} = \text{mean}(2 \cdot \text{error} \cdot x) \qquad \frac{\partial L}{\partial b} = \text{mean}(2 \cdot \text{error})
+$$
+
+Compute it on paper. Once you answer, the table under the lab shows every term so you can check.
+
+<Blank id="grad-w" />
+
+</Gate>
+
+<Gate requires="grad-w">
+
+## 3. Take a step
+
+Move each parameter a small amount **against** its gradient. The size of "a small amount" is the **learning rate**:
+
+$$
+w \leftarrow w - \text{lr} \cdot \frac{\partial L}{\partial w} \qquad b \leftarrow b - \text{lr} \cdot \frac{\partial L}{\partial b}
+$$
+
+Compute the new w by hand with the learning rate at 0.05. Then the step buttons in the lab unlock, and "Take one step" checks you.
+
+<Blank id="new-w" />
+
+</Gate>
+
+<Gate requires="new-w">
+
+<Stuck q="The gradient of w is −14. Why is it negative, and what does that tell me?">
+
+Negative means: if w goes up, the loss goes **down**. Every prediction is too low right now
+(0.5, 1, 1.5 against 2, 4, 6), so a steeper line helps.
+
+The size, 14, says how sensitive the loss is to w right now. It is large because we are far from the answer.
+Near the bottom of the valley the gradient shrinks toward 0, and the steps get smaller by themselves, with no change to the learning rate.
+
+</Stuck>
+
+The loss dropped from 10.5 to about 2.117 in one step. Press "10 steps" a few times and watch the path
+move down the surface toward the lowest point, w = 2, b = 0.
+
+<Predict id="lr-too-big" />
+
+<Deeper title="Where the gradient formula comes from">
+
+Take one point. Its loss is $(wx + b - y)^2$. Call the inside $e = wx + b - y$, the error.
+
+The loss is $e^2$, and $e^2$ changes at rate $2e$ when $e$ changes.
+$e$ changes at rate $x$ when $w$ changes (because $w$ is multiplied by $x$), and at rate $1$ when $b$ changes.
+
+Multiply the two rates: $\partial L/\partial w = 2e \cdot x$ and $\partial L/\partial b = 2e \cdot 1$.
+Average over the points because the loss is an average. That is the whole formula.
+
+"Multiply the rates along the way" is called the **chain rule**. Level 6 is that idea applied to a whole network.
+
+</Deeper>
+
+## 4. Write it yourself
+
+Write the gradient of w. `x` and `y` are NumPy arrays, so `np.mean` averages over the points.
+
+One piece of Python you will need in every later level: a power is written `**`. So the loss is
+`np.mean(error ** 2)`, where `error ** 2` squares every element. Don't write `^` for a power: in Python it means
+something else, and on decimal numbers it gives an error. (More on the [math page](/math/#powers).)
+
+<CodeBlank id="grads" />
+
+</Gate>
+
+<Gate requires="grads">
+
+## 5. Why against the gradient?
+
+<Stuck q="Why do we subtract the gradient? Wouldn’t adding it also change the parameters?">
+
+The gradient points in the direction in which the loss grows fastest.
+We want the loss to shrink, so we go the opposite way. Adding it would climb the surface, and the loss would grow every step.
+
+</Stuck>
+
+<TryIt>
+
+Move to a far corner of the loss surface, for example w = −1, b = 3 (select a point on the 3D surface, or drag in the Map view),
+and take steps from there. Then set the learning rate to 0.15 and do it again. Which path goes back and forth across the valley, and why?
+
+</TryIt>
+
+## 6. The whole loop
+
+Put the three steps together: predict, compute both gradients, step both parameters. Repeat. This is the loop
+every model in this course trains with; only the formula for the gradients gets bigger.
+
+<CodeBlank id="gd-loop" />
+
+</Gate>
+
+<Gate requires="gd-loop">
+
+One last check: the same procedure on different data.
+
+<Blank id="final-w" />
+
+</Gate>

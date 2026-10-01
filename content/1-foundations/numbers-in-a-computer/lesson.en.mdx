@@ -1,0 +1,319 @@
+---
+title: Numbers in a computer
+level: "U2"
+order: 6.2
+part: foundations
+branch: internals
+question: Why does a loss suddenly become NaN, and why does softmax subtract the largest score?
+run: browser
+checkpoint: code-ce
+glossarySkip: [bias]
+testOut: [count-bf16, softmax-stable, code-ce]
+recap:
+  can:
+    - "Read a float from its bits: sign, exponent and mantissa."
+    - "Say when a format overflows to inf, underflows to 0, or loses a small update."
+    - "Compute softmax and cross-entropy without inf or nan, with the max trick and log-sum-exp."
+  keys:
+    - "value = $(-1)^{s} \\times (1 + \\text{mant}/2^{M}) \\times 2^{\\,\\text{exp} - \\text{bias}}$"
+    - "float32: 8 + 23 bits · float16: 5 + 10 (largest 65504) · bfloat16: 8 + 7 (range of float32, but only 7 mantissa bits)"
+    - "$\\text{softmax}(z) = \\text{softmax}(z - \\max z)$: subtract the max before exp"
+    - "$\\ln \\sum_j e^{z_j} = m + \\ln \\sum_j e^{z_j - m}$, and cross-entropy = log-sum-exp − $z_{\\text{target}}$"
+    - "inf − inf, 0 × inf, inf / inf and 0 / 0 give nan; every result computed from a nan is nan"
+  mistakes:
+    - "Computing `np.log(softmax(z))` in two steps: when p underflows to 0 the loss is inf."
+    - "Keeping the weights themselves in bfloat16: small updates are rounded to 0 and training stops."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import FloatLab from '@viz/FloatLab.astro'
+import SoftmaxStableLab from '@viz/SoftmaxStableLab.astro'
+
+Sections 6 and 7 use softmax and cross-entropy, which level 10 teaches. This page explains the part it needs.
+
+On paper a number can be as big or as precise as you like. In a computer each number gets a fixed number of
+bits: 32, 16, sometimes 8. That limit explains several training bugs that seem to have no cause:
+
+1. a loss that suddenly becomes `nan` (“not a number”);
+2. softmax code that subtracts the largest score before `exp`;
+3. weights that stop changing although the gradient is not 0.
+
+## 1. A number in bits
+
+A float is stored like a number in scientific notation, but with powers of 2 instead of powers of 10
+(the [math page](/math/#scientific) has a reminder). For example, $6 = 1.5 \times 2^2$. The bits hold three parts:
+
+- the **sign** $s$: 1 bit, 0 for + and 1 for −;
+- the **exponent**: which power of 2. It is stored with a fixed offset added, called the **exponent bias** (not the
+  bias of a neuron), so that negative powers need no sign;
+- the **mantissa**: the part after “1.”, as a fraction with $M$ bits.
+
+$$
+\text{value} = (-1)^{s} \times (1 + \text{mant}/2^{M}) \times 2^{\,\text{exp} - \text{bias}}
+$$
+
+Three formats matter for deep learning:
+
+| format | bits | exponent bits | mantissa bits $M$ | bias | largest number |
+|---|---|---|---|---|---|
+| float32 | 32 | 8 | 23 | 127 | about $3.4 \times 10^{38}$ |
+| float16 | 16 | 5 | 10 | 15 | 65504 |
+| bfloat16 | 16 | 8 | 7 | 127 | about $3.4 \times 10^{38}$ |
+
+In NumPy these are `np.float32` and `np.float16`; NumPy’s default `np.float64` uses 64 bits. NumPy has no bfloat16.
+PyTorch has all three: `torch.float32`, `torch.float16`, `torch.bfloat16`.
+
+Type a number into the lab, or tap a bit to flip it. The line under the bits computes the value with the formula above.
+
+<FloatLab />
+
+<Blank id="decode-6" />
+
+<Gate requires="decode-6">
+
+## 2. Range and precision
+
+The two 16-bit formats split their bits differently, and that is the whole difference between them:
+
+- The **exponent** bits set the **range**: how big and how small a number can be. bfloat16 keeps float32’s 8
+  exponent bits, so it has float32’s range. float16 has only 5, so it stops at 65504.
+- The **mantissa** bits set the **precision**: how many numbers there are between one power of 2 and the next.
+
+<Blank id="count-bf16" />
+
+<Gate requires="count-bf16">
+
+The same 128 mantissa patterns are used between every two powers of 2: from 1 to 2, from 2 to 4, from 256 to 512.
+So the gap between neighbors grows with the size of the number. Precision is **relative**: about 2 to 3 correct
+digits for bfloat16, wherever the number is.
+
+<Blank id="gap-256" />
+
+<Gate requires="gap-256">
+
+A result that falls between two neighbors is **rounded to the nearer one**. That is all a computer can store.
+
+<Predict id="pred-bf16-add" />
+
+Most numbers are not stored exactly, even simple ones. 0.1 is not a fraction with a power of 2 at the bottom (the denominator), so
+each format stores the nearest number it has: 0.100000001490 in float32, 0.099975585938 in float16 and
+0.100097656250 in bfloat16.
+
+<TryIt>
+
+Press **0.1** in the lab, then switch between the three formats and compare how far each one is from 0.1.
+Then press **256.75** in bfloat16 and in float16: float16 has more mantissa bits, so it keeps the 0.75.
+
+</TryIt>
+
+The same rounding happens in training. A weight gets a small change at every step, and in a 16-bit format a
+small change to a weight near 1 can be lost completely in the rounding.
+
+<Blank id="bf16-update" />
+
+<Deeper title="Exactly halfway (ties), and the numbers below the smallest normal one">
+
+**Ties.** When a result lies exactly halfway between two neighbors, it goes to the neighbor whose last mantissa
+bit is 0 (“round half to even”). So 256 + 1 in bfloat16 is 256, not 258. Always rounding halves upward would make
+long sums slowly grow too big; this rule rounds up and down equally often.
+
+**Subnormals.** When the exponent bits are all 0, the format drops the “1 +” and stores
+$\text{mant}/2^{M} \times 2^{1 - \text{bias}}$. These tiny numbers fill the space between 0 and the smallest normal
+number. In float16 the smallest one is $2^{-24} \approx 6 \times 10^{-8}$. A smaller number rounds to whichever of 0
+and $2^{-24}$ is nearer, so anything below about $3 \times 10^{-8}$ becomes 0.
+When the exponent bits are all 1, the pattern means inf (mantissa 0) or nan (anything else).
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="bf16-update">
+
+## 3. Overflow and underflow
+
+When a result is bigger than the largest number of its format, it **overflows** and becomes `inf` (infinity).
+NumPy gives no error, only a warning that is easy to miss.
+
+<Predict id="pred-overflow" />
+
+`exp` is where this happens most often in a network, because it grows so fast: each +1 to $z$ multiplies $e^z$ by
+about 2.72 (the [math page](/math/#exp-ln) has a reminder about $e$).
+
+<Blank id="exp-limit" />
+
+<Gate requires="exp-limit">
+
+The other side is **underflow**: a result too close to 0 becomes exactly 0. In float32,
+$e^{-1000}$ is 0. In float16, any number below about $3 \times 10^{-8}$ rounds to 0. Small gradients in float16 can
+underflow like this and disappear.
+
+Underflow becomes dangerous at the next step. Level 3’s loss takes $-\ln p$. If $p$ underflowed to 0, then
+$-\ln 0 = $ `inf`.
+
+## 4. How nan appears, and how it spreads
+
+`nan` means “not a number”. It comes from a few operations that have no sensible answer:
+
+| operation | result |
+|---|---|
+| `inf - inf` | `nan` |
+| `0 * inf` | `nan` |
+| `inf / inf`, `0 / 0` | `nan` |
+| `np.log(-1)` | `nan` |
+
+So an `inf` from overflow, or a 0 from underflow, is often one step away from a `nan`.
+
+<Predict id="pred-nan-spread" />
+
+<Stuck q="My loss is a number for 300 steps and then nan. How do I find where it starts?">
+
+Look for the first `inf`, not the first `nan`: the `nan` is usually one step later. Print the largest absolute value
+of the scores before every `exp` and every softmax, and of the gradients (`np.isnan(x).any()` and
+`np.isinf(x).any()` check a whole array). The usual causes, in order:
+
+1. a learning rate so high that the weights grow without limit (level 2);
+2. `exp` of big scores without subtracting the max (section 6);
+3. `np.log` of a probability that underflowed to 0 (section 7);
+4. a division by a sum or a std that can be 0. Add a small ε to it (level 16’s LayerNorm does this).
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pred-nan-spread">
+
+## 5. Why big models train in 16 bits anyway
+
+A 16-bit number takes half the memory of a float32. A model with 7 billion weights takes 28 GB in float32 and
+14 GB in bfloat16, and the graphics card moves half as many bytes. Graphics cards also multiply 16-bit matrices
+several times faster. So large models use **mixed precision**: each operation runs in the format that is safe
+for it.
+
+- The big matrix multiplications run in bfloat16 (or float16). They are most of the work.
+- A **master copy** of the weights stays in float32. The update is added there, so a change of 0.001 to a weight of 1
+  is not rounded away, as it was in section 2.
+- Sums of many numbers, softmax and the loss run in float32.
+
+bfloat16 was made for this. It keeps float32’s range, so scores and gradients rarely overflow or underflow. It has less
+precision, so the float32 master copy and float32 sums keep the precision that matters.
+
+<Deeper title="float16 needs loss scaling">
+
+float16 has more precision than bfloat16 but far less range. Gradients of $10^{-8}$ are common, and float16
+stores them as 0. The fix is **loss scaling**: multiply the loss by a big number, such as 1024, before
+`backward()`. Every gradient is then 1024 times bigger and stays above float16’s smallest number
+($10^{-8} \times 1024 \approx 10^{-5}$ is stored). Divide the gradients by 1024 again, in float32, before the
+update. If any gradient became `inf`, skip that step and use a smaller scale. PyTorch’s `torch.amp` does all of this
+for you. With bfloat16, most training needs no loss scaling at all.
+
+</Deeper>
+
+## 6. Softmax subtracts the largest score
+
+You don't need level 10 for this section: everything it uses is defined here. (Level 10 teaches softmax properly,
+and why it is used.) **Softmax** turns a list of scores into probabilities that add up to 1. Take $e$ to the power
+of each score, then divide each result by their sum:
+
+$$
+p_i = \frac{e^{z_i}}{\sum_j e^{z_j}}
+$$
+
+A model uses it to choose among many answers. Here two scores are enough. With $z = [1, 2]$:
+$e^1 \approx 2.72$ and $e^2 \approx 7.39$, their sum is $10.11$, so softmax gives $[2.72/10.11,\ 7.39/10.11] = [0.27, 0.73]$.
+Now try big scores.
+
+<Predict id="pred-naive" />
+
+<Gate requires="pred-naive">
+
+The fix uses one fact. Adding the same number $c$ to every score does not change softmax:
+
+$$
+\frac{e^{z_i + c}}{\sum_j e^{z_j + c}} = \frac{e^{z_i} \cdot e^{c}}{\sum_j e^{z_j} \cdot e^{c}} = \frac{e^{z_i}}{\sum_j e^{z_j}}
+$$
+
+The factor $e^c$ is in the top and in the bottom of the fraction, so it cancels. Choose $c = -\max(z)$: subtract the largest score.
+Then the largest score becomes 0 and its $e^0 = 1$. No $e^{z}$ can overflow, and the sum is at least 1, so it
+can’t be 0 either.
+
+The lab computes both ways, rounding every step to the format you choose.
+
+<SoftmaxStableLab hide={{ p: "softmax-stable" }} />
+
+<Blank id="softmax-stable" />
+
+<Gate requires="softmax-stable">
+
+<TryIt>
+
+Press **[−1000, −999]**: now every $e^z$ underflows to 0, and 0 / 0 is `nan`. Then switch to float16 and press
+**[10, 12]**: float16 overflows at a score of about 11. Subtracting the max fixes every case.
+
+</TryIt>
+
+In NumPy, `z.max(axis=-1, keepdims=True)` gives the largest score of each row, with shape `(B, 1)`, so that it lines
+up with `z` of shape `(B, V)` (level 1’s broadcasting).
+
+<CodeBlank id="code-softmax" />
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="code-softmax">
+
+## 7. Log-sum-exp: the loss without inf
+
+Level 3’s loss for a yes/no answer was $-\ln p$, with $p$ the probability of the right answer. With softmax over
+many answers the loss is the same, $-\ln p_t$ for the target answer $t$ (its probability from softmax). It is called
+**cross-entropy**; level 10 uses it to train a model that picks a word. Here you only need this one formula.
+
+Computed in two steps, first $p$ and then $-\ln p$, it fails when $p$ underflows to 0. Write $p_t$ out instead, and use
+$\ln(a/b) = \ln a - \ln b$ and $\ln e^{z} = z$ (both on the [math page](/math/#exp-ln)):
+
+$$
+-\ln p_t = -\ln \frac{e^{z_t}}{\sum_j e^{z_j}} = \ln \sum_j e^{z_j} \;-\; z_t
+$$
+
+The first part is the **log-sum-exp** of the scores. It has the same overflow problem as softmax, and the same fix.
+Subtract the largest score $m$ from every score:
+
+$$
+\ln \sum_j e^{z_j} = m + \ln \sum_j e^{z_j - m}
+$$
+
+<Blank id="lse" />
+
+<Gate requires="lse">
+
+Now write it. The template picks each row’s target score for you: `z[np.arange(B), t]` takes, from row 0, the score
+at index `t[0]`; from row 1, the score at index `t[1]`; and so on. You write `lse`, one log-sum-exp per row.
+`m[:, 0]` turns the `(B, 1)` maximum into shape `(B,)`.
+
+<CodeBlank id="code-ce" />
+
+<Deeper title="This is what PyTorch’s `cross_entropy` does">
+
+`torch.nn.functional.cross_entropy(z, t)` takes the raw scores, not probabilities, for exactly this reason:
+inside, it computes log-sum-exp with the max subtracted first, and subtracts the target score. `torch.logsumexp` and
+`torch.log_softmax` exist for the same reason. If you ever write `torch.log(torch.softmax(z, -1))`, replace it with
+`torch.log_softmax(z, -1)`: the same numbers when they are small, and no `inf` when they are big.
+
+</Deeper>
+
+</Gate>
+
+</Gate>

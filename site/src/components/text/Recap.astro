@@ -1,0 +1,83 @@
+---
+/**
+ * The recap card at the end of a level, from the frontmatter `recap: { can, keys, mistakes }`.
+ * `$…$` renders as KaTeX and `…` in backticks as code, in every line.
+ * It waits folded until the level is cleared (LessonLayout opens it then, and in reading mode),
+ * so a new learner doesn't read the formulas before working them out.
+ * Before that it can still be opened, but it shows only "You can now": "Keep in mind" and "Common mistakes"
+ * hold the checkpoint's working, so they stay hidden until LessonLayout marks the recap `data-auto`
+ * (level cleared, reading mode, or the debug "open" switch).
+ */
+import { inlineMath } from '@lib/inlineMath'
+
+interface Props { recap: { can: string[]; keys: string[]; mistakes: string[] } }
+const { recap } = Astro.props
+const html = (s: string) => inlineMath(s)
+---
+<details class="recap">
+  <summary><h2 class="rc-title">Recap</h2><span class="rc-wait">a summary for when you finish the level</span><span class="rc-chev" aria-hidden="true"></span></summary>
+  <p class="rc-later">The key formulas and common mistakes appear here once you clear the level.</p>
+  <div class="rc-grid">
+    {recap.can.length > 0 && (
+      <div class="rc-part rc-can">
+        <h3>You can now</h3>
+        <ul>{recap.can.map((s) => <li set:html={html(s)} />)}</ul>
+      </div>
+    )}
+    {recap.keys.length > 0 && (
+      <div class="rc-part rc-keys">
+        <h3>Keep in mind</h3>
+        <ul>{recap.keys.map((s) => <li set:html={html(s)} />)}</ul>
+      </div>
+    )}
+    {recap.mistakes.length > 0 && (
+      <div class="rc-part rc-miss">
+        <h3>Common mistakes</h3>
+        <ul>{recap.mistakes.map((s) => <li set:html={html(s)} />)}</ul>
+      </div>
+    )}
+  </div>
+</details>
+
+<style>
+  .recap {
+    container-type: inline-size; margin-top: 1.6rem; padding: 0.9rem 1.1rem 1rem;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+  }
+  summary { display: flex; align-items: baseline; gap: 0.7rem; cursor: pointer; list-style: none; min-height: 1.6rem; }
+  summary::-webkit-details-marker { display: none; }
+  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .recap[open] summary { margin-bottom: 0.7rem; }
+  .recap[open] .rc-wait { display: none; }
+  .rc-wait { color: var(--dim); font-size: 0.85rem; }
+  .rc-chev {
+    margin-left: auto; align-self: center; width: 0.45rem; height: 0.45rem; border-right: 1.5px solid var(--dim); border-bottom: 1.5px solid var(--dim);
+    transform: rotate(45deg) translate(-2px, -2px);
+  }
+  .recap[open] .rc-chev { transform: rotate(-135deg) translate(-1px, -1px); }
+  .rc-title {
+    margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+  }
+  .rc-grid { display: grid; gap: 0.9rem 1.4rem; grid-template-columns: 1fr; grid-template-areas: 'can' 'keys' 'miss'; }
+  @container (min-width: 560px) {
+    .rc-grid { grid-template-columns: 1fr 1fr; grid-template-areas: 'can keys' 'miss keys'; }
+  }
+  .rc-later { margin: 0 0 0.7rem; color: var(--dim); font-size: 0.88rem; }
+  .recap[data-auto] .rc-later, .recap:not([data-auto]) .rc-keys, .recap:not([data-auto]) .rc-miss { display: none; }
+  .recap:not([data-auto]) .rc-grid { grid-template-columns: 1fr; grid-template-areas: 'can'; }
+  .rc-can { grid-area: can; }
+  .rc-keys { grid-area: keys; }
+  .rc-miss { grid-area: miss; }
+  h3 { margin: 0 0 0.35rem; font-size: 0.92rem; font-weight: 650; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; font-size: 0.92rem; line-height: 1.45; }
+  li { position: relative; padding-left: 1.25rem; }
+  li::before { position: absolute; left: 0; top: 0; font-weight: 700; font-size: 0.85em; line-height: 1.7; }
+  .rc-can li::before { content: '✓'; color: var(--ok); }
+  .rc-miss li::before { content: '✕'; color: var(--warn); }
+  .rc-keys ul { gap: 0; padding: 0.15rem 0.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  .rc-keys li { padding: 0.45rem 0; border-top: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; }
+  .rc-keys li:first-child { border-top: 0; }
+  .rc-keys li::before { content: none; }
+  li :global(code) { font-family: var(--mono); font-size: 0.88em; white-space: nowrap; }
+  li :global(.katex) { font-size: 1.04em; }
+</style>

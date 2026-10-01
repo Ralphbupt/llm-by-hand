@@ -1,0 +1,85 @@
+---
+/**
+ * U6 §2: one attention head, forward (solid, left to right) and backward (dashed, right to left).
+ * Each backward arrow is labelled with the gradient it produces, so the order dO → dV, dA → dS → dQ, dK can be read off.
+ * Each box's formula sits centered just above it, where no arrow label is (the gradient labels sit below the arrows).
+ */
+type Box = { id: string; x: number; y: number; cap?: string[] }
+const BW = 52, BH = 32
+const B: Record<string, Box> = {
+  Q: { id: 'Q', x: 50, y: 40 },
+  K: { id: 'K', x: 50, y: 150 },
+  S: { id: 'S', x: 200, y: 95, cap: ['Q @ K.T', '/ √dₖ'] },
+  A: { id: 'A', x: 340, y: 95, cap: ['softmax'] },
+  O: { id: 'O', x: 470, y: 95, cap: ['A @ V'] },
+  // V comes in from below, so the space above A and O stays free for their formulas
+  V: { id: 'V', x: 470, y: 190 },
+}
+// where the line from a box's center towards (tx, ty) leaves the box
+function edge(b: Box, tx: number, ty: number) {
+  const dx = tx - b.x, dy = ty - b.y
+  const s = Math.min(dx ? (BW / 2 + 3) / Math.abs(dx) : Infinity, dy ? (BH / 2 + 3) / Math.abs(dy) : Infinity)
+  return { x: b.x + dx * s, y: b.y + dy * s }
+}
+const OFF = 5 // the forward and backward lines run side by side, OFF apart from the middle
+function pair(from: string, to: string, grad: string) {
+  const a = B[from], b = B[to]
+  const p = edge(a, b.x, b.y), q = edge(b, a.x, a.y)
+  const len = Math.hypot(q.x - p.x, q.y - p.y)
+  const nx = -(q.y - p.y) / len, ny = (q.x - p.x) / len // the backward side (below a line that runs to the right)
+  return {
+    fwd: { x1: p.x - nx * OFF, y1: p.y - ny * OFF, x2: q.x - nx * OFF, y2: q.y - ny * OFF },
+    bwd: { x1: q.x + nx * OFF, y1: q.y + ny * OFF, x2: p.x + nx * OFF, y2: p.y + ny * OFF },
+    lbl: { x: (p.x + q.x) / 2 + nx * 22, y: (p.y + q.y) / 2 + ny * 22 + 5, t: grad },
+  }
+}
+const lines = [pair('Q', 'S', 'dQ'), pair('K', 'S', 'dK'), pair('S', 'A', 'dS'), pair('V', 'O', 'dV'), pair('A', 'O', 'dA')]
+const W = 560, H = 214
+---
+<figure class="abf">
+  <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="One attention head. Forward: Q and K give the scores S, softmax gives the weights A, and A with V gives the output O. Backward starts at dO and runs the other way: O = A @ V gives dV and dA, the softmax gives dS, and the scores give dQ and dK.">
+    <defs>
+      <marker id="abf-f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="hf" /></marker>
+      <marker id="abf-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="hb" /></marker>
+    </defs>
+    {lines.map((l) => (
+      <>
+        <line {...l.fwd} class="fwd" marker-end="url(#abf-f)" />
+        <line {...l.bwd} class="bwd" marker-end="url(#abf-b)" />
+        <text x={l.lbl.x} y={l.lbl.y} class="g">{l.lbl.t}</text>
+      </>
+    ))}
+    <line x1={W - 6} y1={B.O.y + OFF} x2={B.O.x + BW / 2 + 3} y2={B.O.y + OFF} class="bwd" marker-end="url(#abf-b)" />
+    <text x={(W - 6 + B.O.x + BW / 2) / 2} y={B.O.y + OFF + 24} class="g">dO</text>
+    {Object.values(B).map((b) => (
+      <>
+        <rect x={b.x - BW / 2} y={b.y - BH / 2} width={BW} height={BH} rx="6" class="box" />
+        <text x={b.x} y={b.y + 6} class="n">{b.id}</text>
+        {/* the formula: centered, just above the box (the last line 10 px above it) */}
+        {b.cap && b.cap.map((t, k) => <text x={b.x} y={b.y - BH / 2 - 14 - (b.cap!.length - 1 - k) * 18} class="cap">{t}</text>)}
+      </>
+    ))}
+  </svg>
+  <figcaption>Solid arrows: the forward pass. Dashed arrows: the backward pass. It starts with dO on the right, and each arrow is
+  labelled with the gradient it gives. First O = A @ V gives dV and dA, then the softmax gives dS, then the scores give dQ and dK.</figcaption>
+</figure>
+
+<style>
+  .abf { margin: 1.2rem 0; }
+  svg { width: 100%; height: auto; display: block; max-width: 600px; }
+  .box { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+  .fwd { stroke: var(--fg); stroke-width: 1.6; }
+  .bwd { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+  .hf { fill: var(--fg); }
+  .hb { fill: var(--accent); }
+  .n { font-family: var(--mono); font-size: 17px; font-weight: 700; fill: var(--fg); text-anchor: middle; }
+  .g { font-family: var(--mono); font-size: 16px; font-weight: 700; fill: var(--accent); text-anchor: middle; }
+  .cap { font-family: var(--mono); font-size: 14px; fill: var(--dim); text-anchor: middle; }
+  figcaption { color: var(--dim); font-size: 0.85rem; margin-top: 0.3rem; }
+  /* phone: the 560-wide drawing shrinks to about 350 px, so the text is drawn larger to stay readable */
+  @media (max-width: 560px) {
+    .n { font-size: 21px; }
+    .g { font-size: 20px; }
+    .cap { font-size: 18px; }
+  }
+</style>

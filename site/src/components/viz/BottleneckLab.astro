@@ -1,0 +1,6 @@
+---
+import Lab from './BottleneckLab.svelte'
+interface Props { models?: ('plain' | 'attn')[] }
+const { models } = Astro.props
+---
+<Lab client:visible models={models} />

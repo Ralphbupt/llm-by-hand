@@ -1,0 +1,227 @@
+lookup-shape:
+  type: shape
+  prompt: "The table E has shape (4, 2): 4 ids, 2 numbers each. You look up the 5 ids of “hello”, [1, 0, 2, 2, 3]. What is the shape of the result?"
+  answer: [5, 2]
+  after: "One row per token, 2 numbers per row. The vocabulary size (4) is gone: it only says how many rows the table has."
+  hints:
+    - when: { shape: [4, 2] }
+      say: "That is the table itself. The result has one row per token, and “hello” has 5 tokens."
+    - when: { shape: [5, 4] }
+      say: "That is the shape of the one-hot rows. After multiplying by E (4, 2), what is left?"
+    - when: { any: true }
+      say: ["One row per token.", "(tokens, numbers per token)."]
+
+same-l:
+  type: predict
+  prompt: "“hello” has two l’s, at positions 2 and 3 (counting from 0). After the lookup, are their two vectors the same?"
+  options: ["Exactly the same", "Slightly different, because of the position", "Completely different"]
+  answer: 0
+  hints:
+    - when: { any: true }
+      say: ["Both l’s have the same id.", "Which row of the table does each one get?"]
+  reveal: "Exactly the same: both are row 2 of the table. A lookup knows nothing about position or neighbors. Level 16 adds position; this page’s last section shows why neighbors matter too."
+
+embed:
+  type: code
+  prompt: "Embed by multiplying one-hot rows by the table."
+  template: |
+    E = np.array([[-1.4,  0.1],    # id 0 'e'
+                  [ 1.5, -1.2],    # id 1 'h'
+                  [-0.1, -1.5],    # id 2 'l'
+                  [-1.3,  1.5]])   # id 3 'o'
+
+    def embed(ids, E):
+        onehot = np.eye(E.shape[0])[ids]   # (tokens, vocab size), a single 1 in each row
+        print("one-hot", onehot.shape)
+        return ____
+
+    print(embed([1, 0, 2, 2, 3], E))
+  solution: "onehot @ E"
+  tests:
+    - expr: "embed([1, 0, 2, 2, 3], E)"
+      expect: [[1.5, -1.2], [-1.4, 0.1], [-0.1, -1.5], [-0.1, -1.5], [-1.3, 1.5]]
+      say: "one row of E per token"
+    - expr: "embed([3], E).shape"
+      expect: [1, 2]
+      say: "one token → shape (1, 2)"
+    - expr: "np.allclose(embed([2, 0], E), E[[2, 0]])"
+      expect: true
+      say: "the same as indexing E directly"
+  hints:
+    - when: { error: "mismatch|not aligned|shapes" }
+      say: "The shapes don’t match. onehot is (tokens, 4) and E is (4, 2). Put onehot first."
+    - when: { any: true }
+      say: ["Each one-hot row has a single 1. Multiplying it by the table keeps exactly one row of E.", "Which operation turns a (tokens, 4) array and a (4, 2) array into a (tokens, 2) array?", "Matrix multiplication, written @. The order matters."]
+  after: "Each one-hot row has a single 1, so the product keeps exactly one row of E. That is why a lookup E[ids] and onehot @ E give the same numbers: (tokens, 4) @ (4, 2) → (tokens, 2)."
+
+dot-5:
+  type: number
+  prompt: "What is [2, 1] · [1, 3]?"
+  answer: 5
+  tol: 0
+  after: "2×1 + 1×3 = 5."
+  hints:
+    - when: { equals: 7 }
+      say: "That looks like 2×3 + 1×1. Pair the first numbers together and the second numbers together."
+    - when: { any: true }
+      say: ["Multiply first with first, second with second, then add the two products.", "The first product is 2×1. What is the second?"]
+
+dot-sign:
+  type: predict
+  prompt: "cat = [2, 1]. You turn car so it points the opposite way from cat. What happens to cat·car?"
+  options: ["It becomes negative", "It becomes zero", "It stays positive but small"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "Zero is a right angle, like cat and car at the start. Opposite is further than that. Try [2, 1] · [−2, −1]."
+    - when: { equals: 2 }
+      say: "Flip car’s signs: every product in the sum changes sign. Try [2, 1] · [−2, −1]."
+  reveal: "Negative. [2, 1] · [−2, −1] = −5. Positive means the arrows point roughly the same way, zero means a right angle (like cat and car at the start: [2, 1] · [−1, 2] = 0), negative means opposite."
+
+static-apple:
+  type: predict
+  prompt: "The word “apple” is looked up in the same table in both sentences. Is its vector the same in “sweet apple” and in “apple releases phone”?"
+  options: ["Yes, exactly the same", "No, the sentence changes it"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "A lookup takes the row for the id. Does the id of “apple” depend on the sentence?"
+  reveal: "Exactly the same: [1, 1, 0, 0], one on fruit and one on tech, in both sentences. The table can’t know which apple is meant. Only mixing it with the neighbors gives it a hint."
+
+mix-fruit:
+  type: number
+  prompt: "Average the three vectors of “apple releases phone” (apple [1, 1, 0, 0], releases [0, 1, 0, 1], phone [0, 1, 0, 0]). What is the fruit number, the first entry, of the result? (3 decimals)"
+  answer: 0.333
+  tol: 0.005
+  after: "(1 + 0 + 0) / 3 = 0.333, while tech is (1 + 1 + 1) / 3 = 1. Mixing pulled apple toward tech, which is the right meaning here."
+  hints:
+    - when: { equals: 1 }
+      say: "1 is apple’s own fruit number. Average the fruit column over all three words."
+    - when: { equals: 0.5 }
+      say: "That is the first sentence (2 words). This sentence has 3 words."
+    - when: { any: true }
+      say: ["An equal-weight mix is an average: add up, then divide by the number of words.", "Fruit numbers: apple 1, releases 0, phone 0."]
+
+cat-count:
+  type: number
+  prompt: "Sentences: “cat eats fish”, “dog eats meat”, “cat drinks milk”, “car needs fuel”. How many times does one of eats, drinks, needs sit right next to “cat” (one word before or after)?"
+  answer: 2
+  tol: 0
+  after: "“eats” in the first sentence and “drinks” in the third: 2. Over (eats, drinks, needs), cat’s counts are [1, 1, 0]."
+  hints:
+    - when: { equals: 1 }
+      say: "“cat” appears in two sentences. Check both."
+    - when: { equals: 3 }
+      say: "Count only eats, drinks and needs, and only right next to “cat”."
+    - when: { any: true }
+      say: ["Find every “cat” and look one word left and one word right.", "“cat” is in sentence 1 and in sentence 3. Read the word next to it in each."]
+
+cat-dog:
+  type: number
+  prompt: "Over (eats, drinks, needs): cat = [1, 1, 0], dog = [1, 0, 0], car = [0, 0, 1]. What is cat · dog?"
+  answer: 1
+  tol: 0
+  after: "1×1 + 1×0 + 0×0 = 1. And cat · car = 0: they never share a neighbor. Words with neighbors in common get a bigger dot product."
+  hints:
+    - when: { equals: 0 }
+      say: "That is cat · car. cat and dog both sit next to “eats”."
+    - when: { any: true }
+      say: ["Multiply number by number, then add.", "The first product is 1×1 = 1. Now compute the other two products and add."]
+
+closest:
+  type: predict
+  prompt: "Take thousands of sentences like “cat eats fish”, “dog eats meat” and “car needs fuel”. cat and dog keep appearing in the same places, and car in different ones. Whose count vector is finally closest to cat’s?"
+  options: ["dog", "car", "eats"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "cat and car never share a neighbor. Over (eats, drinks, needs), cat = [1, 1, 0] and car = [0, 0, 1], so their dot product is 0."
+    - when: { equals: 2 }
+      say: "“eats” is a neighbor of cat, not a word used in the same places as cat. Which word has the same neighbors?"
+  reveal: "dog. Closeness comes from sharing neighbors, not from being neighbors. With 12 words and many sentences, the same counting puts the animals together."
+
+count-code:
+  type: code
+  prompt: "Count neighbors: for every word, add 1 for each word right before and right after it."
+  template: |
+    sents = [["cat", "eats", "fish"], ["dog", "eats", "meat"],
+             ["cat", "drinks", "milk"], ["car", "needs", "fuel"]]
+    words = sorted({w for s in sents for w in s})
+    idx = {w: i for i, w in enumerate(words)}
+    C = np.zeros((len(words), len(words)), dtype=int)
+    for s in sents:
+        for j in range(len(s)):
+            for k in (j - 1, j + 1):
+                if 0 <= k < len(s):
+                    ____
+    cat_row = C[idx["cat"]]
+    print("cat's row:", {w: int(cat_row[idx[w]]) for w in words if cat_row[idx[w]]})
+  solution: "C[idx[s[j]], idx[s[k]]] += 1"
+  tests:
+    - expr: "int(C[idx['cat'], idx['eats']])"
+      expect: 1
+      say: "cat sits next to eats once"
+    - expr: "int(C[idx['eats']].sum())"
+      expect: 4
+      say: "eats has four neighbors: cat, fish, dog, meat"
+    - expr: "bool((C == C.T).all())"
+      expect: true
+      say: "if a is next to b, b is next to a: the table is symmetric"
+    - expr: "int(C.sum())"
+      expect: 16
+      say: "each 3-word sentence has 4 neighbor pairs"
+  hints:
+    - when: { error: "IndexError|KeyError" }
+      say: "Use idx[...] to turn a word into its row or column number."
+    - when: { testFailed: 0 }
+      say: ["j and k are positions in the sentence (0, 1, 2), not word numbers. Read the word at each position first.", "Then turn each word into its row or column number with the dictionary from the template."]
+    - when: { any: true }
+      say: ["Add 1 to the cell for (this word, its neighbor).", "The word is the one at position j, and the neighbor is the one at position k. Both are strings, so turn each into a number first.", "Use idx for both the row and the column of C, then add 1 with +=."]
+  after: "Each pair is counted from both sides: when j is cat and k is eats, and again when j is eats and k is cat. That is why the table is symmetric. A 3-word sentence gives 4 counts."
+
+mix-code:
+  type: code
+  prompt: "Write mix: look up the rows of ids in the table E, then mix them with the weights w (one weight per id, adding up to 1) into one vector of 4 numbers. For example, ids [1, 0] with w = [0.75, 0.25] is 0.75 × sweet + 0.25 × apple. Two lines."
+  template: |
+    #              fruit tech sweet action
+    E = np.array([[1, 1, 0, 0],    # id 0 apple
+                  [1, 0, 1, 0],    # id 1 sweet
+                  [0, 1, 0, 1],    # id 2 releases
+                  [0, 1, 0, 0]],   # id 3 phone
+                 dtype=float)
+
+    def mix(ids, w, E):
+        ____
+        return m
+
+    print("apple releases phone:", mix([0, 2, 3], np.array([0.5, 0.25, 0.25]), E))
+    print("sweet apple:         ", mix([1, 0], np.array([0.75, 0.25]), E))
+  solution: "X = E[ids]\n    m = w @ X"
+  tests:
+    - expr: "mix([0, 2, 3], np.array([0.5, 0.25, 0.25]), E).shape"
+      expect: [4]
+      say: "one vector of 4 numbers, whatever the length of the sentence"
+    - expr: "mix([0, 2, 3], np.array([0.5, 0.25, 0.25]), E)"
+      expect: [0.5, 1, 0, 0.25]
+      tol: 0.001
+      say: "0.5 × apple + 0.25 × releases + 0.25 × phone = [0.5, 1, 0, 0.25]"
+    - expr: "mix([1, 0], np.array([0.75, 0.25]), E)"
+      expect: [1, 0.25, 0.75, 0]
+      tol: 0.001
+      say: "0.75 × sweet + 0.25 × apple = [1, 0.25, 0.75, 0]"
+    - expr: "mix([0, 2, 3], np.ones(3) / 3, E)"
+      expect: [0.3333, 1, 0, 0.3333]
+      tol: 0.001
+      say: "equal weights give the plain average from the lab"
+  hints:
+    - when: { error: "not defined" }
+      say: ["The function must set m before `return m`.", "First a line that looks up the rows, then a line for m."]
+    - when: { error: "mismatch|not aligned|could not be broadcast" }
+      say: ["The shapes don't fit. E[ids] is (L, 4) and w is (L,). Which one goes on the left of @?", "A vector of L weights @ an (L, 4) matrix gives 4 numbers."]
+    - when: { testFailed: 0 }
+      say: ["The result must be one vector of 4 numbers. Did the L axis (one row per word) go away, or the 4 axis?", "E[ids] is (L, 4). The weights go with the rows, so the sum runs over the rows."]
+    - when: { testFailed: 1 }
+      say: ["The shape is right but the numbers are not. Is each row multiplied by its own weight?", "Check by hand: 0.5 × apple + 0.25 × releases + 0.25 × phone."]
+    - when: { any: true }
+      say: ["Two steps: take the rows of the sentence’s ids, then mix those rows with the weights.", "Indexing E with the list ids gives one row per token, shape (L, 4).", "A vector of weights @ a matrix is the weighted sum of its rows."]
+  after: "E[ids] has shape (L, 4), and w @ E[ids] is (L,) @ (L, 4) → (4,): each row times its weight, summed. So every sentence gives 4 numbers, whatever its length. With equal weights it is the plain average. Level 14 computes these weights from the words themselves; that is attention."

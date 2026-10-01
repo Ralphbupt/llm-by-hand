@@ -1,0 +1,6 @@
+---
+import Lab from './SamplingLab.svelte'
+interface Props { hide?: { prob?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

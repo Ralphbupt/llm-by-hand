@@ -1,0 +1,6 @@
+---
+import Lab from './LayerFlowLab.svelte'
+interface Props { variant?: 'decoder' | 'encdec' }
+const { variant } = Astro.props
+---
+<Lab client:visible variant={variant} />

@@ -1,0 +1,47 @@
+---
+/**
+ * The one top bar for every page that is not a lesson (home, mistakes, glossary, setup, 404):
+ * brand · The map · Glossary · Mistakes (count) · search · settings. Lessons use the sidebar instead.
+ */
+import Settings from './Settings.svelte'
+import Search from './Search.svelte'
+interface Props { current?: 'map' | 'glossary' | 'mistakes' | 'setup' }
+const { current } = Astro.props
+---
+<header class="site-top">
+  <a class="brand" href="/">LLM by Hand</a>
+  <nav aria-label="Site">
+    <a href="/#map" aria-current={current === 'map' ? 'page' : undefined}>The map</a>
+    <a href="/glossary/" aria-current={current === 'glossary' ? 'page' : undefined}>Glossary</a>
+    <a href="/review/" aria-current={current === 'mistakes' ? 'page' : undefined}>Mistakes<span class="miss" data-site-miss hidden></span></a>
+  </nav>
+  <div class="tools"><Search client:idle /><Settings client:idle /></div>
+</header>
+
+<script>
+  import { mistakeCount } from '@lib/marks'
+  import { subscribe } from '@lib/progress'
+  const el = document.querySelector<HTMLElement>('[data-site-miss]')
+  const sync = () => {
+    if (!el) return
+    const n = mistakeCount()
+    el.hidden = n === 0
+    el.textContent = String(n)
+  }
+  subscribe(sync)
+  sync()
+</script>
+
+<style>
+  .site-top { max-width: 1180px; margin: 0 auto; padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1.2rem; }
+  .brand { font-family: 'Bricolage Grotesque Variable', system-ui, sans-serif; font-weight: 700; font-size: 1.15rem; color: var(--fg);
+    text-decoration: none; margin-right: auto; }
+  nav { display: flex; gap: 1.1rem; font-size: 0.92rem; }
+  nav a { color: var(--dim); text-decoration: none; padding: 0.3rem 0; }
+  nav a:hover, nav a[aria-current='page'] { color: var(--fg); }
+  nav a[aria-current='page'] { text-decoration: underline; text-underline-offset: 6px; text-decoration-color: var(--accent); }
+  .miss { margin-left: 0.3rem; color: var(--fg); font-family: var(--mono); font-size: 0.78rem; background: var(--card);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0 0.4rem; }
+  .tools { display: flex; gap: 0.5rem; }
+  @media (max-width: 560px) { nav { gap: 0.8rem; font-size: 0.85rem; } nav a:first-child { display: none; } }
+</style>

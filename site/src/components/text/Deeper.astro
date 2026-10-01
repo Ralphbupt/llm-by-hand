@@ -1,0 +1,9 @@
+---
+/** Collapsed "go deeper" explanation: full derivation, why it is designed this way. */
+interface Props { title: string }
+import { smart } from '@lib/typo'
+const title = smart(Astro.props.title)
+// `code` in the title shows as code (odd pieces of the split are the code spans)
+const parts = title.split(/`([^`]+)`/)
+---
+<details class="deeper"><summary><span class="k">Go deeper</span> {parts.map((p, i) => (i % 2 ? <code>{p}</code> : p))}</summary><div class="body"><slot /></div></details>

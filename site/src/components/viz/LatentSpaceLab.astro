@@ -1,0 +1,6 @@
+---
+import Lab from './LatentSpaceLab.svelte'
+interface Props { start?: 'ae' | 'vae' }
+const { start = 'ae' } = Astro.props
+---
+<Lab client:visible start={start} />

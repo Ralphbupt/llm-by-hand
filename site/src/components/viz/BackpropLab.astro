@@ -1,0 +1,6 @@
+---
+import Lab from './BackpropLab.svelte'
+interface Props { hide?: { dLda?: string; dLdz?: string; dLdw?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

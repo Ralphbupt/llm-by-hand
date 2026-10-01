@@ -1,0 +1,357 @@
+:root {
+  --bg: #fdfdfc;
+  --card: #f7f7f5;
+  --fg: #1c1c1a;
+  --dim: #66665e;          /* secondary text: ≥ 4.5:1 on --bg and --card */
+  --line: #dcdcd6;         /* hairlines, dividers, inactive borders (decorative) */
+  --field: #8a8a82;        /* borders of things you can type into or edit: ≥ 3:1 */
+  --accent: #2563eb;       /* the learner's thing: their answer, their point, the current step */
+  --ok: #15803d;           /* correct, the target, the minimum */
+  --warn: #c2410c;         /* errors, divergence, a masked "?" — nothing else */
+  --pos: #0f7a84;          /* positive values (signed data) */
+  --neg: #b0279a;          /* negative values (signed data) */
+  --grad: #6d3fd4;         /* gradients and anything flowing backward */
+  --cat-1: #9a6a00;        /* categories / series 1–5: classes, words, curves that are just "different" */
+  --cat-2: #5d7317;        /* (ochre, olive, rose, slate, sand: hues the meaning tokens above don't use; */
+  --cat-3: #a8324f;        /*  scripts/check_tokens.py keeps every pair at Delta E >= 15) */
+  --cat-4: #3f5b85;
+  --cat-5: #b7755d;
+  --highlight: color-mix(in srgb, var(--accent) 14%, transparent);  /* hover / linked-cell background */
+  --on-solid: #ffffff;     /* text on a solid --accent / --ok / --warn fill */
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+/* dark: follow the system unless the reader picked light; or the reader picked dark (see lib/settings.ts) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16161a; --card: #1e1e23; --fg: #e6e6e3; --dim: #9a9aa3; --line: #33333b; --field: #6c6c77;
+    --accent: #7aa2f7; --ok: #7bc97b; --warn: #f0845c;
+    --pos: #4fc8c0; --neg: #e48ad8; --grad: #b49cff;
+    --cat-1: #d4b65e; --cat-2: #a3bd5a; --cat-3: #f08da0; --cat-4: #8da9d6; --cat-5: #c49478;
+    --on-solid: #16161a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16161a; --card: #1e1e23; --fg: #e6e6e3; --dim: #9a9aa3; --line: #33333b; --field: #6c6c77;
+  --accent: #7aa2f7; --ok: #7bc97b; --warn: #f0845c;
+  --pos: #4fc8c0; --neg: #e48ad8; --grad: #b49cff;
+  --cat-1: #d4b65e; --cat-2: #a3bd5a; --cat-3: #f08da0; --cat-4: #8da9d6; --cat-5: #c49478;
+  --on-solid: #16161a;
+  color-scheme: dark;
+}
+/* text size */
+html { font-size: 100%; }
+html[data-scale="s"] { font-size: 90%; }
+html[data-scale="l"] { font-size: 112.5%; }
+/* reduce motion */
+html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after {
+  transition: none !important; animation: none !important; scroll-behavior: auto !important;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 1rem/1.75 system-ui, -apple-system, sans-serif;
+}
+a { color: var(--accent); }
+code { font-family: var(--mono); font-variant-ligatures: none; font-size: 0.88em; background: var(--card); padding: 0.1em 0.3em; border-radius: 3px; }
+/* short inline code stays on one line (astro.config.mjs marks it) */
+code.code-nw { white-space: nowrap; }
+pre { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 0.9rem; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+/* a comment in a code block wraps under itself instead of running off the box (astro.config.mjs marks it "cmt" with
+   --c, the column it starts at): an inline block as wide as the room left on its line, never narrower than 10ch */
+pre.astro-code { container-type: inline-size; }
+pre.astro-code .cmt { display: inline-block; vertical-align: top; white-space: pre-wrap; max-width: max(10ch, calc(100cqi - var(--c, 0) * 1ch)); }
+/* on a phone the code itself is usually wider than the box (it scrolls sideways): a comment squeezed into the few
+   columns left would break into scraps, so there it stays on its line */
+@media (max-width: 560px) { pre.astro-code .cmt { display: inline; white-space: inherit; max-width: none; } }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: left; }
+
+.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 2rem; max-width: 1080px; margin: 0 auto; padding: 1.5rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 1rem; }
+main { min-width: 0; }
+.head { border-bottom: 1px solid var(--line); padding-bottom: 0.8rem; margin-bottom: 1.5rem; }
+.head h1 { margin: 0.2rem 0; font-size: 1.5rem; }
+.meta { color: var(--dim); font-size: 0.82rem; font-family: var(--mono); }
+.meta-seg { white-space: nowrap; } /* the line breaks between its parts, never inside one ("runs in your / browser"); each part carries its own leading "·", so a break never leaves one hanging at a line end */
+.foot { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font-size: 0.9rem; }
+.explainer { margin-top: 2rem; padding: 0.8rem 1rem; border: 1px solid var(--line); border-radius: 6px; font-size: 0.9rem; background: var(--card); }
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; gap: 0.5rem; padding: 1rem; }
+  nav.side { position: static; border-bottom: 1px solid var(--line); padding-bottom: 0.6rem; }
+}
+
+/* ---- levels ---- */
+.boss-pill { display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 3px; border: 1px solid var(--warn);
+  color: var(--warn); font-size: 0.66rem; font-family: var(--mono); letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 0.1em; }
+/* cleared levels: stars, green when solved on your own, plain gray when helped (lib/marks.ts sets data-stars / data-grade) */
+nav.side a.done::after { content: attr(data-stars); margin-left: auto; padding-left: 0.3rem; flex: none; font-size: 0.72rem; letter-spacing: -0.04em; line-height: 1.5; color: var(--dim); }
+nav.side a.done[data-grade="3"]::after { color: var(--ok); }
+.question { margin: 0.4rem 0 0; font-size: 1.12rem; color: var(--dim); }
+.boss { border: 1.5px solid var(--warn); border-radius: 8px; padding: 0.8rem 1rem; margin: 0 0 1.5rem; background: var(--card); }
+.boss p { margin: 0.2rem 0 0; }
+.boss-tag { font-family: var(--mono); font-size: 0.78rem; color: var(--warn); letter-spacing: 0.04em; }
+.cleared { margin-top: 2rem; padding: 0.7rem 1rem; border-radius: 6px; border: 1px solid var(--ok); color: var(--ok); font-weight: 600; }
+[hidden] { display: none !important; }
+details.deeper, details.stuck { border: 1px solid var(--line); border-radius: 6px; margin: 1.2rem 0; background: var(--card); }
+details.deeper > summary, details.stuck > summary { cursor: pointer; padding: 0.6rem 1rem; }
+details .body { padding: 0 1rem 0.6rem; }
+details .k, .tryit .k { font-size: 0.72rem; font-family: var(--mono); letter-spacing: 0.04em; text-transform: uppercase; margin-right: 0.5rem; }
+details.deeper .k { color: var(--accent); }
+details.stuck .k { color: var(--dim); }
+.tryit { border: 1px dashed var(--line); border-radius: 6px; padding: 0.7rem 1rem; margin: 1.2rem 0; }
+.tryit .k { color: var(--ok); }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
+/* a short vector in running text, "[0, 2]", stays on one line (astro.config.mjs wraps it) */
+.vec-nw { white-space: nowrap; }
+/* phones: subscripts and superscripts never below 11px (KaTeX shrinks them to 0.7em / 0.5em of small text) */
+@media (max-width: 760px) {
+  /* (doubled class: wins over KaTeX's own rules, which load later) */
+  .katex .sizing.sizing.reset-size6.size3 { font-size: max(11px, 0.7em); }
+  .katex .sizing.sizing.reset-size6.size1 { font-size: max(11px, 0.5em); }
+  .katex .sizing.sizing.reset-size3.size1 { font-size: max(11px, 0.71428571em); }
+}
+
+/* ---- reading comfort ---- */
+.side-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.side-top h1 { margin: 0 !important; }
+nav.side h1 { margin-bottom: 1rem; }
+.nav-btn { display: none; font: inherit; font-size: 0.82rem; padding: 0.25rem 0.7rem; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--card); color: var(--fg); cursor: pointer; }
+.nav-btn[aria-expanded='true'] { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 760px) { .nav-btn { display: inline-block; } }
+@media (min-width: 761px) { .side-top { margin-bottom: 1rem; } }
+main > p, main > ul, main > ol, main > h2, main > h3, .gate > .content > p, .gate > .content > ul, .gate > .content > ol,
+details .body > p { max-width: 70ch; }
+main h2 { margin-top: 2.4rem; font-size: 1.35rem; line-height: 1.3; text-wrap: balance; }
+main h3 { margin-top: 1.8rem; font-size: 1.1rem; }
+.head h1 { text-wrap: balance; }
+.question { text-wrap: balance; }
+@media (max-width: 560px) { .question { text-wrap: pretty; } }
+
+/* local debug switches (dev server only) */
+.debug-panel { position: fixed; right: 12px; bottom: 64px; z-index: 50; display: flex; gap: 0.8rem; align-items: center;
+  padding: 0.4rem 0.8rem; border: 1px dashed var(--warn); border-radius: 8px; background: var(--card);
+  font-size: 0.82rem; box-shadow: 0 2px 10px rgb(0 0 0 / 0.25); }
+.debug-panel .debug-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--warn); text-transform: uppercase; letter-spacing: 0.05em; }
+.debug-panel label { display: flex; gap: 0.35rem; align-items: center; cursor: pointer; }
+.debug-panel .minor { color: var(--dim); font-size: 0.75rem; }
+
+.side-tools { display: flex; align-items: center; gap: 0.5rem; }
+
+/* ---- mistakes link, level score, keyboard shortcuts ---- */
+.review-link { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0 0 0.6rem; font-size: 0.82rem; color: var(--dim); text-decoration: none; }
+.review-link:hover { color: var(--accent); }
+.miss-count { font-family: var(--mono); font-size: 0.72rem; padding: 0 0.4rem; border-radius: 999px; background: var(--warn); color: var(--bg); }
+@media (max-width: 760px) { .review-link { margin: 0.5rem 0 0; } }
+.score { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 6px; border: 1px solid var(--line); background: var(--card);
+  display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; align-items: baseline; }
+.score .stars { font-size: 1.3rem; letter-spacing: 0.08em; color: var(--fg); }
+.score[data-grade="3"] .stars { color: var(--ok); }
+.score .note { font-weight: 600; }
+.score .nums { flex-basis: 100%; color: var(--dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.kbd-hint { margin: 0.8rem 0 0; font-size: 0.75rem; color: var(--dim); }
+@media (hover: none), (pointer: coarse) { .kbd-hint { display: none; } }
+kbd { font-family: var(--mono); font-size: max(11px, 0.78em); padding: 0.05em 0.4em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--card); color: var(--fg); }
+.shortcuts { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 0.45); }
+.shortcuts-box { width: min(26rem, 100%); padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.shortcuts-box h2 { margin: 0 0 0.6rem !important; font-size: 1.05rem; }
+.shortcuts-box dl { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 0.9rem; margin: 0 0 0.9rem; font-size: 0.9rem; }
+.shortcuts-box dt { white-space: nowrap; }
+.shortcuts-box dd { margin: 0; color: var(--dim); }
+.shortcuts-box button { font: inherit; font-size: 0.85rem; padding: 0.25rem 0.9rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
+
+/* ---- glossary terms in lesson prose, and their card ---- */
+.glossary-link { margin-left: 0.9rem; }
+.gl-term { text-decoration: underline dotted color-mix(in srgb, var(--fg) 45%, transparent); text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px; cursor: help; border-radius: 2px; }
+.gl-term:hover, .gl-term:focus-visible { text-decoration-color: var(--accent); outline: none;
+  background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.gl-card { position: absolute; z-index: 65; padding: 0.65rem 0.8rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); box-shadow: 0 8px 28px rgb(0 0 0 / 0.25); font-size: 0.86rem; line-height: 1.5; }
+.gl-card b { font-size: 0.92rem; }
+.gl-card p { margin: 0.25rem 0 0.45rem; }
+.gl-card .gl-where { display: block; color: var(--accent); font-size: 0.8rem; text-decoration: none; }
+.gl-card span.gl-where { color: var(--dim); }
+.gl-card .gl-all { display: inline-block; margin-top: 0.25rem; font-size: 0.75rem; color: var(--dim); }
+.gl-card { --ax: 50%; padding-right: 2rem; }
+.gl-card::before { content: ''; position: absolute; left: var(--ax); top: -6px; width: 10px; height: 10px; margin-left: -5px;
+  background: var(--card); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.gl-card.above::before { top: auto; bottom: -6px; transform: rotate(225deg); }
+.gl-card .gl-x { position: absolute; top: 0.35rem; right: 0.35rem; width: 1.9rem; height: 1.9rem; display: grid; place-items: center;
+  font: inherit; font-size: 1.1rem; line-height: 1; color: var(--dim); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.gl-card .gl-x:hover, .gl-card .gl-x:focus-visible { color: var(--fg); background: var(--highlight, var(--bg)); }
+@media (pointer: coarse) { .gl-card .gl-x { width: 2.5rem; height: 2.5rem; top: 0.15rem; right: 0.15rem; } }
+.gl-card .gl-where:focus-visible, .gl-card .gl-all:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* a side note in lesson prose ("> Haven’t done level 16? …") */
+main blockquote { margin: 1.2rem 0; padding: 0.6rem 1rem; border-left: 3px solid var(--accent); background: var(--card);
+  border-radius: 0 6px 6px 0; color: var(--fg); max-width: 70ch; }
+main blockquote p { margin: 0.3rem 0; }
+.meta-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+.meta-row .meta { min-width: 0; }
+.share-cleared { display: inline-flex; align-items: center; gap: 0.8rem; color: var(--dim); font-size: 0.9rem; }
+/* the end of a level (LessonLayout): one card with the result and a primary "Next" button, then the side trips that open here */
+.lvl-done { margin-top: 2rem; padding: 0.9rem 1rem 1rem; border: 1px solid var(--ok); border-radius: 10px; background: var(--card); }
+.lvl-done .cleared { margin: 0; padding: 0; border: 0; }
+.lvl-done .score { margin: 0.5rem 0 0; padding: 0; border: 0; background: none; }
+.lvl-done-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem 1rem; margin-top: 0.9rem; }
+.lvl-next { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.5rem; padding: 0.45rem 1rem; border-radius: 8px;
+  background: var(--accent); color: var(--on-solid); font-weight: 650; text-decoration: none; }
+.lvl-next:hover { filter: brightness(1.08); color: var(--on-solid); }
+.lvl-next:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lvl-trips { margin: 1.4rem 0 0; padding: 0.6rem 0.9rem; border: 1px dashed var(--line); border-radius: 8px; font-size: 0.9rem; color: var(--dim); }
+.lvl-trips-k { display: block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg); margin-bottom: 0.2rem; }
+.lvl-trips ul { list-style: none; margin: 0.15rem 0 0.3rem; padding: 0; }
+.lvl-trips li { margin: 0.2rem 0; line-height: 1.5; }
+.lvl-trips-b { color: var(--dim); margin-right: 0.5rem; }
+.lvl-trips a { color: var(--fg); text-decoration: none; white-space: nowrap; }
+.lvl-trips a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.lvl-trips-n { font-family: var(--mono); font-size: 0.8rem; color: var(--dim); }
+.lvl-trips-note { display: block; font-size: 0.82rem; }
+@media (max-width: 560px) {
+  .lvl-trips-b { display: block; font-size: 0.82rem; } .lvl-trips li { margin: 0.45rem 0; }
+  /* one level per line on phones: a "·" never starts a line */
+  .lvl-trips a { display: block; } .lvl-trips-sep { display: none; }
+}
+.lvl-after { margin: 0.45rem 0 0; font-size: 0.85rem; color: var(--dim); }
+.lvl-after a { color: var(--fg); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+
+/* ---- 3D views (Stage3D.svelte + lib/three/stage.ts + labels.ts) ---- */
+.stage3d { width: 100%; max-width: 100%; }
+.stage3d-view { position: relative; width: 100%; max-width: 100%; min-height: 160px; border-radius: 6px; background: var(--bg);
+  border: 1px solid var(--line); overflow: hidden; cursor: grab; }
+.stage3d-view:active { cursor: grabbing; }
+.stage3d-view:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stage3d-surface { position: absolute; inset: 0; }
+.stage3d-canvas { display: block; width: 100%; height: 100%; }
+.stage3d-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.stage3d-bar { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; min-height: 1.75rem; }
+.stage3d-hint { flex: 1; min-width: 0; font-size: 0.72rem; line-height: 1.35; color: var(--dim); }
+.stage3d-hint.on { color: var(--accent); }
+.stage3d-btn { flex: none; font: inherit; font-size: 0.75rem; color: var(--dim); background: transparent; border: 1px solid var(--line);
+  border-radius: 4px; padding: 0.15rem 0.55rem; cursor: pointer; min-height: 1.75rem; }
+.stage3d-btn:hover, .stage3d-btn:focus-visible { color: var(--fg); border-color: var(--fg); }
+@media (pointer: coarse) { .stage3d-btn { min-height: 2.5rem; } }
+.stage3d-msg { position: absolute; inset: 0; width: 100%; border: 0; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  color: var(--dim); font: inherit; font-size: 0.8rem; cursor: pointer; }
+.stage3d-msg[hidden] { display: none; }
+.stage3d-fallback { border: 1px dashed var(--line); border-radius: 6px; padding: 0.8rem 1rem; color: var(--dim); font-size: 0.85rem; }
+.stage3d-fallback p { margin: 0; }
+/* labels: HTML over the canvas, projected each frame; sizes in rem follow the Settings text size */
+.stage3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.l3d { position: absolute; left: 0; top: 0; white-space: pre; text-align: center; font-family: var(--mono); line-height: 1.15; color: var(--fg);
+  text-shadow: 0 0 2px var(--bg), 0 0 2px var(--bg), 0 0 3px var(--bg), 0 0 5px var(--bg); will-change: transform; }
+.l3d.hidden { visibility: hidden; }
+.l3d.occluded { opacity: 0.35; }
+/* a tick behind a surface would read as a label of whatever is drawn over it (e.g. the learner's point): hide it */
+.l3d.occluded[data-role="tick"] { visibility: hidden; }
+.l3d.v { writing-mode: vertical-rl; }
+.l3d.v.up { text-orientation: upright; letter-spacing: -0.1em; }
+.l3d[data-role="tick"] { font-size: clamp(11px, 0.68rem, 14px); color: var(--dim); }
+.l3d[data-role="axis"] { font-size: clamp(11px, 0.74rem, 15px); color: var(--dim); font-weight: 600; }
+.l3d[data-role="name"] { font-size: clamp(11.5px, 0.8rem, 16px); font-weight: 600; }
+.l3d[data-role="op"] { font-size: clamp(14px, 1.1rem, 22px); font-weight: 600; }
+.l3d[data-role="callout"] { font-size: clamp(11px, 0.75rem, 15px); font-weight: 600; padding: 0 0.25em; border-radius: 3px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); }
+
+/* ---- sidebar: parts fold, branches nest, the list scrolls on its own ---- */
+nav.side { position: sticky; z-index: 10; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); display: flex; flex-direction: column; font-size: 0.88rem; }
+nav.side a { color: var(--dim); text-decoration: none; }
+.side-scroll { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -0.4rem; padding: 0 0.4rem 0.5rem; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+details.part + details.part { margin-top: 0.2rem; }
+details.part > summary, details.branch > summary { list-style: none; cursor: pointer; }
+details.part > summary::-webkit-details-marker, details.branch > summary::-webkit-details-marker { display: none; }
+details.part > summary { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0.35rem 0.6rem; padding: 0.7rem 0 0.55rem; }
+.p-name { font-weight: 650; color: var(--fg); font-size: 0.86rem; }
+.p-name::before { content: '›'; display: inline-block; width: 0.9rem; text-align: center; margin-right: 0.15rem; color: var(--dim); transition: transform 0.15s; transform-origin: 50% 55%; }
+details[open] > summary .p-name::before { transform: rotate(90deg); }
+.p-count { font-family: var(--mono); font-size: 0.7rem; color: var(--dim); }
+.p-bar { grid-column: 1 / -1; height: 2px; border-radius: 1px; background: var(--line); overflow: hidden; margin-left: 1.05rem; }
+.p-bar i { display: block; height: 100%; width: 0; background: var(--ok); transition: width 0.3s; }
+ol.lvls { list-style: none; margin: 0 0 0.5rem; padding: 0; }
+ol.lvls a { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr) auto; align-items: baseline; padding: 0.24rem 0.45rem; border-radius: 6px; line-height: 1.35; }
+ol.lvls a:hover { background: var(--card); color: var(--fg); }
+/* the current level: accent color and a 2px bar on the left; a boss level: plain text color and semibold.
+   Two different channels, so a boss never looks like "you are here". */
+ol.lvls a.on { background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: inset 2px 0 0 var(--accent); border-radius: 0 6px 6px 0; color: var(--accent); }
+ol.lvls a.on .lv { color: var(--accent); }
+ol.lvls a.is-boss-level { color: var(--fg); font-weight: 600; }
+ol.lvls a.is-boss-level.on { color: var(--accent); }
+.lv { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); }
+details.branch { margin: 0.1rem 0 0.4rem 0.55rem; padding-left: 0.6rem; border-left: 1px solid var(--line); }
+details.branch ol.lvls { margin-bottom: 0.2rem; }
+.b-after { font-family: var(--mono); font-size: 0.72rem; font-weight: 400; margin-left: auto; color: var(--dim); }
+details.branch > summary { display: flex; align-items: baseline; gap: 0.45rem; padding: 0.3rem 0 0.25rem; font-size: 0.78rem; font-weight: 400; color: var(--dim); }
+/* a side trip with one level: the level itself, no fold */
+.trip-solo { margin: 0.1rem 0 0.3rem 0.55rem; padding-left: 0.45rem; border-left: 1px solid var(--line); }
+ol.lvls .trip-solo a { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.3rem; padding: 0.24rem 0.45rem; border-radius: 6px; line-height: 1.35; font-size: 0.82rem; }
+/* "after N" under the name, small: a side trip never outweighs the main levels around it */
+.trip-solo .b-after { grid-row: 2; grid-column: 2; margin-left: 0; font-size: 0.66rem; line-height: 1.3; }
+.trip-solo a:hover { background: var(--card); color: var(--fg); }
+.trip-solo a.on { background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: inset 2px 0 0 var(--accent); border-radius: 0 6px 6px 0; color: var(--accent); }
+details.branch > summary::before { content: '›'; display: inline-block; width: 0.6rem; text-align: center; transition: transform 0.15s; transform-origin: 50% 55%; }
+details.branch[open] > summary::before { transform: rotate(90deg); }
+.b-count { font-family: var(--mono); font-size: 0.68rem; font-weight: 400; }
+details.branch ol.lvls a { grid-template-columns: 1.9rem minmax(0, 1fr) auto; }
+.side-foot { display: flex; gap: 0.9rem; flex-wrap: wrap; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+.side-foot .review-link { margin: 0; }
+@media (max-width: 760px) {
+  nav.side { position: static; max-height: none; }
+  nav.side .side-scroll, nav.side .side-foot { display: none; }
+  nav.side.open .side-scroll, nav.side.open .side-foot { display: block; }
+  nav.side.open .side-foot { display: flex; }
+  ol.lvls a, .trip-solo a { min-height: 40px; align-content: center; }
+  details.branch > summary { min-height: 40px; align-items: center; }
+}
+
+/* ---- lab buttons (used inside LabFrame controls; see AUTHORING.md "Visual style") ---- */
+.lab-btn { font: inherit; font-size: 0.88rem; line-height: 1.2; padding: 0.4rem 0.9rem; min-height: 2.1rem; border-radius: 6px;
+  border: 1px solid var(--field); background: var(--bg); color: var(--fg); cursor: pointer; }
+.lab-btn:hover:not(:disabled) { border-color: var(--fg); }
+.lab-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-solid); font-weight: 600; }
+.lab-btn.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent); }
+.lab-btn.ghost { background: transparent; border-color: transparent; color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+.lab-btn.ghost:hover:not(:disabled) { color: var(--fg); border-color: transparent; }
+.lab-btn:disabled { opacity: 0.45; cursor: default; }
+/* a toggle or choice that is on (aria-pressed): accent outline and text, a light accent wash */
+.lab-btn[aria-pressed="true"]:not(.primary) { border-color: var(--accent); color: var(--accent); background: var(--highlight); }
+.lab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 760px) { .lab-btn { min-height: 2.5rem; } }
+
+/* ---- keyboard focus is always visible ---- */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- skip link (lesson layout) ---- */
+.skip-link { position: absolute; left: 0.75rem; top: -3rem; z-index: 100; padding: 0.45rem 0.9rem; border-radius: 6px;
+  background: var(--accent); color: var(--on-solid); text-decoration: none; font-weight: 600; }
+.skip-link:focus { top: 0.75rem; }
+main#lesson:focus { outline: none; }
+
+/* prose tables (from Markdown) scroll inside their own box on narrow screens; lab tables are untouched */
+main > table, .gate > .content > table, details .body > table {
+  display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; width: max-content;
+}
+
+/* reading mode (Settings): a small pill that stays on screen while it is on */
+.reading-pill { display: none; }
+html[data-reading] .reading-pill {
+  position: fixed; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 55;
+  display: flex; align-items: center; gap: 0.7rem; max-width: calc(100vw - 24px);
+  padding: 0.3rem 0.35rem 0.3rem 0.85rem; border: 1px solid var(--accent); border-radius: 999px; background: var(--card);
+  font-size: 0.8rem; color: var(--fg); box-shadow: 0 2px 12px rgb(0 0 0 / 0.18);
+}
+.reading-pill b { color: var(--accent); font-weight: 650; }
+.reading-pill .rp-note { color: var(--dim); }
+.reading-pill button { font: inherit; font-size: 0.78rem; padding: 0.2rem 0.75rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); color: var(--fg); cursor: pointer; min-height: 2rem; }
+.reading-pill button:hover, .reading-pill button:focus-visible { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) { .reading-pill .rp-note { display: none; } .reading-pill button { min-height: 40px; } }
+@media print { html[data-reading] .reading-pill { display: none; } }
+html[data-reading] main { padding-bottom: 3.5rem; }

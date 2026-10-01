@@ -1,0 +1,231 @@
+---
+title: Backpropagation
+level: "6"
+order: 6
+part: foundations
+question: How does the gradient flow back through the network, layer by layer?
+run: browser
+checkpoint: backward
+testOut: [numeric, dW-hand, db-hand, dz1-hand, backward]
+recap:
+  can:
+    - "Follow the chain rule backward through a small network by hand, multiplying the local gradients."
+    - "Check any gradient with the numeric estimate $(L(w + \\varepsilon) - L(w - \\varepsilon)) / (2\\varepsilon)$."
+    - "Write the backward pass of a two-layer network in NumPy and train it on XOR."
+  keys:
+    - "Chain rule: $\\partial L/\\partial w = \\partial L/\\partial a \\cdot \\partial a/\\partial z \\cdot \\partial z/\\partial w$"
+    - "`dW = X.T @ dz`, the same shape as `W`"
+    - "`db = dz.sum(axis=0)`: one number per neuron, summed over the examples"
+    - "`dz_prev = (dz @ W.T) * f'(z_prev)`; for tanh, $f' = 1 - a^2$"
+    - "Sigmoid with cross-entropy: the output `dz = (p - y) / n`"
+  mistakes:
+    - "Writing `db = dz` without summing over the examples, so its shape is wrong."
+    - "Using `W @ dz` or `dz @ W` where the shapes call for a transpose: write the shapes down first."
+boss: "Write the backward pass for a 2→6→1 network and prove it right with a gradient check. Then train the network until all four XOR points are correct, in your browser."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import BackpropLab from '@viz/BackpropLab.astro'
+import MlpLab from '@viz/MlpLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+In level 2 you could write the gradient by hand: one formula, two parameters. A network has thousands of
+parameters spread over many layers. **Backpropagation** is a way to find all their gradients in one pass,
+using a single rule again and again. That rule is the chain rule (the [math page](/math/#chain-rule) shows it with numbers).
+
+Here is the smallest network that still has layers: one input, one neuron, one loss.
+
+$$
+z = w \cdot x + b \quad\to\quad a = \text{sigmoid}(z) \quad\to\quad L = (a - y)^2
+$$
+
+With $x = 2$, $w = 0.5$, $b = -1$, $y = 1$: $z = 0$, so $a = \text{sigmoid}(0) = 0.5$ and $L = (0.5 - 1)^2 = 0.25$.
+We want $\partial L / \partial w$.
+
+## 1. The one rule
+
+Each box knows only its own **local gradient**: how its output moves when its input moves.
+Sigmoid knows $\partial a / \partial z = a(1 - a)$. The square knows $\partial L / \partial a = 2(a - y)$.
+To get from $L$ back to $w$, **multiply the local gradients along the path**. That is the chain rule.
+
+Press "Step back" one step at a time. Each new gradient shows as “?” until you compute it in the question below.
+
+<BackpropLab hide={{ dLda: "dLda", dLdz: "dLdz", dLdw: "dLdw" }} />
+
+<Blank id="dLda" />
+
+<Gate requires="dLda">
+
+The next step needs your arithmetic. The lab stops at a question mark.
+
+<Blank id="dLdz" />
+
+</Gate>
+
+<Gate requires="dLdz">
+
+One more multiplication reaches $w$.
+
+<Blank id="dLdw" />
+
+Notice what $\partial L / \partial z$ did. Once you had it, $w$ and $b$ each cost one more multiplication.
+Going backward means every gradient is computed once and reused by all the earlier layers. That is why it is fast.
+
+<Stuck q="Why go backward? Couldn’t I start at w and go forward?">
+
+You could, for one parameter. Starting at $w$, you would carry "how much does z move per unit of w" forward to L.
+But then for $b$ you would start again from the beginning, and for every other weight again. A network with a million weights would
+need a million forward passes.
+
+Going backward, you start from the one thing everyone shares, the loss, and each box passes one number to
+the boxes before it. One backward pass gives every gradient, for roughly the cost of one or two forward passes.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="dLdw">
+
+## 2. How do you know the gradient is right?
+
+Go back to the definition: move $w$ up by a tiny amount $\varepsilon$, then down by the same amount, and see how much
+the loss changes.
+
+$$
+\frac{\partial L}{\partial w} \approx \frac{L(w + \varepsilon) - L(w - \varepsilon)}{2\varepsilon}
+$$
+
+This **numeric gradient** needs no calculus at all, just two forward passes. It is too slow to train with
+(two passes per weight), but it is a perfect checker. If it agrees with your backprop, your backprop is right.
+This is called a **gradient check**.
+
+The lab writes tiny numbers the way computers do: `1e−5` means $1 \times 10^{-5} = 0.00001$, and `2e−11` means
+$2 \times 10^{-11}$. This "e" has nothing to do with $e \approx 2.72$ from level 3.
+
+<Blank id="numeric" />
+
+<Predict id="tiny-eps" />
+
+</Gate>
+
+<Gate requires="tiny-eps">
+
+## 3. From numbers to matrices
+
+A real layer does the same thing for many neurons and many examples at once. Each scalar becomes a matrix.
+In the rest of this level, `dz` means $\partial L/\partial z$: the gradient of the loss at a layer's output **before** its
+activation, one number per example and per neuron. In general it is not the error (prediction − truth) of level 2:
+at a hidden layer it is whatever the chain rule gives. Only at the output, with sigmoid and cross-entropy, does it come
+out as $(p - y)/n$ (the Deeper box below shows why).
+Three rules move it around:
+
+1. **gradient of a layer's weights**: `dW = X.T @ dz`, where `X` is the layer's input and `X.T` its transpose (level 1).
+   "The layer's input" means what goes into that layer: for the hidden layer it is the data `X`, but for the output
+   layer it is the hidden layer's output (the boss below calls it `a1`), not `X`.
+2. **gradient of a layer's bias**: `db = dz.sum(axis=0)`, one number per neuron. A bias is like a weight whose
+   input is always 1, so its gradient is the plain sum of `dz` over the examples. (`.sum(axis=0)` adds down the
+   rows, as in level 1, section 7.)
+3. **one layer back**: `dz_prev = (dz @ W.T) * f'(z_prev)`. The `@` sends the gradient back through the weights.
+   The `*` is element-wise: it multiplies each number by the activation's slope at that point.
+
+Here are the same rules on a small network with 2 inputs, 3 hidden neurons and 1 output. It uses sigmoid and the squared
+loss, as in section 1. Hidden neuron 1 is section 1's neuron: $x_1 = 2$, $w = 0.5$, $b = -1$. The output also lands on
+$z = 0$, so the backward pass starts with the same $-1$ and $-0.25$. Step forward, then keep pressing Next to go back.
+
+<ArchLab which="backprop" />
+
+Where does `X.T @ dz` come from? Look at one example first. For one input row $x$ and one output gradient,
+the weight gradient is $x \cdot dz$, exactly as in section 1 ($\partial L/\partial w = x \cdot \partial L/\partial z$).
+With several examples, the loss is a sum over them, so the gradients add up. Two examples, two inputs, one output:
+
+| example | input x | dz | x × dz (each input times dz) |
+|---|---|---|---|
+| 0 | [1, 2] | 0.5 | [0.5, 1.0] |
+| 1 | [3, 1] | −1 | ? |
+
+`dW` is the sum of the last column over both examples. `X.T @ dz` computes exactly that sum in one multiplication.
+
+<Blank id="dW-hand" />
+
+<Blank id="db-hand" />
+
+Our network for XOR is $X$ (4, 2) → $W_1$ (2, 6) → tanh → $W_2$ (6, 1) → sigmoid.
+
+<Blank id="dW1-shape" />
+
+Rule 3 takes the gradient one layer back. Try it on the XOR network, then on two numbers by hand.
+
+<Blank id="dz-back-shape" />
+
+<Blank id="dz1-hand" />
+
+<Stuck q="Why is there a transpose in dW = Xᵀ @ dz?">
+
+Let the shapes decide. $X$ is (4, 2): 4 examples, 2 inputs. The gradient at the hidden layer, `dz1`, is (4, 6).
+The gradient must have the same shape as $W_1$, which is (2, 6).
+The only way to multiply a (4, 2) and a (4, 6) into a (2, 6) is $X^T$ (2, 4) @ `dz1` (4, 6).
+
+The 4 that disappears is the examples: the transpose adds up each weight's gradient over all 4 examples.
+When a shape doesn't line up, write the shapes down and look for the one arrangement that works.
+
+</Stuck>
+
+<Deeper title="Why the output gradient is simply p − y">
+
+The output uses sigmoid and the loss is the cross-entropy from level 3: $L = -[y \ln p + (1-y)\ln(1-p)]$.
+Chain the two local gradients:
+
+$$
+\frac{\partial L}{\partial p} = \frac{p - y}{p(1-p)} \qquad \frac{\partial p}{\partial z} = p(1-p)
+$$
+
+Multiply them and $p(1-p)$ cancels: $\partial L / \partial z = p - y$. That is why the output gradient in the code
+below is just `p - y` (divided by 4, because the loss is the mean over 4 examples). It is also why sigmoid and
+cross-entropy are almost always used together.
+
+</Deeper>
+
+<Gate requires="dz1-hand">
+
+## 4. Boss: write the backward pass
+
+The forward pass is written. You write the whole backward pass: start at the output with `dz2 = (p − y) / n`
+(the Deeper box above shows why), then use the three rules to get all four gradients. The local gradient of tanh
+is $1 - \tanh(z)^2$, and you already have $\tanh(z)$: it is `a1`. In Python the square is `a1 ** 2` (`**` is a power, as in level 2; `^` is not). The hidden tests run a gradient check on every
+gradient your `backward` returns, with $\varepsilon = 10^{-5}$ (written `1e-5`).
+
+<CodeBlank id="backward" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="backward">
+
+Your gradients match the numeric ones. Now train the network. Each step moves every weight against its gradient,
+exactly as in level 2. So that this cell doesn't show the boss's answer, it doesn't call your `backward`: it gets the
+gradients the slow way, by changing each number a little (the check from section 2). Your gradient check showed that
+those are the same numbers your `backward` gives, only much slower to compute.
+
+<CodeBlank id="train-xor" />
+
+The lab below runs the same network, written in JavaScript instead of NumPy. Press Train and watch it learn.
+
+<MlpLab />
+
+<TryIt>
+
+In the backprop lab at the top, set the target to y = 0 and step back again. Which gradients change sign?
+Then set w = 5. Why does ∂L/∂w almost vanish? Look at a(1 − a) when a is close to 1.
+
+</TryIt>
+
+Optional side trip: [level U3](/learn/autograd/) builds a small program that does this backward pass for you, the
+way PyTorch does, in about 50 lines of Python. Level 7 continues the main line.
+
+</Gate>

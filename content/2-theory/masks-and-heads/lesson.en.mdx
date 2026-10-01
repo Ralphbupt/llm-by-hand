@@ -1,0 +1,186 @@
+---
+title: Masks and multi-head attention
+short: "Masks and heads"
+level: "15"
+order: 15
+part: theory
+question: How do you stop a word from looking at some words, and look in several ways at once?
+run: browser
+checkpoint: masked-attention
+testOut: [open-cells, pad-broadcast, causal-mask, dk-512, masked-attention]
+recap:
+  can:
+    - "Build a causal mask and a padding mask, and say which cells of the weight table they block."
+    - "Split `d_model` into heads and say where each head’s output sits in concat."
+    - "Write one masked attention head in NumPy, from X to the output."
+  keys:
+    - "True = blocked; a blocked score becomes −∞ before softmax, and e^−∞ = 0"
+    - "Causal mask, shape `(L, L)`: `np.triu(…, k=1)` on an all-True table"
+    - "Apply it with `np.where(mask, -np.inf, scores)`"
+    - "$d_k = d_\\text{model} / h$: the heads split the width evenly"
+    - "concat is `(L, d_model)`, head 0 first; `W_O` mixes the heads"
+  mistakes:
+    - "Setting a blocked score to 0 instead of −∞: e⁰ = 1, so the blocked word still gets weight."
+    - "Using `k=0` in `np.triu`: that blocks the diagonal too, and a word may look at itself."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import MaskLab from '@viz/MaskLab.astro'
+import MultiHeadLab from '@viz/MultiHeadLab.astro'
+
+In level 14 every word looked at every word, with one set of `W_Q`, `W_K` and `W_V`. A GPT needs two more things:
+
+1. **Masks**, so a word can be stopped from looking at some words: the words after it, or padding.
+2. **Several heads**, so the model can look in several ways at once.
+
+This level adds both and ends with one attention head of a GPT, written by you.
+
+## 1. Masks: who is not allowed to look
+
+Two situations need some cells of the weight table forced to zero.
+
+- **No looking ahead.** When a model writes text one word at a time, word 3 must not use word 4: word 4 is what it is
+  trying to predict. The **causal mask** blocks every cell above the diagonal.
+- **No looking at padding.** Sentences in a batch have different lengths, so short ones are filled with PAD tokens
+  until they all have the same length. Nobody should look at those. The **padding mask** blocks their columns.
+
+A mask is a table of True/False with **True = blocked**. A blocked score becomes −∞ before softmax, and e^−∞ = 0.
+The two masks are combined with OR: a cell is blocked if either mask blocks it.
+
+<Predict id="fill-zero" />
+
+<Gate requires="fill-zero">
+
+<MaskLab />
+
+<TryIt>
+
+In the mask lab, uncheck “causal” and tap the last two words to make them padding. Which columns are now empty?
+Turn “causal” back on. Which row always has exactly one open cell, whatever you pad?
+
+</TryIt>
+
+<Blank id="mask-shape" />
+
+<Stuck q="Why is the causal mask a 6×6 table and not just 6 numbers?">
+
+Because it is a mask on the *weights*, and the weight table has one row per word that is looking and one column per
+word being looked at. For a causal mask, “may word i look at word j” depends on both i and j, so it needs a full 6×6 table.
+
+The padding mask really is just 6 numbers, one per column: a PAD token is blocked for everyone.
+That is why it is stored as one row, with shape (1, 6), and copied down every row when it is used.
+
+The size comes from the sequence that looks at itself: 6 tokens looking at the same 6 tokens. Side trip [N7](/learn/encoder-decoder/) has models with two
+sequences (a source and a target of different lengths). Its section 5 shows which mask each attention uses, and which length sets its size.
+
+</Stuck>
+
+<Blank id="open-cells" />
+
+</Gate>
+
+<Gate requires="open-cells">
+
+### One mask for a whole batch
+
+A batch holds several sentences, and each sentence has its own padding. Its scores have shape (B, L, L).
+
+<Stuck q="What is the B in (B, 1, L)?">
+
+B is the batch size: how many sentences are processed together. Each sentence has its own padding pattern,
+so the padding mask is (B, L), one row per sentence. The scores are (B, L, L). To make the shapes fit, the mask gets a 1 in the
+middle, (B, 1, L), and NumPy copies that single row across all L query rows. This copying is called broadcasting.
+
+</Stuck>
+
+<Blank id="pad-broadcast" />
+
+In the lab, the PAD rows still spread their own weights over the real words. That is fine: a PAD token’s output is never used,
+and the loss skips it. The mask only has to stop real words from looking **at** PAD.
+
+Masks use two NumPy functions. `np.where(mask, a, b)` takes a where mask is True and b everywhere else:
+
+```python
+blocked = np.array([True, False, False])
+np.where(blocked, -np.inf, np.array([0.34, 0.05, 0.9]))   # [-inf, 0.05, 0.9]
+```
+
+To build a causal mask, one more function does the work. `np.triu(M, k)` (“triangle, upper”) keeps the entries of M on and
+above diagonal k and sets the rest to 0 (or False). k = 0 is the main diagonal, k = 1 starts one step above it:
+
+```python
+np.triu(np.ones((3, 3), dtype=int), k=0)    # [[1, 1, 1],
+                                            #  [0, 1, 1],
+                                            #  [0, 0, 1]]
+```
+
+<CodeBlank id="causal-mask" />
+
+</Gate>
+
+## 2. Many heads
+
+One set of `W_Q` and `W_K` gives one way of looking: one score table. But words relate in several ways at once.
+**Multi-head attention** runs a few attentions side by side, each on a separate slice of the numbers, and then mixes them.
+
+Here `d_model` = 4 and there are 2 heads, so each head gets `d_k` = 2 columns. Heads are numbered from 0, like everything else.
+Each head outputs 2 numbers per word, and the heads’ outputs are placed next to each other in one table called **concat**,
+head 0 first.
+
+Splitting does not add parameters. `W_Q`, `W_K` and `W_V` stay (`d_model`, `d_model`): the heads share their columns instead of
+each getting a full copy, so 8 heads cost the same as 1 big head.
+
+<Gate requires="causal-mask">
+
+<Blank id="concat-shape" />
+
+<Blank id="head2-col" />
+
+<Gate requires="head2-col">
+
+Now pick a head in the lab and follow its columns.
+
+<MultiHeadLab />
+
+Head 0 uses columns 0 and 1 of Q, K and V, which here are exactly the cat, dog, car of level 14 (section 2), so it gives the same weights.
+Head 1 uses columns 2 and 3 and, with its swapped keys, a different pattern. In the end there is one output: 2 heads in,
+1 output out, after `W_O`.
+
+</Gate>
+
+<Stuck q="Does head 0 only see half of each word?">
+
+No. Each head uses all `d_model` numbers of every word: Q = X @ `W_Q` mixes every input number into every column of Q.
+The splitting happens to Q, K and V, not to X. In this lab `W_Q` is the identity, so the columns of Q happen to be the
+columns of X. In a trained model, column 0 of Q is a mix of all four numbers of the word.
+
+</Stuck>
+
+<Deeper title="What `W_O` does">
+
+After the heads run, their outputs sit next to each other: concat is (3, 4). Without `W_O`, head 0’s result would stay in
+columns 0–1 and head 1’s in columns 2–3, always separate. `W_O` is a (4, 4) matrix. Output column j is a mix of all
+four concat columns, so every output number can use both heads. Rows 0–1 of `W_O` are the weights for head 0’s numbers,
+rows 2–3 for head 1’s.
+
+</Deeper>
+
+<Blank id="dk-512" />
+
+</Gate>
+
+## 3. All of it at once
+
+You now know every piece: three projections, scores, scaling, a mask, softmax, a weighted average.
+Here they are as one function, with a causal mask. This is one attention head of a GPT.
+
+<Gate requires="dk-512">
+
+<CodeBlank id="masked-attention" />
+
+</Gate>

@@ -1,0 +1,6 @@
+---
+import Lab from './GradientLab.svelte'
+interface Props { hide?: { loss?: string; grad?: string; step?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

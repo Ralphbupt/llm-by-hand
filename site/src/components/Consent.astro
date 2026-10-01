@@ -1,0 +1,69 @@
+---
+/**
+ * The analytics consent bar: one sentence, Allow / No thanks, remembered in this browser.
+ * Rendered only when the site is built with PUBLIC_GA4_ID (SeoHead includes it). It is fixed to the bottom of the
+ * screen, so it never moves the page; while it shows, the page gets extra room at the end, so nothing stays under it.
+ * The visitor can change their mind in Settings (Analytics).
+ */
+---
+<script>
+  import { getConsent, initAnalytics, setConsent } from '@lib/analytics'
+  import { watchAnalytics } from '@lib/analyticsWatch'
+
+  initAnalytics()
+  watchAnalytics()
+
+  function show() {
+    if (document.querySelector('.consent-bar')) return
+    const bar = document.createElement('div')
+    bar.className = 'consent-bar'
+    bar.setAttribute('role', 'region')
+    bar.setAttribute('aria-label', 'Analytics')
+    bar.innerHTML =
+      '<p>May we count visits with Google Analytics, to see which levels help? No ads, nothing you type is sent, and you can change this in Settings.</p>' +
+      '<div class="consent-acts"><button type="button" data-consent="granted">Allow</button>' +
+      '<button type="button" data-consent="denied">No thanks</button></div>'
+    bar.addEventListener('click', (e) => {
+      const v = (e.target as HTMLElement).closest<HTMLElement>('[data-consent]')?.dataset.consent
+      if (v !== 'granted' && v !== 'denied') return
+      setConsent(v)
+    })
+    document.body.appendChild(bar)
+    document.documentElement.classList.add('consent-open')
+  }
+  function hide() {
+    document.querySelector('.consent-bar')?.remove()
+    document.documentElement.classList.remove('consent-open')
+  }
+  if (getConsent() === null) {
+    if (document.body) show()
+    else document.addEventListener('DOMContentLoaded', show)
+  }
+  window.addEventListener('llmbh:consent', hide)
+</script>
+
+<style is:global>
+  .consent-bar {
+    position: fixed; z-index: 70; left: 0.75rem; right: 0.75rem; bottom: 0.75rem; margin: 0 auto; max-width: 40rem;
+    display: flex; align-items: center; gap: 0.5rem 1rem; padding: 0.55rem 0.6rem 0.55rem 0.9rem;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg);
+    box-shadow: 0 4px 18px rgb(0 0 0 / 0.12); font: 0.85rem/1.45 system-ui, -apple-system, sans-serif;
+  }
+  .consent-bar p { margin: 0; flex: 1; color: var(--dim); }
+  .consent-acts { display: flex; gap: 0.4rem; flex: none; }
+  .consent-bar button {
+    font: inherit; padding: 0.3rem 0.8rem; min-height: 2rem; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  }
+  .consent-bar button[data-consent="granted"] { border-color: var(--accent); color: var(--accent); }
+  .consent-bar button:hover { border-color: var(--accent); }
+  .consent-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* room at the end of the page, so the last controls can scroll clear of the bar */
+  html.consent-open body { padding-bottom: 7.5rem; }
+  @media (max-width: 560px) {
+    .consent-bar { flex-direction: column; align-items: stretch; left: 0.5rem; right: 0.5rem; bottom: 0.5rem; padding: 0.6rem 0.75rem; }
+    .consent-acts { justify-content: flex-end; }
+    .consent-bar button { min-height: 2.5rem; }
+  }
+  @media print { .consent-bar { display: none; } }
+</style>

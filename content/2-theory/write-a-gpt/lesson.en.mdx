@@ -1,0 +1,451 @@
+---
+title: Write your own GPT
+level: "21"
+order: 21
+part: theory
+question: Can you write a working model from a starter file that has the names but no code?
+run: local
+checkpoint: boss-report
+mustSolve: [boss-forward]
+testOut: [answer-targets, split-code, mha-code, boss-forward, boss-report]
+recap:
+  can:
+    - "Turn a problem into ids, then into x and y shifted by one, with the loss on the answer digits only."
+    - "Write masked multi-head attention: split the heads, mask the scores, merge the heads back."
+    - "Debug a model before training it for long: check the first loss, then overfit one batch."
+  keys:
+    - "`x, y = ids[:-1], ids[1:]`; targets you don’t grade become `IGNORE = -100`"
+    - "Split: `(B, L, d_model)` → `view(B, L, h, d_k).transpose(1, 2)` → `(B, h, L, d_k)`"
+    - "Merge: `out.transpose(1, 2)`, then `.contiguous().view(B, L, d_model)`"
+    - "An untrained model starts near $\\ln V$: $\\ln 15 \\approx 2.71$"
+  mistakes:
+    - "Calling `.view` right after `.transpose` without `.contiguous()`."
+    - "Counting positions without `<bos>`, or grading the loss on the random digits of a and b and on `<pad>`."
+boss: "A decoder-only GPT with pre-norm blocks and RMSNorm learns two-digit addition. Your code must pass a fixed-weights check, and your trained model must get at least 950 of the 1,000 unseen problems fully right."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import AddDataLab from '@viz/AddDataLab.astro'
+import PlateauLab from '@viz/PlateauLab.astro'
+import MicroscopeLab from '@viz/MicroscopeLab.astro'
+
+Until now every level gave you most of the code. This one gives you only the task and a **starter file**: a Python file
+in which every class and function already has its name and a one-line description, but no code inside.
+You can reread earlier levels as often as you like, but you write every line yourself, on your own computer.
+If you haven’t run Python and PyTorch locally yet, start with the [setup page](/setup/).
+Recommended before this boss: levels U4 (feeding data to a model) and U5 (debugging a model). They cover the batches,
+padding and bugs you will meet here. If you skipped them, this is the batch loop you need for one epoch:
+
+```python
+# X, Y: every training x and y. perm: a new order every epoch.
+perm = torch.randperm(len(X))
+for i in range(0, len(X), 64):
+    idx = perm[i:i + 64]               # the next 64 ids
+    xb, yb = X[idx], Y[idx]
+    # forward, loss, zero_grad, backward, step
+```
+
+## The task
+
+- **What the model does.** It reads `<bos>23+58=` and continues with `81<eos>`. One character per token.
+  `<bos>` is the start token: every sequence begins with it, so the model has an input before the first digit.
+  `<eos>` is the end token: the model writes it when the answer is complete.
+  This is exactly how a chat model writes: it predicts the next token, again and again.
+- **Data.** Every pair a, b from 0 to 99: 10,000 problems. Shuffle them. Train on 8,500. Use 500 for validation, to
+  pick the best epoch. Keep the last 1,000 apart: the model never sees them, and you make no choice based on them.
+- **Vocabulary.** 15 tokens: `<pad>`, `<bos>`, `<eos>`, the ten digits, `+` and `=`.
+- **Model.** Decoder only: embeddings, a few blocks of causal self-attention and FFN, then an output layer.
+  No encoder and no cross-attention. The blocks are **pre-norm** (level 16) and use **RMSNorm** (level 19), with
+  learned position embeddings.
+- **Pass.** Two checks. First, your code loads fixed weights and must compute the same logits as the reference.
+  Second, your trained model writes the answers to the 1,000 unseen problems, and at least 950 must be fully right.
+
+Do the steps in order. Each step has a check that tells you a piece works before you use it in the next step.
+
+## Step 0: your tools
+
+Download these files into one folder:
+
+1. [skeleton.py](/files/write-a-gpt/skeleton.py), the starter file: names, shapes and one-line descriptions, no hints. Copy it to `my_gpt.py` and complete every `# TODO`. {/* en-ok: skeleton, starter */}
+   Keep the class and attribute names: the boss check loads weights by those names.
+   If you are stuck, [`skeleton_hints.py`](/files/write-a-gpt/skeleton_hints.py) is the same file with comments that say which lines to write. Try without it first. {/* en-ok: skeleton */}
+2. [check.py](/files/write-a-gpt/check.py) and [`check_weights.json`](/files/write-a-gpt/check_weights.json), the boss check.
+   You run it on your own file at the end of step 2 and step 5.
+3. The **translation table** in level 9, [section 7](/learn/numpy-to-pytorch/#7-a-translation-table-to-keep).
+   Almost every line you write is a NumPy line from an earlier level, translated: `nn.Embedding`, `view`, `transpose`,
+   `masked_fill`, `F.cross_entropy` with `ignore_index`, and the epoch loop. One name differs from NumPy:
+   `np.triu(…, k=1)` is `torch.triu(…, diagonal=1)` in PyTorch.
+
+<Deeper title="What the starter file contains">
+
+```python
+PAD, BOS, EOS = 0, 1, 2
+ITOS = ["<pad>", "<bos>", "<eos>"] + list("0123456789") + ["+", "="]   # 15 tokens, ids 0–14
+STOI = {c: i for i, c in enumerate(ITOS)}                             # {'<pad>': 0, '<bos>': 1, …}
+MAXLEN = 11          # the longest sequence: <bos> 9 9 + 9 9 = 1 9 8 <eos>
+IGNORE = -100        # F.cross_entropy(..., ignore_index=IGNORE) skips these targets
+
+def encode(a, b): ...          # (23, 58) → 11 ids, padded with <pad>
+def make_xy(ids): ...          # x, y shifted by one; y = IGNORE before the answer and on <pad>
+def split(seed=0): ...         # given: 8,500 train, 500 validation, 1,000 unseen (the same split check.py uses)
+
+class RMSNorm(nn.Module): ...  # divide by the root mean square, times a learned gain
+class Attention(nn.Module): ...# q, k, v → heads → scores → causal mask → softmax → join heads → output
+class Block(nn.Module): ...    # pre-norm: x = x + attn(norm1(x)); x = x + ffn(norm2(x))
+class GPT(nn.Module): ...      # embeddings → blocks → final norm → output layer: (B, L) ids → (B, L, 15)
+
+def overfit_one_batch(): ...   # step 3
+def train(epochs): ...         # step 4, ends by saving model.pt for check.py
+def solve(model, a, b): ...    # step 5: greedy until <eos>
+```
+
+</Deeper>
+
+<Deeper title="Lines you copy, choices you make">
+
+Some lines are the same in almost every PyTorch script. You can copy them without a reason of your own:
+`torch.manual_seed(0)`, `opt.zero_grad(); loss.backward(); opt.step()`, Adam with learning rate 0.001, and batches of 64.
+
+Other lines are choices that change what the model learns. You should be able to say why you made each of them:
+
+- which positions count in the loss;
+- how many blocks, and how wide they are;
+- pre-norm or post-norm;
+- how positions enter the model.
+
+The encoder–decoder of side trip [N7](/learn/encoder-decoder/) uses `label_smoothing=0.1`, as the 2017 design did.
+It is a choice, not a habit. This task doesn’t need it.
+
+</Deeper>
+
+## Step 1: the data, shifted by one
+
+Every token has an id. These are the ids the checks on this page use:
+
+| token | `<pad>` | `<bos>` | `<eos>` | `0` … `9` | `+` | `=` |
+|---|---|---|---|---|---|---|
+| id | 0 | 1 | 2 | 3 … 12 | 13 | 14 |
+
+So the digit 2 has id 5 and the digit 8 has id 11. Take the problem 23 + 58. As one sequence of tokens it is
+`<bos>23+58=81<eos>`.
+
+<Blank id="seq-len" />
+
+<Gate requires="seq-len">
+
+A batch is a rectangle: every sequence in it must have the same length. So every sequence gets `<pad>` tokens at the
+end, up to the length of the longest possible one.
+
+<Blank id="pad-len" />
+
+</Gate>
+
+<Gate requires="pad-len">
+
+The input x is the padded sequence without its last token, and the target y is the same sequence without its first token.
+So x and y have 10 tokens each, and y[t] is the token that comes after x[t].
+
+<Blank id="first-answer-pos" />
+
+</Gate>
+
+<Gate requires="first-answer-pos">
+
+The model should be graded only on the answer. The digits of a and b are random, so no model can predict them, and
+`<pad>` is not something anyone wants it to say. So in y, every target before the answer and every `<pad>` is replaced
+by a special value, `IGNORE = -100`, and `F.cross_entropy(..., ignore_index=-100)` skips those positions. This page
+calls it the **loss on the answer digits only**.
+
+<Blank id="answer-targets" />
+
+</Gate>
+
+<Gate requires="answer-targets">
+
+So “the answer digits only” always includes `<eos>`: the model is graded on the answer and on knowing when to stop.
+
+Why is there no padding mask, as in level 15? Here every `<pad>` comes at the end, after `<eos>`, and the causal mask
+already stops each position from looking at later positions. So no real token ever looks at a `<pad>`. The `<pad>`
+positions do look at the tokens before them, but nothing uses their outputs: their targets are IGNORE, and generation
+stops at `<eos>`.
+
+Now check your answers in the lab, then try a few problems of your own. Compare x and y position by position, and see which targets the loss skips.
+
+<AddDataLab />
+
+**Check:** print three examples as characters, as ids, as x and as y. Check that every y is its x moved one step left.
+
+<CodeBlank id="make-xy" />
+
+<Stuck q="I understand the shift, but why remove the first and the last token?">
+
+x and y come from the same sequence. x drops the last token, and y drops the first. So at every position t,
+y[t] is “the token after x[t]”. One pass through the model makes ten guesses at once, one per position,
+and the causal mask makes sure no guess can see its own answer.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="make-xy">
+
+## Step 2: the forward shape
+
+Before you write the model, watch a tiny trained GPT read `<bos>2+3=` and write the next token. It has the same parts as
+yours, only with very small sizes, so you can see every number. Step through it and note the shape after each part.
+
+<MicroscopeLab data="write-a-gpt" />
+
+Now build your own model with random weights and pass one batch through it. Nothing is trained yet. Only the shapes matter.
+
+One difference from levels 16 and 17: the input is just `tok(ids) + pos(positions)`, with **no** × √`d_model`.
+Those levels use the factor because their position table is fixed (numbers between −1 and 1), and the token numbers
+must not be hidden by it. Here both tables are learned `nn.Embedding` layers that start at the same size, so
+training sets the balance between them. The boss check expects no factor.
+
+<Blank id="logits-shape" />
+
+</Gate>
+
+<Gate requires="logits-shape">
+
+The hardest line in the model splits the heads. In level 15 each head took its own slice of columns.
+In code, the last axis of size `d_model` is reshaped into h heads of `d_k` numbers. Then the heads move in front of the
+length, so every head gets its own (L, `d_k`) table:
+
+```python
+q = q.view(B, L, h, d_k).transpose(1, 2)    # (B, L, d_model) → (B, h, L, d_k)
+```
+
+<Blank id="split-heads" />
+
+In NumPy the same split is a reshape and a transpose with all four axes in their new order ([level 9’s table](/learn/numpy-to-pytorch/#7-a-translation-table-to-keep)):
+
+<CodeBlank id="split-code" />
+
+</Gate>
+
+<Gate requires="split-code">
+
+After the attention, the heads go back together: move the length in front of the heads again, then join the last two axes.
+
+```python
+y = out.transpose(1, 2).contiguous().view(B, L, d_model)    # (B, h, L, d_k) → (B, L, d_model)
+```
+
+<Blank id="merge-heads" />
+
+<Stuck q="view says “view size is not compatible with input tensor’s size and stride”.">
+
+`view` only relabels the numbers as they lie in memory. It never moves them. After `transpose`, the numbers that should
+be next to each other are not next to each other in memory, so `view` refuses. `.contiguous()` makes a copy with
+the numbers in the new order, and then `view` works. `.reshape(B, L, d_model)` does both steps for you.
+The error says: `view size is not compatible with input tensor's size and stride … Use .reshape(...) instead.`
+
+</Stuck>
+
+<Stuck q="My model runs, but some blocks never change during training.">
+
+Check how you stored the blocks. A model is a class: `__init__` builds the parts, and `forward` uses them.
+PyTorch finds a part’s weights only if the part is stored as a module. A plain Python list hides it:
+`self.blocks = [Block(...), Block(...)]` runs fine, but `model.parameters()` doesn’t see those blocks, so the optimizer
+never updates them. Use `nn.ModuleList([...])`. A single learned number needs the same care: wrap it in
+`nn.Parameter(...)`, like the RMSNorm gain, or it isn’t trained either.
+
+</Stuck>
+
+<Deeper title="A GPT block is level 16’s decoder block, with RMSNorm">
+
+Level 16’s decoder block was already pre-norm, and level 17 stacked it into a whole model.
+Each block does `x = x + attn(norm1(x))`, then `x = x + ffn(norm2(x))`.
+The attention uses a causal mask, and one final norm comes before the output layer.
+A GPT block keeps all of it with one change: **RMSNorm** (level 19) instead of LayerNorm. Two more changes sit outside
+the blocks: the positions are learned, and the token is not multiplied by √`d_model`.
+
+The reference solution has 2 blocks, `d_model` 64, 4 heads, `d_ff` 256, learned position embeddings and RMSNorm:
+102,415 parameters.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="merge-heads">
+
+Now put the whole attention together. In NumPy, `k.transpose(0, 1, 3, 2)` swaps the last two axes of a four-axis array
+(PyTorch: `k.transpose(-2, -1)`), and `np.where(blocked, -np.inf, scores)` sets the blocked scores to −∞ (PyTorch:
+`scores.masked_fill(blocked, float('-inf'))`). The causal mask is the one from level 15: True above the diagonal.
+Inside the function, take the sizes from the arrays themselves, for example `d_k = q.shape[-1]`.
+
+<CodeBlank id="mha-code" />
+
+When this works in NumPy, your PyTorch `Attention.forward` is the same four lines, translated.
+
+</Gate>
+
+<Gate requires="mha-code">
+
+**Boss check, part 1.** Your model is complete, but untrained. Run `python check.py my_gpt.py`. It builds your `GPT`
+with small sizes, `GPT(d=32, heads=4, layers=2, d_ff=64)`, so keep these four argument names from the starter file
+(`d` is `d_model`). Then it loads the fixed weights from `check_weights.json` into it by
+name, runs it on `23+58=81` and turns 20 of its logits into a short code. It also tells you whether they match the reference.
+A correct pre-norm GPT with RMSNorm, a causal mask and the √`d_k` scaling gives the reference’s code. A missing mask, a missing gain or a post-norm block each
+change it. The weights are loaded by name, so one more thing must match: the order of the columns of `qkv(x)`. The first d
+numbers are q, the next d are k and the last d are v (`q, k, v = self.qkv(x).split(d, dim=-1)`), and only then is each one split into heads.
+
+<CodeBlank id="boss-forward" />
+
+</Gate>
+
+<Gate requires="boss-forward">
+
+## Step 3: overfit one batch
+
+Take 8 fixed examples and train on only those, for 300 steps. A correct model memorizes them:
+with the loss on the answer digits only, the reference goes from 2.73 to 0.061 after 50 steps and 0.003 after 300.
+
+The first number is not random. Before training, the model gives every one of the 15 tokens about the same probability,
+1/15. The loss is −ln(1/15) = ln 15 ≈ 2.71. So an untrained model should start near 2.7.
+
+<Predict id="start-loss" />
+
+If the loss on one batch stays high, the bug is in your code, not in the size of the model. It is almost always one of
+three things: the causal mask, the shift by one, or what the loss is counting.
+
+<Stuck q="My loss on one batch stops at about 0.22 and won’t go lower.">
+
+Check whether you count the loss on every position. The reference does exactly this: 0.36 after 50 steps,
+then stays at 0.22. After `<bos>`, the 8 examples start with different digits, and no earlier token tells the model which digit comes first.
+No model can get those guesses right, so the loss can’t go below that level.
+Each example loses ln 8 ≈ 2.08 on its first digit. Spread over about 9.5 targets per example, that is ln 8 / 9.5 ≈ 0.22.
+
+Count the loss on the answer digits only and the same model drops to 0.003.
+Your model was fine. The test was asking it to guess a random digit.
+
+</Stuck>
+
+<Stuck q="The loss line fails with “Expected target size [8, 15], got [8, 10]”.">
+
+`F.cross_entropy` wants one row of scores per prediction, but your logits are (8, 10, 15): 8 examples, 10 positions,
+15 tokens. Flatten them to one row per position, as in level 17:
+`F.cross_entropy(logits.reshape(-1, 15), y.reshape(-1), ignore_index=IGNORE)`. That is 80 rows of 15 scores and 80 targets.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="start-loss">
+
+## Step 4: train
+
+Train on the 8,500 training problems, batches of 64, Adam with learning rate 0.001. One **epoch** is one pass over all
+8,500, in a new random order each time. Train for 40 epochs, about a minute on a laptop. After every epoch,
+measure accuracy on the 500 validation problems. Accuracy can drop for an epoch or two and then recover, so keep the
+best model. Each time validation accuracy beats its best so far, save the model for the check. The starter file’s `train` shows
+the one line that does it. If even the best epoch is below 95%, train for more epochs (for example 60). {/* en-ok: starter, step */}
+
+<Predict id="plateau" />
+
+<Gate requires="plateau">
+
+Two real runs of the reference model, one for each loss setting. Drag the slider or press play. The lab shows accuracy
+on the 1,000 unseen problems, only to watch the runs: the best epoch is still picked on the 500 validation problems.
+
+<PlateauLab />
+
+<Stuck q="Why does accuracy stay the same for several epochs, then jump?">
+
+Accuracy only counts answers that are completely right. A model that gets two of three digits right scores zero.
+During the flat part the model is learning pieces: the answer has two or three digits, and the last digit depends on
+the last digits of a and b. The training loss shows this. With the loss on every position it falls from 1.34 to 1.27
+between epochs 4 and 8, while accuracy only rises slowly, from 8% to 15%.
+
+Then the model combines these pieces, including the carry. The carry is the 1 that moves to the next digit when a column
+adds to 10 or more, as in 8 + 5 = 13. After that, whole answers start to be right.
+How long the flat part lasts depends on the model, the data and the settings. In other setups it can last fifty epochs.
+
+</Stuck>
+
+**Plateau or bug?** Look at the training loss, not only the accuracy.
+
+- **The loss is still falling:** the model is learning. Keep training, even if accuracy hasn’t moved.
+- **The loss has been flat for a long time and overfitting one batch (step 3) also fails:** it’s a bug. Train on
+  something very easy, like the copy task from level 17, and fix the code before you train longer.
+
+<Stuck q="I ran it twice and got exactly the same numbers. Shouldn’t it be random?">
+
+`torch.manual_seed(0)` fixes every random choice: the starting weights, the order of the batches and the split.
+This is on purpose. When you change one thing in an experiment, the change you see comes from that one thing.
+To see how much randomness matters, change the seed: the flat part gets longer or shorter, and the end result is similar.
+
+</Stuck>
+
+<Predict id="loss-floor" />
+
+<Deeper title="Why the loss on the answer digits only starts faster">
+
+With the loss on every position, most of the targets are the digits of a and b. They are random, so the model can’t
+learn them, and they cause most of every batch’s gradient. With the loss on the answer digits only, all of the
+gradient pushes the model toward adding correctly.
+
+In these two runs, the run with the loss on the answer digits only is far ahead early: 81% after 8 epochs, against 15% for every position.
+It reaches 95% a little sooner (epoch 14 against epoch 16). Both end near 100%. Neither curve is smooth: the run with
+the loss on the answer digits only drops to 84.2% at epoch 18 and recovers. Look at several epochs before you decide a run is good or bad.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="loss-floor">
+
+## Step 5: evaluate, and pass the boss
+
+Give the model `<bos>a+b=` for each unseen problem, pick the top token, append it, and repeat until `<eos>`.
+An answer counts only if every digit is right.
+
+Don’t look only at the score. A model at 98% still gets 20 problems wrong, and the wrong ones often have something in common.
+Print every miss and look for the pattern. `zip` reads two lists together, one pair at a time:
+`list(zip([1, 2], ["a", "b"]))` is `[(1, "a"), (2, "b")]`.
+
+<CodeBlank id="list-wrong" />
+
+</Gate>
+
+<Gate requires="list-wrong">
+
+**Boss check, part 2.** Run `python check.py my_gpt.py model.pt`. It first runs part 1 again on `my_gpt.py`, so the
+model it tests must be the GPT you wrote. Then it loads your trained model and writes the answers to the
+1,000 unseen problems with its own greedy loop. It prints a report with three parts: how many are right, the first ten
+it got wrong, and a short check code made from those numbers. Paste the report.
+
+The page can test that the report is consistent and that you pasted it unchanged. It can’t see your model: anyone who
+reads check.py could type a report by hand. So this part relies on your honesty. The level counts as cleared when both parts pass.
+
+<CodeBlank id="boss-report" />
+
+<TryIt>
+
+Once you pass, make it harder for yourself. Use 1 block instead of 2, or `d_model` 32 instead of 64.
+Does it still reach 95%? How many epochs does it need now? Then replace the learned position embeddings with RoPE
+(level 19) and compare how fast the two versions learn.
+
+</TryIt>
+
+<Deeper title="The reference solution">
+
+The numbers on this page come from the course’s own solution to this boss. It is not a download, so that the boss stays a test.
+Trained for 40 epochs (about a minute on a laptop), its best epoch on the 500 validation problems gets 98.6% of the 1,000 unseen problems right. The two runs in the lab above come from the same code. It has no learning-rate schedule, so their first 40 epochs are exactly a 40-epoch run; the lab shows 60 epochs, to show what happens after that.
+
+</Deeper>
+
+You have now built and trained a GPT. If you haven’t taken them yet, two side trips show more.
+Side trip [N7](/learn/encoder-decoder/) adds two things to the GPT you just wrote: a second stack, the encoder,
+and cross-attention, which joins the two stacks. Side trip [U6](/learn/attention-backward/) computes the backward pass of attention by hand.
+
+</Gate>

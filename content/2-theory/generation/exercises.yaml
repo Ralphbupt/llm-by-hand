@@ -1,0 +1,267 @@
+greedy-p:
+  type: number
+  prompt: "Scores: mat 2.0, sofa 1.5, rug 1.0, roof 0.0, moon −1.0. With T = 1, greedy picks mat. Use e² ≈ 7.4, e^1.5 ≈ 4.5, e¹ ≈ 2.7, e⁰ = 1, e^−1 ≈ 0.4. What probability does softmax give mat? (2 decimals)"
+  answer: 0.46
+  tol: 0.01
+  after: "The five e^score add up to 7.4 + 4.5 + 2.7 + 1 + 0.4 = 16, so p(mat) = 7.4 / 16 ≈ 0.46. Greedy takes mat every single time, even though it has less than half the probability."
+  hints:
+    - when: { equals: 2 }
+      wrong: "2.0"
+      say: "That is mat’s score. Softmax turns it into a probability: e² divided by the sum of e^score over all five words."
+    - when: { equals: 7.4 }
+      say: "That is e² alone. Divide it by the sum of all five: 7.4 + 4.5 + 2.7 + 1 + 0.4."
+    - when: { any: true }
+      say: ["Softmax: e^score for mat, divided by the sum of e^score over all five words.", "Add the five e values you were given, then divide mat’s by that total."]
+
+t-zero:
+  type: predict
+  prompt: "You sample (not greedy) with T = 0.01, so every score is multiplied by 100. What does sampling do now?"
+  options: ["Picks mat almost every time, like greedy", "Picks all five words about equally", "Picks the same words as at T = 1, just as often"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "That happens for a very large T. Dividing by 0.01 makes the gaps between scores 100 times bigger, not smaller."
+    - when: { equals: 2 }
+      say: "Multiplying every score by 100 multiplies the gaps between them too. What does softmax do with huge gaps?"
+  reveal: "Almost always mat. Scores 200 vs 150 differ by 50 after dividing by 0.01, and e^50 is extremely large (about 5 × 10²¹). As T goes to 0, sampling turns into greedy. As T grows, it moves toward picking every word equally."
+
+top2-sofa:
+  type: number
+  prompt: "Probabilities: mat 0.46, sofa 0.28, rug 0.17, roof 0.06, moon 0.03. Top-k with k = 2 keeps mat and sofa and divides by their total. What is sofa’s new probability? (2 decimals)"
+  answer: 0.38
+  tol: 0.01
+  after: "0.28 / (0.46 + 0.28) = 0.28 / 0.74 ≈ 0.38. Mat becomes 0.62. Rug, roof and moon can no longer be picked."
+  hints:
+    - when: { equals: 0.28 }
+      wrong: "0.28"
+      say: "That is sofa before the cut. After dropping three words, the two kept ones must add up to 1 again."
+    - when: { any: true }
+      say: ["The two kept probabilities must add up to 1 again. What do you divide by?", "Divide sofa’s 0.28 by the total of the two kept words."]
+
+topp-count:
+  type: number
+  prompt: "Sorted probabilities: 0.4631, 0.2809, 0.1704, 0.0627, 0.0231. Top-p with p = 0.9 keeps words, starting from the largest, until the running total reaches 0.9. How many words does it keep?"
+  answer: 3
+  tol: 0
+  after: "Running totals: 0.4631, 0.7439, 0.9143. The third word pushes the total past 0.9, so it is kept, and the search stops. Roof and moon are dropped."
+  hints:
+    - when: { equals: 2 }
+      wrong: "1 + 1"
+      say: "After two words the total is 0.7439, still below 0.9. Keep adding: the word that crosses 0.9 is kept too."
+    - when: { equals: 4 }
+      wrong: "3 + 1"
+      say: "The total is already 0.9143 after three words. Once you reach 0.9, stop."
+    - when: { any: true }
+      say: ["Add the probabilities one at a time, starting from the largest. Stop when the total is 0.9 or more.", "After the first word the total is 0.4631. Add 0.2809 next."]
+
+topp-code:
+  type: code
+  prompt: "Finish `top_p`: `keep_sorted` must be True for every word to keep, in sorted order."
+  template: |
+    def top_p(probs, p):
+        order = np.argsort(-probs)          # most likely first
+        sorted_p = probs[order]
+        cum = np.cumsum(sorted_p)           # running totals
+        keep_sorted = ____
+        keep = np.zeros(len(probs), dtype=bool)
+        keep[order] = keep_sorted           # back to the original word order
+        out = np.where(keep, probs, 0.0)
+        return out / out.sum()
+
+    probs = softmax(np.array([2.0, 1.5, 1.0, 0.0, -1.0]))
+    print("cum:", np.round(np.cumsum(np.sort(probs)[::-1]), 4))
+    print(np.round(top_p(probs, 0.9), 4))
+  solution: "cum - sorted_p < p"
+  tests:
+    - setup: "probs = softmax(np.array([2.0, 1.5, 1.0, 0.0, -1.0]))"
+      expr: "np.round(top_p(probs, 0.9), 4)"
+      expect: [0.5065, 0.3072, 0.1863, 0.0, 0.0]
+      tol: 0.0002
+      say: "p = 0.9 keeps mat, sofa, rug"
+    - setup: "probs = softmax(np.array([2.0, 1.5, 1.0, 0.0, -1.0]))"
+      expr: "int((top_p(probs, 0.3) > 0).sum())"
+      expect: 1
+      say: "p = 0.3: mat alone (0.4631) already covers it"
+    - setup: "probs = np.array([0.25, 0.25, 0.25, 0.25])"
+      expr: "int((top_p(probs, 0.6) > 0).sum())"
+      expect: 3
+      say: "four equal words, p = 0.6: totals 0.25, 0.5, 0.75 → keep 3"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["If you wrote cum < p, you drop the word that crosses 0.9. Keep a word when the words *before* it are not enough yet.", "cum includes the word itself. Remove the word’s own probability before you compare with p."]
+    - when: { error: "shape|broadcast|matmul|core dimension" }
+      say: "`keep_sorted` needs one True/False per word, the same length as `sorted_p`."
+    - when: { any: true }
+      say: ["Step 2 of the recipe: keep a word if the words ranked above it add up to less than p.", "cum[i] is the total up to and including word i. How do you get the total of only the words above it?"]
+  after: "cum − `sorted_p` is the total of the words ranked above each word. Comparing it with p keeps the word that crosses p, and the most likely word is always kept, because 0 < p."
+
+beam-greedy:
+  type: number
+  prompt: "First word: a 0.5, the 0.4, one 0.1. After a: dog 0.4, cat 0.3, fox 0.3. After the: dog 0.9, cat 0.05, fox 0.05. After one: dog 0.5, cat 0.25, fox 0.25. Greedy takes the best word at each step. What is the probability of the two-word sentence greedy writes? (2 decimals)"
+  answer: 0.2
+  tol: 0.005
+  after: "Greedy takes a (0.5), then dog (0.4): p(a dog) = 0.5 × 0.4 = 0.20."
+  hints:
+    - when: { equals: 0.36 }
+      say: "0.36 is p(the dog). Greedy never looks at “the”: at step 1 it only takes the single best word, a."
+    - when: { equals: 0.5 }
+      wrong: "0.5"
+      say: "That is just the first word. Multiply by the probability of the second word greedy picks after “a”."
+    - when: { any: true }
+      say: ["Greedy takes the single best first word, then the best second word after it.", "The best first word is a (0.5). Which word is most likely after a?"]
+
+beam-wider:
+  type: predict
+  prompt: "First word: a 0.5, the 0.4, one 0.1. After a: dog 0.4, cat 0.3, fox 0.3. After the: dog 0.9, cat 0.05, fox 0.05. After one: dog 0.5, cat 0.25, fox 0.25. Greedy writes “a dog”, with probability 0.20. Beam search with width 2 keeps the two best first words (a and the) and then looks at all their second words. Will it find a better sentence than greedy’s 0.20?"
+  options: ["Yes, it finds one with higher probability", "No: “a” was the best first word, so the best sentence starts with “a”", "No: with only two words, every method finds the same sentence"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "A sentence’s probability is first word × second word. Could a worse first word be followed by a much better second word?"
+    - when: { equals: 2 }
+      say: "Two steps are enough for greedy to go wrong. Compare a × (best after a) with the × (best after the)."
+  reveal: "Yes. “the” looked worse than “a” at the first step, but one of its second words is far more likely than anything after “a”. Keeping “the” as a candidate is what lets beam search find that sentence."
+
+beam-best:
+  type: number
+  prompt: "First word: a 0.5, the 0.4, one 0.1. After a: dog 0.4, cat 0.3, fox 0.3. After the: dog 0.9, cat 0.05, fox 0.05. After one: dog 0.5, cat 0.25, fox 0.25. What is the probability of the best sentence that beam width 2 finds? (2 decimals)"
+  answer: 0.36
+  tol: 0.005
+  after: "the dog: 0.4 × 0.9 = 0.36. Width 3 finds the same one: in this small tree, width 2 already found the best of all nine sentences."
+  hints:
+    - when: { equals: 0.2 }
+      wrong: "0.5*0.4"
+      say: "That is greedy’s sentence. Width 2 also expands “the”. What is “the” followed by its best word?"
+    - when: { any: true }
+      say: ["List the six sentences that start with a or the, multiply their two probabilities, and take the largest.", "“a dog” is 0.5 × 0.4 = 0.20. Now do the three sentences that start with “the”."]
+
+repeat-predict:
+  type: predict
+  prompt: "A counting model looks at the last two words. It has seen “the cat sat on the mat .” far more than any other sentence. Greedy writes 14 words starting from “the”. What do you expect?"
+  options: ["The same sentence again and again", "Fourteen words, all different", "It stops after one sentence"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "The model only looks at the last two words. What happens when greedy reaches “. the” again?"
+    - when: { equals: 2 }
+      say: "Greedy never stops by itself here: “.” is followed by “the”, and the sentence starts again."
+  reveal: "The same sentence again and again. After “. the” it is back where it started, so it makes exactly the same choices again: a loop of 7 words."
+
+penalty-cat:
+  type: number
+  prompt: "After “. the”, ln p(cat) = −0.7752 and ln p(dog) = −1.1852. “cat” has already been written once, “dog” never. With penalty 1.0, score = ln p − 1.0 × (times written). What is cat’s score? (4 decimals)"
+  answer: -1.7752
+  tol: 0.0005
+  after: "−0.7752 − 1.0 × 1 = −1.7752. Dog keeps −1.1852, which is now higher, so the second sentence starts “the dog”. The loop is broken."
+  hints:
+    - when: { equals: -0.7752 }
+      wrong: "-0.7752"
+      say: "That is cat’s score before the penalty. It was written once: subtract 1.0 × 1."
+    - when: { equals: 0.2248 }
+      wrong: "-0.7752 + 1.0"
+      say: "You added the penalty. It lowers the score: −0.7752 − 1.0."
+    - when: { any: true }
+      say: ["Start from cat’s ln p and subtract the penalty once for every time cat was written.", "Cat was written once, and the penalty is 1.0."]
+
+tradeoff-predict:
+  type: predict
+  prompt: "Sampling at T = 2 flattens the probabilities, so the 4% for “any word” matters a lot more. Of 200 six-word continuations, what fraction do you expect to follow the sentence rules?"
+  options: ["About 100%", "About 80%", "About 20%"]
+  reveal: "About 20% (demo.py: 20%). Each word only has a small chance to go wrong, but six words in a row must all be right, and flattening multiplies the small chances."
+
+topp-trigram:
+  type: number
+  prompt: "After “on the” the model gives mat 0.3445, rug 0.2451, park 0.1984, roof 0.1835, and 0.0029 to each of the other 10 words. Top-p with p = 0.9 keeps how many words?"
+  answer: 4
+  tol: 0
+  after: "Running totals 0.3445, 0.5896, 0.7879, 0.9714: roof crosses 0.9, so four words are kept: exactly the four places. All ten unlikely words are dropped. That is why top-p scores 100% on the rules here."
+  hints:
+    - when: { equals: 3 }
+      wrong: "4 - 1"
+      say: "After three words the total is 0.7879, still below 0.9. The fourth word is kept because it is the one that crosses 0.9."
+    - when: { equals: 14 }
+      wrong: "4 + 10"
+      say: "The ten words with 0.0029 are never reached: the total passes 0.9 before them."
+    - when: { any: true }
+      say: ["Add, starting from the largest, and keep a running total.", "Count the words up to and including the one that pushes the total past 0.9."]
+
+kv-new:
+  type: number
+  prompt: "Tokens 0 to 98 have already been processed by the model, and their k and v are in the KV cache. The model has just picked token 99. To predict token 100, it gives token 99 to the model. For how many tokens must it compute k and v now?"
+  answer: 1
+  tol: 0
+  after: "Just 1: token 99, the one given to the model. The other 99 rows of K and V are read from the cache. Without the cache it would compute all 100 again."
+  hints:
+    - when: { equals: 100 }
+      say: "That is without a cache. Which of the 100 tokens 0–99 have their k and v stored already?"
+    - when: { equals: 99 }
+      say: "99 rows come from the cache. The question asks how many are computed now."
+    - when: { equals: 0 }
+      wrong: "99 - 99"
+      say: "Token 99 was just picked. It has not been processed by the model yet, so its k and v are not in the cache."
+    - when: { any: true }
+      say: ["Which tokens’ k and v are already stored?", "Only the token given to the model at this step is new."]
+q-rows:
+  type: number
+  prompt: "With a KV cache: tokens 0, 1, 2 are in the cache, and token 3 is given to the model. How many rows does Q have at this step?"
+  answer: 1
+  after: "One row: the q of token 3. K and V have 4 rows (3 from the cache, 1 new), so the scores are 1 × 4."
+  hints:
+    - when: { equals: 4 }
+      say: "K and V have 4 rows. But Q only asks questions for the tokens given to the model at this step."
+    - when: { equals: 3 }
+      say: "3 rows of K and V come from the cache. Q is never cached: which tokens are given to the model now?"
+    - when: { any: true }
+      say: ["Only token 3 is given to the model at this step.", "Q has one row per token given to the model."]
+
+kv-total:
+  type: number
+  prompt: "No cache. Writing tokens 0 to 99 one at a time, the k of 1 token is computed at the first step, 2 at the second, …, 100 at the last. How many k computations is that in total?"
+  answer: 5050
+  after: "5,050, against 100 with a cache. The work without a cache grows with the square of the length; with a cache it grows like the length."
+  hints:
+    - when: { equals: 10100 }
+      say: "That is 100 × 101. Divide by 2: each pair (1 and 100, 2 and 99, …) adds to 101, and there are 50 pairs."
+    - when: { equals: 100 }
+      say: "100 is with a cache. Without one, every step recomputes all the tokens so far."
+    - when: { any: true }
+      say: ["Add 1 + 2 + … + 100.", "Make pairs: 1 + 100, 2 + 99, … What does each pair add to, and how many pairs are there?"]
+
+filter-code:
+  type: code
+  prompt: "Write the sampler’s filter: divide the scores by T (given), keep only the k largest, and return probabilities that add up to 1, with 0 for the dropped words."
+  template: |
+    def filter_probs(scores, T, k):
+        z = scores / T
+        ____
+
+    scores = np.array([2.0, 1.0, 0.5, -1.0])
+    print(np.round(filter_probs(scores, 1.0, 2), 4))
+  solution: |-
+    cut = np.sort(z)[::-1][k - 1]          # the k-th largest score
+        z = np.where(z >= cut, z, -np.inf)     # drop everything below it
+        print("cut:", cut, " z:", z)
+        return softmax(z)
+  tests:
+    - expr: "np.round(filter_probs(np.array([2.0, 1.0, 0.5, -1.0]), 1.0, 2), 4)"
+      expect: [0.7311, 0.2689, 0.0, 0.0]
+      tol: 0.0002
+      say: "T = 1, k = 2: only the two best words, divided by their sum so they add up to 1"
+    - expr: "np.round(filter_probs(np.array([2.0, 1.0, 0.5, -1.0]), 2.0, 3), 4)"
+      expect: [0.481, 0.2918, 0.2272, 0.0]
+      tol: 0.0002
+      say: "T = 2 flattens the scores before the cut"
+    - expr: "np.round(filter_probs(np.array([-1.0, 3.0, 0.0]), 1.0, 1), 4)"
+      expect: [0.0, 1.0, 0.0]
+      tol: 0.0002
+      say: "k = 1 is greedy: all the probability on the top word, even when it is not first"
+  hints:
+    - when: { error: "not defined" }
+      say: "Define cut before you use it. The browser gives you softmax(x)."
+    - when: { error: "NoneType|unsupported operand" }
+      say: "The function must return the probabilities. End with return softmax(...)."
+    - when: { testFailed: 0 }
+      say: ["Check two things. Is cut the k-th largest score? Do the dropped words get exactly 0 after softmax?", "np.sort sorts smallest first. Reverse it with [::-1] before you take position k − 1.", "A dropped word needs −∞ before softmax, not 0: a score of 0 still gets e⁰ = 1. np.where can put −∞ where a score is below the cut."]
+    - when: { any: true }
+      say: ["Three steps: find the k-th largest score, replace every smaller score with −∞, then softmax.", "np.sort sorts smallest first. Reverse it, then take position k − 1: that score is the cut.", "Keep the scores that are at least the cut. np.where can put −∞ everywhere else."]
+  after: "Dropped words get −∞ before softmax, so e^−∞ = 0 and the kept words add up to 1 by themselves. Dividing by T comes first. It changes how flat the kept probabilities are, but not which words are in the top k."

@@ -1,0 +1,220 @@
+n-batches:
+  type: number
+  prompt: "A dataset has 10 examples. The batch size is 4, and the last batch keeps whatever is left. How many batches are in one epoch?"
+  answer: 3
+  tol: 0
+  after: "Batches start at 0, 4 and 8: sizes 4, 4 and 2. That is 3 batches, because 10 / 4 = 2.5 rounds up."
+  hints:
+    - when: { equals: 2 }
+      say: "2 batches of 4 cover only 8 examples. Where do examples 8 and 9 go?"
+    - when: { equals: 2.5 }
+      say: "A batch is either there or not. Half a batch is still one batch, just a shorter one."
+    - when: { any: true }
+      say: ["Start at example 0 and take 4 at a time. Where does each batch start?", "The first batch is examples 0 to 3, and the next one starts at 4. Keep going until no example is left."]
+
+last-batch:
+  type: number
+  prompt: "10 examples, batch size 4. How many examples are in the last batch?"
+  answer: 2
+  tol: 0
+  after: "The first two batches take 8 examples. The last batch gets the 2 that are left: examples 8 and 9."
+  hints:
+    - when: { equals: 4 }
+      say: "Only 10 examples exist. After two full batches of 4, how many are left?"
+    - when: { any: true }
+      say: ["Count the examples the full batches use first.", "Two full batches of 4 use 8 of the 10 examples."]
+
+steps-epochs:
+  type: number
+  prompt: "10 examples, batch size 4, short last batch kept. You train for 3 epochs. How many steps (weight updates) is that?"
+  answer: 9
+  tol: 0
+  after: "3 batches per epoch, one step per batch: 3 × 3 = 9 steps."
+  hints:
+    - when: { equals: 30 }
+      say: "30 counts examples, not steps. One step uses a whole batch."
+    - when: { equals: 6 }
+      say: "That would be 2 batches per epoch. The short last batch is a step too."
+    - when: { equals: 7.5 }
+      say: "The short batch is still a full step. Count batches per epoch first: 3."
+    - when: { any: true }
+      say: ["Steps = epochs × batches per epoch.", "One epoch here has 3 batches: sizes 4, 4 and 2."]
+
+pred-sorted:
+  type: predict
+  prompt: "10 examples stored sorted by class: examples 0–4 are class 0, 5–9 are class 1. No shuffling, batch size 5. What does each training step see?"
+  options:
+    - "A fair mix of both classes in every batch"
+    - "Batch 0 is only class 0 and batch 1 is only class 1, so the steps pull the weights one way, then back"
+    - "Only class 0, every epoch"
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Without shuffling, batch 0 is examples 0–4. Which class are they?"
+    - when: { equals: 2 }
+      say: "Batch 1 is examples 5–9. It is used in every epoch too."
+  reveal: "Batch 0 holds only class 0 and batch 1 only class 1. Each step only sees one class, so it pushes the model toward “everything is class 0”, and the next step pushes it back. The gradient of one batch is a bad sample of the whole dataset. Shuffling fixes that."
+
+code-batches:
+  type: code
+  prompt: "Cut a random order into batches. Write the slice that takes one batch of indices, starting at i."
+  template: |
+    def batches(n, batch_size, rng):
+        idx = rng.permutation(n)       # a random order of 0 … n−1
+        return [____ for i in range(0, n, batch_size)]
+
+    bl = batches(10, 4, np.random.default_rng(0))
+    print([b.tolist() for b in bl])    # [[4, 6, 2, 7], [3, 5, 9, 0], [8, 1]]
+  solution: "idx[i:i + batch_size]"
+  after: "range(0, n, `batch_size`) gives the start of each batch, and the slice takes the next `batch_size` items. A slice that runs past the end just stops, so the last batch is shorter. Slicing idx, not range(n), is what makes the order random."
+  tests:
+    - expr: "[len(b) for b in batches(10, 4, np.random.default_rng(0))]"
+      expect: [4, 4, 2]
+      say: "10 examples, batch size 4: sizes 4, 4, 2"
+    - expr: "sorted(np.concatenate(batches(10, 4, np.random.default_rng(0))).tolist())"
+      expect: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      say: "every example appears exactly once"
+    - expr: "int(np.concatenate(batches(10, 4, np.random.default_rng(0))).tolist() != list(range(10)))"
+      expect: 1
+      say: "the order is shuffled, not 0, 1, 2, …"
+    - expr: "[len(b) for b in batches(7, 3, np.random.default_rng(1))]"
+      expect: [3, 3, 1]
+      say: "7 examples, batch size 3"
+  hints:
+    - when: { testFailed: 2 }
+      wrong: "np.arange(n)[i:i + batch_size]"
+      say: "The order is 0, 1, 2, … Slice the shuffled idx, not range(n)."
+    - when: { error: "not defined" }
+      say: "Inside the brackets you can use idx, i and `batch_size`."
+    - when: { testFailed: 0 }
+      say: ["Each batch should hold `batch_size` indices.", "The batch starts at i. Where must the slice stop, so that it holds `batch_size` items?"]
+    - when: { any: true }
+      say: ["Take a slice of idx that starts at i.", "idx[a:b] holds the items from position a up to position b, without b. Here a is i. What must b be?", "For i = 4 and batch size 4, the batch is items 4, 5, 6 and 7 of idx."]
+
+heldout-steps:
+  type: number
+  prompt: "50 examples. You hold out 20% of them, once, and train on the rest with batch size 8. How many training steps are in one epoch?"
+  answer: 5
+  tol: 0
+  after: "20% of 50 is 10 held out, so 40 are left for training. 40 / 8 = 5 steps per epoch."
+  hints:
+    - when: { equals: 7 }
+      say: "That uses all 50 examples. The held-out examples are never trained on."
+    - when: { equals: 6.25 }
+      say: "That uses all 50 examples. Take the 10 held-out ones away first."
+    - when: { equals: 1.25 }
+      say: "That trains on the held-out 10. Training uses the other 40."
+    - when: { any: true }
+      say: ["How many examples are left for training after holding out 20%?", "50 − 10 = 40 training examples. How many batches of 8?"]
+
+pred-resplit:
+  type: predict
+  prompt: "Instead of splitting once, the code draws a new random train / held-out split at the start of every epoch. What goes wrong?"
+  options:
+    - "Nothing: each epoch measures on new examples, which is even fairer"
+    - "Over many epochs the model trains on almost every example, so the held-out score measures what the model memorized, not new data"
+    - "Training gets slower, but the held-out score is still correct"
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "An example that is held out in epoch 5 may have been trained on in epochs 1 to 4. Is it new data?"
+    - when: { equals: 2 }
+      say: "Speed is not the problem. Ask whether the held-out examples are still unseen."
+  reveal: "With a new split every epoch, after enough epochs, every example has been in the training set. The model has seen the “held-out” examples before, so the score looks better than it would on truly new data. Split once, with a fixed seed, before training starts."
+
+pred-seed:
+  type: predict
+  prompt: "A script sets the seed at the top. You run it with seed 0, run it again with seed 0, then once with seed 1. Same code, same computer. Which runs print the same loss curve?"
+  options:
+    - "All three"
+    - "The two runs with seed 0"
+    - "None: training is always random"
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Seed 1 starts the generator somewhere else: other starting weights, another batch order."
+    - when: { equals: 2 }
+      say: "A random generator started from the same seed gives the same numbers every time."
+  reveal: "The two seed-0 runs match: the same starting weights, the same split and the same batch order, so the same numbers. Seed 1 gives other random choices and a slightly different curve. (On a GPU, a few operations can still differ in the last digits between runs unless you ask PyTorch for deterministic algorithms.)"
+
+pad-shape:
+  type: shape
+  prompt: "Three sequences, [5, 3, 8], [2, 9] and [7], are padded with PAD = 0 at the end into one batch. What is the shape of the batch?"
+  answer: [3, 3]
+  after: "3 sequences, padded to the longest length, 3: shape (3, 3). Rows are [5, 3, 8], [2, 9, 0], [7, 0, 0]."
+  hints:
+    - when: { shape: [3, 2] }
+      say: "Padding makes every sequence as long as the LONGEST one. How long is [5, 3, 8]?"
+    - when: { shape: [3, 1] }
+      say: "Cutting to the shortest would lose tokens. Padding makes every sequence as long as the longest one."
+    - when: { shape: [6] }
+      say: "That joins all tokens into one row. A batch keeps one row per sequence."
+    - when: { any: true }
+      say: ["One row per sequence. How long is each row after padding?", "(number of sequences, length of the longest sequence)."]
+
+pad-count:
+  type: number
+  prompt: "[5, 3, 8], [2, 9] and [7] padded into a (3, 3) batch. How many cells are PAD?"
+  answer: 3
+  tol: 0
+  after: "Row 1 needs one PAD, row 2 needs two: 3 PAD cells out of 9."
+  hints:
+    - when: { equals: 6 }
+      say: "6 is the number of real tokens: 3 + 2 + 1. PAD is the rest of the 9 cells."
+    - when: { any: true }
+      say: ["Each row is padded to length 3. Count the PAD cells row by row.", "Row [5, 3, 8] needs 0 PAD and row [2, 9] needs 1. How many does [7] need?"]
+
+pad-cells:
+  type: number
+  prompt: "Four sequences of lengths 2, 3, 6 and 1 go into ONE batch, padded to the longest. How many cells of the batch are PAD?"
+  answer: 12
+  tol: 0
+  after: "The batch is (4, 6) = 24 cells. The real tokens fill 2 + 3 + 6 + 1 = 12 of them, so 12 are PAD: half the batch."
+  hints:
+    - when: { equals: 24 }
+      say: "24 is all cells. Take away the real tokens."
+    - when: { equals: 6 }
+      say: "6 is the longest length. The batch has 4 rows of length 6."
+    - when: { any: true }
+      say: ["How big is the whole batch? 4 rows of the longest length.", "The whole batch is 4 × 6 = 24 cells. Now count the real tokens."]
+
+collate-code:
+  type: code
+  prompt: "Write the loop of the collate function: copy each sequence into its row of X, and mark its real cells as not blocked (False) in the mask. Replace ____ with as many lines as you need."
+  template: |
+    def collate(seqs, pad=0):
+        L = max(len(s) for s in seqs)
+        X = np.full((len(seqs), L), pad)
+        mask = np.ones((len(seqs), L), dtype=bool)    # True = PAD = blocked
+        for i, s in enumerate(seqs):
+            ____
+        return X, mask
+
+    X, mask = collate([[5, 3, 8], [2, 9], [7]])
+    print(X)
+    print(mask)
+  solution: |-
+    X[i, :len(s)] = s
+            mask[i, :len(s)] = False
+  after: "The cells after len(s) keep their starting values: pad in X and True in the mask. So only the real tokens need writing. X and the mask use the same slice, so they always agree on which cells are real."
+  tests:
+    - expr: "collate([[5, 3, 8], [2, 9], [7]])[0]"
+      expect: [[5, 3, 8], [2, 9, 0], [7, 0, 0]]
+      say: "X for [5, 3, 8], [2, 9], [7]"
+    - expr: "collate([[5, 3, 8], [2, 9], [7]])[1]"
+      expect: [[false, false, false], [false, false, true], [false, true, true]]
+      say: "the mask: True only on the 3 PAD cells"
+    - expr: "collate([[4], [1, 2, 3, 6]], pad=-1)[0]"
+      expect: [[4, -1, -1, -1], [1, 2, 3, 6]]
+      say: "pad = −1, lengths 1 and 4"
+  hints:
+    - when: { testFailed: 1 }
+      say: ["X is right. Now the mask: it starts all True. Which cells must become False?", "The real cells of the mask are the same cells you set in X."]
+    - when: { error: "could not broadcast|shape mismatch" }
+      say: "The slice of row i must be exactly as long as s. Use len(s) for its end."
+    - when: { error: "IndentationError|unindent" }
+      say: "Both lines go inside the for loop, at the same indentation as the ____ was."
+    - when: { testFailed: 0 }
+      say: ["Write s into the first len(s) cells of row i of X.", "Index X with the row i and a column slice. For the sequence [2, 9] in row 1, that is X[1, :2]."]
+    - when: { any: true }
+      say: ["Two lines: one fills X, one fixes the mask.", "Both lines use the same cells: row i, the first len(s) columns.", "For the sequence [2, 9] in row 1, the cells are columns 0 and 1 of row 1, in X and in the mask."]

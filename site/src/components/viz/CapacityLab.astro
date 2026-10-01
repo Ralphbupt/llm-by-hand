@@ -1,0 +1,6 @@
+---
+import Lab from './CapacityLab.svelte'
+interface Props { decay?: boolean }
+const { decay = false } = Astro.props
+---
+<Lab client:visible decay={decay} />

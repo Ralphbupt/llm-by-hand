@@ -1,0 +1,256 @@
+grad-d:
+  type: number
+  prompt: "a = 2, b = 3, c = 1, d = −2. e = a·b, f = e + c, L = f·d. What is ∂L/∂d?"
+  answer: 7
+  tol: 0
+  after: "L = f·d, so the product sends f × L.grad = 7 × 1 = 7 to d. If d grows by a little bit, L grows 7 times as much."
+  hints:
+    - when: { equals: -2 }
+      say: "−2 is d itself, which is what f receives. d receives the OTHER input of the product."
+    - when: { equals: -14 }
+      say: "−14 is L. The gradient is how fast L changes when d changes."
+    - when: { any: true }
+      say: ["In a product, each input gets (the other input) × (the product’s grad). Which input of L = f·d is the other one for d?", "d gets f × L.grad, and L.grad = 1. Compute f first: f = e + c, with e = a·b."]
+
+grad-a:
+  type: number
+  prompt: "a = 2, b = 3, c = 1, d = −2. e = a·b, f = e + c, L = f·d. What is ∂L/∂a?"
+  answer: -6
+  tol: 0
+  after: "L → f: d = −2. f → e: × 1, still −2. e → a: × b = 3. So −2 × 1 × 3 = −6."
+  hints:
+    - when: { equals: -4 }
+      say: "−4 is ∂L/∂b: it uses a. For a, the product e = a·b sends b × e.grad."
+    - when: { equals: 6 }
+      say: "Right size, wrong sign. The gradient that reaches e is −2."
+    - when: { equals: -2 }
+      say: "−2 is e.grad. One more node: e = a·b sends b × e.grad to a."
+    - when: { any: true }
+      say: ["Use the chain rule: multiply the local factors along the path L → f → e → a.", "The first factor, from L to f, is d = −2. Then f = e + c gives the gradient to e unchanged."]
+
+code-mul:
+  type: code
+  prompt: "Write the gradient that a product sends to its first input."
+  template: |
+    class Value:
+        def __init__(self, data, children=()):
+            self.data = data
+            self.grad = 0.0
+            self._children = children
+            self._backward = lambda: None
+
+        def __add__(self, other):
+            out = Value(self.data + other.data, (self, other))
+            def _backward():
+                self.grad += out.grad
+                other.grad += out.grad
+            out._backward = _backward
+            return out
+
+        def __mul__(self, other):
+            out = Value(self.data * other.data, (self, other))
+            def _backward():
+                self.grad += ____
+                other.grad += self.data * out.grad
+            out._backward = _backward
+            return out
+
+    def grads(a, b, c, d):
+        a, b, c, d = Value(a), Value(b), Value(c), Value(d)
+        e = a * b
+        f = e + c
+        L = f * d
+        L.grad = 1.0
+        for v in [L, f, e]:          # visit from the end, by hand for now
+            v._backward()
+        return [a.grad, b.grad, c.grad, d.grad]
+
+    print(grads(2, 3, 1, -2))
+  solution: "other.data * out.grad"
+  after: "In a product, a small change in one input is multiplied by the other input, so that is the local factor. Multiplying by out.grad adds the effect of every node after this one. That is the chain rule, one node at a time."
+  tests:
+    - expr: "grads(2, 3, 1, -2)"
+      expect: [-6, -4, -2, 7]
+      say: "the lab’s numbers: a −6, b −4, c −2, d 7"
+    - expr: "grads(1, -1, 2, 3)"
+      expect: [-3, 3, 3, 1]
+      say: "a = 1, b = −1, c = 2, d = 3"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["self gets (the other input) × out.grad. Look at the line below it, the one for other.", "The line for other uses self.data. Which input is the other one for self?", "For e = a·b with a = 2 and b = 3, a gets 3 × e.grad: the data of b."]
+    - when: { any: true }
+      say: ["Each input of a product gets (the other input) × (the product’s grad).", "The line below it, the one for other, has the same form.", "For e = a·b with a = 2 and b = 3, a gets 3 × e.grad."]
+
+x-times-x:
+  type: number
+  prompt: "y = x · x with x = 3. What is dy/dx?"
+  answer: 6
+  tol: 0
+  after: "dy/dx = 2x = 6. In the graph: x is both inputs of the product, and each side sends x × 1 = 3. Together 6."
+  hints:
+    - when: { equals: 3 }
+      say: "3 is what ONE side of the product sends. x is both sides."
+    - when: { equals: 9 }
+      say: "9 is y. The slope of x² at x = 3 is 2x."
+    - when: { any: true }
+      say: ["x is both inputs of the product. Each side sends (the other input) × y.grad, and the two parts add.", "y.grad = 1, so one side sends 3 × 1 = 3."]
+
+pred-equals:
+  type: predict
+  prompt: "Someone writes self.grad = … and other.grad = … (with =, not +=). For y = x · x at x = 3, what does their backward give for x.grad?"
+  options: ["6, still right", "3, half the right answer", "9"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "With =, the second line does not add to what the first line wrote. It replaces it."
+    - when: { equals: 2 }
+      say: "9 is y itself. Each line writes one part of the gradient, x × 1 = 3."
+  reveal: "3. The first line sets x.grad = 3, the second line sets x.grad = 3 again, overwriting it. With += the two parts are added: 3 + 3 = 6."
+
+code-sub:
+  type: code
+  prompt: "Write the backward rule of subtraction, out = self − other: one line for self, one line for other."
+  template: |
+    class Value:
+        def __init__(self, data, children=()):
+            self.data = data
+            self.grad = 0.0
+            self._children = children
+            self._backward = lambda: None
+
+        def __mul__(self, other):
+            out = Value(self.data * other.data, (self, other))
+            def _backward():
+                self.grad += other.data * out.grad
+                other.grad += self.data * out.grad
+            out._backward = _backward
+            return out
+
+        def __sub__(self, other):
+            out = Value(self.data - other.data, (self, other))
+            def _backward():
+                ____
+            out._backward = _backward
+            return out
+
+    def grads(a, b, c):
+        a, b, c = Value(a), Value(b), Value(c)
+        e = a * b
+        L = e - c
+        L.grad = 1.0
+        for v in [L, e]:             # visit from the end, by hand
+            v._backward()
+        return [a.grad, b.grad, c.grad]
+
+    print(grads(2, 3, 1))   # should be [3, 2, -1]
+  solution: "self.grad += out.grad\n            other.grad -= out.grad"
+  after: "out = self − other has local factors 1 and −1, so self gets +out.grad and other gets −out.grad. Both lines add into grad, so y = x − x correctly gives x.grad = 1 − 1 = 0."
+  tests:
+    - expr: "grads(2, 3, 1)"
+      expect: [3, 2, -1]
+      say: "L = a·b − c at a = 2, b = 3, c = 1: c gets −1"
+    - setup: "x = Value(5.0); y = x - x; y.grad = 1.0; y._backward()"
+      expr: "x.grad"
+      expect: 0
+      say: "y = x − x: x is both inputs, so the two parts 1 and −1 must sum to 0"
+    - setup: "a, b, c = Value(4.0), Value(1.0), Value(2.0); dd = a - b; L = dd * c; L.grad = 1.0; L._backward(); dd._backward()"
+      expr: "[a.grad, b.grad, c.grad]"
+      expect: [2, -2, 3]
+      say: "L = (a − b)·c at a = 4, b = 1, c = 2: out.grad is 2 here, not 1"
+  hints:
+    - when: { error: "indent" }
+      say: "Both lines sit inside _backward. Start the second line exactly below the first one."
+    - when: { testFailed: 0 }
+      say: ["Two lines: self gets its local factor times out.grad, and other gets its local factor times out.grad.", "If self grows by a little, out grows by the same amount. If other grows by a little, out shrinks by that amount. What are the two local factors?", "The local factor for self is 1. The factor for other has the same size but the other sign."]
+    - when: { testFailed: 1 }
+      wrong: "self.grad = out.grad\n            other.grad = -out.grad"
+      say: ["The first test passed, but x − x failed. Here self and other are the same x. Does the second line keep what the first line wrote?", "Both lines must add into grad, with += (or -=), never replace it with =."]
+    - when: { testFailed: 2 }
+      wrong: "self.grad += 1\n            other.grad -= 1"
+      say: "Here out.grad is 2, not 1. Multiply each local factor by out.grad instead of using a fixed number."
+    - when: { any: true }
+      say: ["One line for self, one for other, each adding into its grad.", "If self grows by a little, out grows by the same amount. If other grows by a little, out shrinks by that amount.", "Each line adds (local factor) × out.grad. One of the two factors is negative."]
+
+code-backward:
+  type: code
+  prompt: "Write the end of backward, after build(self): set the starting gradient of the output node, then call _backward on every node, in reverse topological order. Several lines."
+  template: |
+    import math
+
+    class Value:
+        def __init__(self, data, children=()):
+            self.data = data
+            self.grad = 0.0
+            self._children = children
+            self._backward = lambda: None
+
+        def __add__(self, other):
+            out = Value(self.data + other.data, (self, other))
+            def _backward():
+                self.grad += out.grad
+                other.grad += out.grad
+            out._backward = _backward
+            return out
+
+        def __mul__(self, other):
+            out = Value(self.data * other.data, (self, other))
+            def _backward():
+                self.grad += other.data * out.grad
+                other.grad += self.data * out.grad
+            out._backward = _backward
+            return out
+
+        def tanh(self):
+            t = math.tanh(self.data)
+            out = Value(t, (self,))
+            def _backward():
+                self.grad += (1 - t ** 2) * out.grad
+            out._backward = _backward
+            return out
+
+        def backward(self):
+            topo, seen = [], set()
+            def build(v):
+                if v not in seen:
+                    seen.add(v)
+                    for child in v._children:
+                        build(child)
+                    topo.append(v)      # a node goes in after all of its inputs
+            build(self)
+            ____
+
+    def grads(a, b, c, d):
+        a, b, c, d = Value(a), Value(b), Value(c), Value(d)
+        L = (a * b + c) * d
+        L.backward()
+        return [a.grad, b.grad, c.grad, d.grad]
+
+    print(grads(2, 3, 1, -2))
+  solution: "self.grad = 1.0\n        for v in reversed(topo):\n            v._backward()"
+  after: "build puts every node after its inputs, so L is last. Walking the list backwards visits each node only after all the nodes that use it, so its grad is complete before it sends gradients to its inputs."
+  tests:
+    - expr: "grads(2, 3, 1, -2)"
+      expect: [-6, -4, -2, 7]
+      say: "the lab’s graph"
+    - setup: "x = Value(3.0); y = x * x + x; y.backward()"
+      expr: "x.grad"
+      expect: 7
+      say: "y = x² + x at x = 3: 2·3 + 1 = 7 (x is used in three places)"
+    - setup: "w = Value(0.5); n = (w * Value(1.0) + Value(0.0)).tanh(); n.backward()"
+      expr: "w.grad"
+      expect: 0.786448
+      tol: 0.000001
+      say: "a tanh neuron: (1 − tanh(0.5)²) × 1 = 0.786448"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Indent every line by 8 spaces, like build(self) above it, except the line inside the for, which gets 4 more spaces."
+    - when: { error: "is not defined" }
+      say: "The list that build fills is called topo, and the node you start from is self."
+    - when: { shape: [0, 0, 0, 0] }
+      say: ["All zeros: nothing started the gradient flow. What is ∂L/∂L, and on which node does it go?", "Every _backward multiplies by out.grad. If the output's grad is still 0, every product is 0."]
+    - when: { shape: [0, 0, 0, 7] }
+      say: ["Only d got a gradient. L's _backward ran while L.grad was 1, but a·b + c ran its _backward while its own grad was still 0. In what order did you visit the nodes?", "topo lists inputs before the nodes that use them. A node may pass its gradient on only after every node that uses it has run. Which end of topo must you start from?", "Visit topo from its last element to its first. Python has a built-in that walks a list backwards."]
+    - when: { testFailed: 0 }
+      say: ["Compare your list with the expected one. Which gradients are wrong, and which nodes do they belong to?", "topo lists inputs before the nodes that use them. Which end of the list must backward start from?", "Visit topo from its last element to its first. Python has a built-in that walks a list backwards."]
+    - when: { any: true }
+      say: ["Two things: L's own gradient, then one _backward call per node.", "Backward starts at L, which is self here and the last node in topo.", "Walk topo backwards: from L to the inputs."]

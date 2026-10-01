@@ -1,0 +1,260 @@
+cross-kv:
+  type: predict
+  prompt: "In the decoder’s cross-attention, where do K and V come from?"
+  options: ["From the target words, like Q", "From memory, the encoder’s output", "K from memory, V from the target words"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Then it would be the decoder’s self-attention again. Cross-attention is how the decoder reads the source sentence."
+    - when: { equals: 2 }
+      say: "Key j and value j belong to the same token: the key decides how much weight that token gets, and the value is what that token then gives to the output. Both describe source tokens."
+  reveal: "From memory. Q asks “which source words matter for the word I am writing?”, so Q comes from the decoder, and the keys and values it searches come from the encoder’s output."
+
+cross-weights:
+  type: shape
+  prompt: "Batch 2. The decoder input has 3 tokens (<bos> plus 2 target words), and the source has 6 words. What shape are one head’s cross-attention weights?"
+  answer: [2, 3, 6]
+  after: "One row per decoder-input token (the queries, <bos> included), one column per source word (the keys). Each row says how much weight that token gives each source word."
+  hints:
+    - when: { shape: [2, 6, 3] }
+      say: "Rows come from Q, which is the decoder input: 3 tokens. Columns come from K: 6 source words."
+    - when: { shape: [2, 3, 3] }
+      say: "That is the masked self-attention. In cross-attention the keys are the source words."
+    - when: { shape: [3, 6] }
+      say: "Keep the batch dimension in front."
+    - when: { any: true }
+      say: ["Rows come from Q (the decoder input’s tokens), columns from K (memory’s source words).", "Q is (2, 3, d) and K is (2, 6, d). Keep the batch, then rows × columns."]
+
+cross-out:
+  type: number
+  prompt: "One decoder token reads a memory of 2 source tokens, with dₖ = 2. Its query is q = [√2 · ln 3, 0], about [1.55, 0]. From memory, the keys are k₀ = [1, 0] and k₁ = [0, 1], and the values are v₀ = [4, 0] and v₁ = [0, 8]. The output is a vector of 2 numbers. What is its first number?"
+  promptShort: "Cross-attention by hand: one query q = [√2 · ln 3, 0], dₖ = 2, keys k₀ = [1, 0] and k₁ = [0, 1] from memory, values v₀ = [4, 0] and v₁ = [0, 8]. What is the output’s first number?"
+  answer: 3
+  tol: 0.01
+  after: "Scores: q · k₀ / √2 = ln 3 and q · k₁ / √2 = 0. Softmax: e^(ln 3) = 3 and e⁰ = 1, so the weights are 3/4 = 0.75 and 1/4 = 0.25. Output: 0.75 · [4, 0] + 0.25 · [0, 8] = [3, 2]. The query came from the decoder; the keys and the values came from memory."
+  hints:
+    - when: { equals: 4 }
+      say: "That puts all the weight on source token 0. Softmax gives each token part of the weight, so token 1 gets some weight too."
+      wrong: "1 * 4"
+    - when: { equals: 2 }
+      say: "That gives both tokens the same weight. The two scores are different, so their weights are different too."
+      wrong: "0.5 * 4"
+    - when: { equals: 0.75 }
+      say: "0.75 is the weight on source token 0. The output is the weighted average of the values: multiply each value by its weight, then add."
+      wrong: "3 / 4"
+    - when: { any: true }
+      say: ["As in level 14: one score per source token, q · k / √dₖ. Then softmax turns the scores into weights, and the output is the weighted average of the values.", "q · k₀ = √2 · ln 3, so the first score is ln 3; the second score is 0. What are e^(ln 3) and e⁰?", "The weights are 3/4 and 1/4. The output is 3/4 · v₀ + 1/4 · v₁."]
+
+memory-shape:
+  type: shape
+  prompt: "A model reads numbers aloud, with `d_model` = 64. A batch holds 32 numbers. The source digits are padded to 3 tokens, and the decoder input has 5 tokens. What shape is memory, the encoder’s output?"
+  promptShort: "`d_model` = 64, a batch of 32 numbers, source digits padded to 3 tokens, a decoder input of 5 tokens. What shape is memory, the encoder’s output?"
+  answer: [32, 3, 64]
+  after: "Batch, source tokens, `d_model`: one vector of 64 numbers for each of the 3 digits. The decoder input’s 5 tokens don’t appear, because memory is made before the decoder runs. Every decoder layer reads this same (32, 3, 64) memory."
+  hints:
+    - when: { shape: [32, 5, 64] }
+      say: "5 is the length of the decoder input. Memory is made by the encoder, so which sequence does it have one vector for?"
+    - when: { shape: [3, 64] }
+      say: "That is memory for one number. Keep the batch dimension in front."
+    - when: { shape: [32, 5, 3] }
+      say: "That is a table of cross-attention weights. Memory itself is a list of vectors, one per token."
+    - when: { any: true }
+      say: ["Memory is the output of the last encoder layer. Each layer keeps the shape of its input: one vector per token.", "The encoder reads only the source: 32 numbers, 3 tokens each, 64 numbers per token."]
+
+dec-extra:
+  type: predict
+  prompt: "At the default size, a decoder layer has 49,856 parameters and an encoder layer 33,280. The difference is 16,576, the same as one FFN. What does the decoder layer have that the encoder layer doesn’t?"
+  options: ["A second FFN", "Cross-attention (16,448) and one more LayerNorm (128)", "The causal mask, which is learned"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Count the sublayers of a decoder layer in section 1. How many of them are an FFN?"
+    - when: { equals: 2 }
+      say: "A mask is a table of True and False, made from the lengths. Is anything in it trained?"
+  reveal: "Cross-attention and one more LayerNorm. A decoder layer has three sublayers (masked self-attention, cross-attention, the FFN); an encoder layer has two. The extra one is cross-attention: 16,448 parameters. Each sublayer has its own LayerNorm, so there is one more: 128. 16,448 + 128 = 16,576. It is a coincidence that this equals one FFN."
+
+cross-shape:
+  type: shape
+  prompt: "A model reads numbers aloud. A batch holds 64 numbers, the source digits are padded to 3 tokens, the decoder input has 5 tokens (words), and there are 4 heads. What shape are the cross-attention scores?"
+  answer: [64, 4, 5, 3]
+  after: "Batch, heads, decoder tokens, source digits: each head of each example has a 5 × 3 table, one row per word (Q) and one column per digit (K)."
+  hints:
+    - when: { shape: [64, 4, 3, 5] }
+      say: "Rows come from Q, and in cross-attention Q comes from the words (the decoder input). Columns come from K: the digits in memory."
+    - when: { shape: [64, 5, 3] }
+      say: "Right table, but the full model has 4 heads, and every head has its own scores."
+    - when: { any: true }
+      say: ["For 1 example, 1 head, 3 words and 2 digits, the cross-attention scores are (1, 3, 2): batch, then words, then digits.", "Now use the real sizes: 64 examples, 4 heads, 5 words, 3 digits."]
+
+step-rows:
+  type: number
+  prompt: "Reading 742 aloud. The model has already written “seven hundred forty”. How many rows go into the decoder at this step?"
+  answer: 4
+  after: "<bos>, seven, hundred, forty: 4 rows. Only the last row is used to pick the next word. Level 17’s model had 7 rows at this step, because the digits and = are in its one sequence. This decoder gets only <bos> and the words. The digits reach it through cross-attention."
+  hints:
+    - when: { equals: 3 }
+      say: "Don’t forget the <bos> token at the start. It is always there."
+      wrong: "4 - 1"
+    - when: { equals: 5 }
+      say: "5 is the longest it can get. At this step only some words have been written."
+    - when: { any: true }
+      say: "Count the tokens the decoder has seen so far, starting with <bos>."
+
+cross-cache:
+  type: number
+  prompt: "A decoder with 2 layers reads 742 aloud: 4 words, one per step. The model keeps (caches) every result that cannot change between steps, and reuses it. In one decoder layer, how many times is memory multiplied by `W_K` for the whole answer?"
+  promptShort: "A 2-layer decoder writes 4 words, one per step, and caches every result that cannot change between steps. In one layer, how many times is memory multiplied by `W_K`?"
+  answer: 1
+  tol: 0
+  after: "Once. Memory is fixed while the decoder writes, so its keys (memory @ `W_K`) and its values (memory @ `W_V`) are the same at every step. Each decoder layer computes them once, before the first word, and keeps them: one row per source token, and the cache never grows. The self-attention cache is different: each step adds one row for the new word."
+  hints:
+    - when: { equals: 4 }
+      say: "That computes the keys again at every step. Does memory change while the decoder writes? Does `W_K`?"
+      wrong: "4 * 1"
+    - when: { equals: 8 }
+      say: "That counts both layers and every step. The question asks about one layer. Also ask what changes from one step to the next."
+      wrong: "2 * 4"
+    - when: { equals: 2 }
+      say: "That counts both layers. The question asks about one layer."
+      wrong: "2 * 1"
+    - when: { any: true }
+      say: ["In cross-attention, which inputs change from one step to the next: the queries, the keys or the values?", "The keys are memory @ `W_K`. Memory is made once, before the first word, and `W_K` is fixed."]
+
+mask-6:
+  type: shape
+  prompt: "The source has 5 tokens. The decoder input is <bos> plus 5 target words. What shape is the causal mask in the decoder’s self-attention (for one sentence)?"
+  answer: [6, 6]
+  after: "Both Q and K of the decoder’s self-attention come from the decoder input: 6 tokens. The source length doesn’t matter here."
+  hints:
+    - when: { shape: [5, 5] }
+      say: "5 is the source length, or the target words without <bos>. The causal mask is used in the decoder’s self-attention: count the decoder’s input."
+    - when: { shape: [6, 5] }
+      say: "That is the shape of the cross-attention scores. The causal mask is in the decoder’s self-attention, where Q and K come from the same sequence."
+    - when: { any: true }
+      say: ["Which attention has a causal mask? Where do its Q and K come from?", "Count the decoder input: <bos> plus 5 words."]
+
+decoder-mask-count:
+  type: number
+  prompt: "Reading 42 aloud, in a batch where longer answers need 5 words. The decoder input is <bos> forty two PAD PAD: 5 positions. The decoder’s self-attention mask blocks a cell if the causal mask blocks it or if its column is a PAD word. How many of the 25 cells are blocked?"
+  answer: 13
+  tol: 0
+  after: "Count the open cells row by row. <bos> sees 1 cell, forty sees 2, two sees 3, and each PAD row sees only the 3 real words: 1 + 2 + 3 + 3 + 3 = 12 open, so 25 − 12 = 13 blocked. The PAD rows still get outputs, but the loss skips them."
+  hints:
+    - when: { equals: 10 }
+      say: "10 is the causal mask alone. The PAD columns block some cells that the causal mask leaves open."
+    - when: { equals: 20 }
+      say: "Some cells are blocked by both masks. Count each blocked cell once."
+      wrong: "10 + 2 * 5"
+    - when: { equals: 12 }
+      say: "12 is the number of open cells. The question asks for the blocked ones."
+    - when: { any: true }
+      say: ["Draw the 5 × 5 grid: row i is the query at position i, column j is the key at position j.", "Go row by row. Row i may see columns 0 to i, but never a PAD column. How many cells is that for each row?"]
+
+three-masks:
+  type: code
+  prompt: "Build the three masks of one example. src holds the digit ids, `tgt_in` the decoder input ids, and pad is the id of PAD. Return (enc, dec, cross), True where a cell is blocked: enc is (Ls, Ls), dec is (Lt, Lt), cross is (Lt, Ls). Several lines."
+  template: |
+    def three_masks(src, tgt_in, pad=0):
+        Ls, Lt = len(src), len(tgt_in)
+        ____
+        return enc, dec, cross
+
+    src = np.array([7, 5, 0])            # "42", then one PAD
+    tgt_in = np.array([1, 25, 5, 0, 0])  # <bos> forty two PAD PAD
+    enc, dec, cross = three_masks(src, tgt_in)
+    print("enc:\n", enc.astype(int))
+    print("dec:\n", dec.astype(int))
+    print("cross:\n", cross.astype(int))
+  solution: |-
+    src_pad = src == pad                                   # (Ls,): one entry per digit column
+        tgt_pad = tgt_in == pad                                # (Lt,): one entry per word column
+        enc = np.broadcast_to(src_pad, (Ls, Ls))
+        causal = np.triu(np.ones((Lt, Lt), dtype=bool), k=1)
+        dec = causal | np.broadcast_to(tgt_pad, (Lt, Lt))
+        cross = np.broadcast_to(src_pad, (Lt, Ls))
+  tests:
+    - expr: "three_masks(src, tgt_in)[0].astype(int)"
+      expect: [[0, 0, 1], [0, 0, 1], [0, 0, 1]]
+      say: "enc: only the PAD digit’s column is blocked"
+    - expr: "three_masks(src, tgt_in)[1].astype(int)"
+      expect: [[0, 1, 1, 1, 1], [0, 0, 1, 1, 1], [0, 0, 0, 1, 1], [0, 0, 0, 1, 1], [0, 0, 0, 1, 1]]
+      say: "dec: causal, plus the two PAD word columns: 13 blocked cells"
+    - expr: "three_masks(src, tgt_in)[2].astype(int)"
+      expect: [[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1]]
+      say: "cross: one row per decoder token, one column per digit; only the PAD digit is blocked"
+    - setup: "s2 = np.array([4, 4]); t2 = np.array([1, 9, 3])"
+      expr: "[int(m.sum()) for m in three_masks(s2, t2)]"
+      expect: [0, 3, 0]
+      say: "no PAD at all: only the causal mask blocks anything, 3 cells"
+    - setup: "s3 = np.array([7, 5, 2]); t3 = np.array([1, 25, 2])"
+      expr: "[int(m.sum()) for m in three_masks(s3, t3, pad=2)]"
+      expect: [3, 4, 3]
+      say: "PAD is id 2 here: each mask blocks the id-2 columns"
+  hints:
+    - when: { error: "not defined" }
+      say: "Set enc, dec and cross before the return line. Start with the two padding rows: src == pad and `tgt_in` == pad."
+    - when: { error: "shape|broadcast|operands|matmul|core dimension" }
+      say: ["Two tables combined with | must have the same shape, or shapes NumPy can stretch.", "Give each mask the shape of its scores: (rows from Q, columns from K)."]
+    - when: { testFailed: 0 }
+      say: ["enc should block only the PAD digit’s column, in every row.", "Stretch src == pad over Ls rows with `np.broadcast_to`."]
+    - when: { testFailed: 1 }
+      say: ["dec is the causal mask OR the PAD-word columns. Is the diagonal open? np.triu with k = 1 keeps it open.", "The PAD columns come from `tgt_in` == pad, stretched over Lt rows."]
+    - when: { testFailed: 2 }
+      say: ["cross has one row per decoder token and one column per digit: (Lt, Ls).", "Its columns are the digits, so its padding row is src == pad. It has no causal part."]
+    - when: { testFailed: 4 }
+      say: "This test calls the function with pad=2. Compare with the argument pad, not with the number 0."
+      wrong: "src_pad = src == 0\n    tgt_pad = tgt_in == 0\n    enc = np.broadcast_to(src_pad, (Ls, Ls))\n    causal = np.triu(np.ones((Lt, Lt), dtype=bool), k=1)\n    dec = causal | np.broadcast_to(tgt_pad, (Lt, Lt))\n    cross = np.broadcast_to(src_pad, (Lt, Ls))"
+    - when: { any: true }
+      say: ["Each mask has the shape of its scores: rows from Q, columns from K. Look at the table above for each attention.", "Start with two padding rows, src == pad and `tgt_in` == pad. Each mask blocks the PAD columns of its keys.", "Only dec adds the causal mask: np.triu(np.ones((Lt, Lt), dtype=bool), k=1), combined with | ."]
+  after: "Every mask blocks the PAD columns of its own keys, stretched over its query rows. Only the decoder’s self-attention adds the causal triangle, because only its keys contain the words being guessed. The source length decides the columns of enc and cross; the decoder input length decides the rows of dec and cross."
+
+cross-attn-code:
+  type: code
+  prompt: "Write one cross-attention head. y holds the decoder’s rows and memory the encoder’s output; src_pad is True for a PAD source token. Return (out, A): the output and the weights. Several lines."
+  promptShort: "Write `cross_attention(y, memory, src_pad)`: one head, PAD source tokens blocked. Return (out, A)."
+  template: |
+    def cross_attention(y, memory, src_pad):
+        # y: (Lt, d), the decoder's rows    memory: (Ls, d), the encoder's output
+        # src_pad: (Ls,), True for a PAD source token
+        # To keep it short, W_Q, W_K and W_V are left out: the rows are used as they are.
+        d = y.shape[1]
+        ____
+        return A @ V, A
+
+    # 5 decoder rows, and a memory of 2 digits, then PAD
+    y = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 0.0], [0.0, 2.0]])
+    memory = np.array([[2.0, 0.0], [0.0, 2.0], [1.0, 1.0]])
+    src_pad = np.array([False, False, True])
+    out, A = cross_attention(y, memory, src_pad)
+    print("out", out.shape, "\n", out.round(3))
+    print("A", A.shape, "\n", A.round(3))
+  solution: "Q, K, V = y, memory, memory\n    S = Q @ K.T / np.sqrt(d)\n    A = softmax(np.where(src_pad, -np.inf, S))"
+  tests:
+    - setup: "y = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 0.0], [0.0, 2.0]]); memory = np.array([[2.0, 0.0], [0.0, 2.0], [1.0, 1.0]]); src_pad = np.array([False, False, True])"
+      expr: "list(cross_attention(y, memory, src_pad)[0].shape)"
+      expect: [5, 2]
+      say: "5 decoder rows, 3 source tokens: out has one row per decoder token, as wide as a memory row"
+    - setup: "y = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 0.0], [0.0, 2.0]]); memory = np.array([[2.0, 0.0], [0.0, 2.0], [1.0, 1.0]]); src_pad = np.array([False, False, True])"
+      expr: "cross_attention(y, memory, src_pad)[1][:, 2]"
+      expect: [0, 0, 0, 0, 0]
+      say: "the PAD source token gets weight 0 in every row"
+    - setup: "y = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 0.0], [0.0, 2.0]]); memory = np.array([[2.0, 0.0], [0.0, 2.0], [1.0, 1.0]]); src_pad = np.array([False, False, True])"
+      expr: "cross_attention(y, memory, src_pad)[0]"
+      expect: [[1.6089, 0.3911], [0.3911, 1.6089], [1.0, 1.0], [1.8884, 0.1116], [0.1116, 1.8884]]
+      tol: 0.001
+      say: "the numbers: each row is a weighted average of the two real memory rows"
+  hints:
+    - when: { error: "not defined" }
+      say: "Set Q, K, V and A before the return line. The return line uses A and V."
+    - when: { error: "shape|broadcast|operands|matmul|core dimension|aligned" }
+      say: ["Q comes from the decoder rows y. K and V both come from memory, not from y. Then the scores are (Lt, Ls): one row per decoder token, one column per source token.", "src_pad has one entry per source token, so it matches the columns of (Lt, Ls) scores."]
+      wrong: ["Q, K, V = y, y, y\n    S = Q @ K.T / np.sqrt(d)\n    A = softmax(np.where(src_pad, -np.inf, S))", "Q, K, V = y, memory, y\n    S = Q @ K.T / np.sqrt(d)\n    A = softmax(np.where(src_pad, -np.inf, S))"]
+    - when: { testFailed: 1 }
+      say: ["The PAD column must get weight 0 in every row. A blocked score becomes −∞ before softmax, as in level 15.", "np.where(src_pad, -np.inf, S) blocks the PAD columns: src_pad stretches over the rows by itself."]
+      wrong: "Q, K, V = y, memory, memory\n    S = Q @ K.T / np.sqrt(d)\n    A = softmax(S)"
+    - when: { testFailed: 2 }
+      say: "The shapes and the PAD column are right, but the weights are too sharp. Divide the scores by √d, as in level 14."
+      wrong: "Q, K, V = y, memory, memory\n    S = Q @ K.T\n    A = softmax(np.where(src_pad, -np.inf, S))"
+    - when: { any: true }
+      say: ["The steps of level 14: scores, mask, softmax. Only the source of Q, K and V is new.", "Q from y; K and V from memory. Scores S = Q @ K.T / np.sqrt(d), then block the PAD columns, then softmax.", "Q is y; K and V are both memory. Divide Q @ K.T by √d, set the PAD columns to −∞ with np.where, and apply softmax."]
+  after: "Q comes from the decoder, so A has one row per decoder token (5). K comes from memory, so A has one column per source token (3), and the PAD column gets weight 0. V comes from memory too, so each output row is a weighted average of the real memory rows, and out is (5, 2). A real model first multiplies by `W_Q`, `W_K` and `W_V` and splits the work into heads. The rest is the same."

@@ -1,0 +1,184 @@
+---
+title: Sampling and guidance
+level: "D2"
+order: 21.2
+part: theory
+branch: diffusion
+question: How do you make it draw the thing you asked for?
+run: browser
+checkpoint: guided-step
+glossarySkip: [shape]
+testOut: [k-coef, mean-first, cfg-first, guided-step]
+recap:
+  can:
+    - "Take one reverse step by hand: compute the mean from the noise guess, then add fresh noise scaled by √β."
+    - "Explain why each step adds a little fresh noise back, and why the last step adds none."
+    - "Mix two noise guesses with a guidance weight w and use the mixed guess in the reverse step."
+  keys:
+    - "$\\text{mean} = \\big(x_t - \\frac{\\beta_t}{\\sqrt{1-\\bar\\alpha_t}}\\,\\hat\\varepsilon\\big) / \\sqrt{\\alpha_t}$"
+    - "$x_{t-1} = \\text{mean} + \\sqrt{\\beta_t}\\; z$, with $z = 0$ on the last step"
+    - "`α_t` = kept in this one step; `ᾱ_t` = kept by all steps so far"
+    - "$\\hat\\varepsilon = \\varepsilon_\\text{free} + w\\,(\\varepsilon_\\text{shape} - \\varepsilon_\\text{free})$: w = 0 ignores the label, w > 1 goes past it"
+    - "Guidance runs the network twice per step: 50 steps → 100 runs"
+  mistakes:
+    - "Dividing by $\\sqrt{\\bar\\alpha_t}$ instead of this step’s $\\sqrt{\\alpha_t}$ at the bottom of the mean."
+    - "Scaling the fresh noise by β instead of √β, or adding it on the last step."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import SamplerLab from '@viz/SamplerLab.astro'
+import GuidanceLab from '@viz/GuidanceLab.astro'
+
+This level continues [D1](/learn/noise-and-denoise/).
+
+In level D1, one guess from heavy noise gave an answer that was not sharp.
+Generating works by taking **many small steps** instead:
+
+1. Start from pure random points at t = 50.
+2. Guess the noise and remove a little of it, which takes you one step back.
+3. Repeat: 49, 48, and so on down to 0.
+
+## 1. One step back
+
+Two letters from level D1 look almost the same, so here they are side by side for the 3-step example at t = 3:
+
+| | means | at t = 3 | in code |
+|---|---|---|---|
+| `α_t` (alpha) | what **this one step** keeps, 1 − `β_t` | 0.5 | `alpha` |
+| `ᾱ_t` (alpha-bar) | what **all steps so far** kept, multiplied together | 0.9 × 0.8 × 0.5 = 0.36 | `ab` |
+
+Removing “a little” noise has its own formula. It uses both letters. With the noise guess `ε̂` (eps-hat):
+
+$$
+\text{mean} = \frac{x_t - \dfrac{\beta_t}{\sqrt{1-\bar\alpha_t}}\;\hat\varepsilon}{\sqrt{\alpha_t}}
+$$
+
+$$
+x_{t-1} = \text{mean} + \sqrt{\beta_t}\; z
+$$
+
+`z` is fresh random noise. Yes, a little noise goes back in. Most people do not expect that, and a box further down explains why.
+
+Use the 3-step example from level D1 (β = 0.1, 0.2, 0.5) and the noisy point from there: `x_3 = [1.0, 0.4]`.
+Suppose the network guesses the noise was `ε̂ = [0.5, -1]`. At t = 3: β = 0.5, α = 0.5, alpha-bar = 0.36.
+Start with the number in front of the noise guess:
+
+<Blank id="k-coef" />
+
+With that number, the rest of the step is subtraction and division.
+
+<Gate requires="k-coef">
+
+<Blank id="mean-first" />
+
+With fresh noise `z = [0.2, -0.4]` you get `x_2 = [1.114, 1.167]`.
+
+A step back does not go back along the same path. It picks a new point at random from the places it could have come from.
+The `z` here was chosen to land near where the same point would sit at t = 2 going forward, `[1.113, 1.168]`.
+With a different `z`, the step lands somewhere else nearby, and that is fine.
+
+<Predict id="last-step" />
+
+<Gate requires="last-step">
+
+Now write the step. The last step, from t = 1 to t = 0, passes zeros for `z`.
+
+<CodeBlank id="reverse-step" />
+
+</Gate>
+
+</Gate>
+
+One step works. Generation is that step, repeated 50 times.
+
+<Gate requires="reverse-step">
+
+## 2. Watching 50 steps
+
+Now a real trained network. It learned three shapes: a spiral, a ring, and two moons.
+Every point starts as random noise. Press **Step** a few times, then **Play**. The numbers on the right follow the highlighted point through each step.
+
+<SamplerLab />
+
+<Stuck q="Why add fresh noise back while removing noise? Isn’t that going the wrong way?">
+
+The noise guess is never exact. It is the network's best average guess, and an average is less sharp than any single answer.
+In this sampler, if you only ever subtract, every point moves toward the “average” answer, and the samples gather in the middle
+of the shape or all land on a few spots.
+
+The reason is in the formula: the mean above was derived for a step that adds fresh noise. Adding a small amount at each step
+keeps the points as spread as real data. The amount gets smaller as t goes down, and at the last step there is none.
+Try "To the end" on the spiral: the points spread along the whole arm instead of gathering in a few places.
+
+Other samplers exist that add no noise at all. They use a different step formula, made for that purpose.
+
+</Stuck>
+
+<Deeper title="Where the one-step formula comes from">
+
+Going forward, one step does `x_t = √α_t · x_(t−1) + √β_t · noise`. To go back you would like to know `x_(t−1)` given `x_t`.
+
+If you also knew the clean point `x_0`, that question has an exact answer: `x_(t−1)` has a Gaussian (normal) distribution
+around a weighted mix of `x_t` and `x_0`. You don't know `x_0`, but level D1 showed how to guess it from `x_t` and the noise guess.
+Put that guess into the mix, simplify, and the terms rearrange into the mean above.
+
+The std around that mean should be a bit less than `√β_t`, but using exactly `√β_t` works just as well in practice and is simpler.
+
+</Deeper>
+
+## 3. Asking for a shape
+
+The network was trained with a label: “this point came from the spiral”, “this one from the ring”.
+In 20% of training examples the label was hidden. So the same network can make two guesses:
+
+- `ε_free`: the noise guess without the label. It only knows "some shape".
+- `ε_shape`: the noise guess when told which shape.
+
+Guidance mixes them:
+
+$$\hat\varepsilon = \varepsilon_\text{free} + w\,(\varepsilon_\text{shape} - \varepsilon_\text{free})$$
+
+- `w = 0` ignores the label.
+- `w = 1` uses the labeled guess as it is.
+- `w > 1` goes past it, pushing further in the direction that makes the point “more like this shape”.
+
+<Blank id="cfg-first" />
+
+<Predict id="big-w" />
+
+<GuidanceLab />
+
+At w = 1 the shapes are not sharp. That is normal for a network this small. Slide w up and watch them sharpen.
+
+<TryIt>
+
+Pick the ring and slide w from 0 to 10. Watch both numbers: “on the shape” climbs and then falls,
+and “shape covered” falls once w passes about 3. Find the w that gives a good balance of the two.
+Is it the same for the spiral?
+
+</TryIt>
+
+<Blank id="calls" />
+
+The last piece is the guidance mix itself.
+
+<CodeBlank id="cfg" />
+
+<Gate requires="cfg">
+
+Now put both halves together. One guided step back is: mix the two noise guesses, then take the reverse step from section 1
+with the mixed guess. This is exactly what the lab does 50 times.
+
+<CodeBlank id="guided-step" />
+
+</Gate>
+
+You can now draw a chosen shape from pure noise. In level D3 the points become pictures,
+and the network that guesses the noise is a Transformer.
+
+</Gate>

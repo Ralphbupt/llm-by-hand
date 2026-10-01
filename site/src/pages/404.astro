@@ -1,0 +1,43 @@
+---
+import '../styles/global.css'
+import '@fontsource-variable/bricolage-grotesque'
+import '@fontsource-variable/jetbrains-mono'
+import { settingsBootScript } from '@lib/settings'
+import { allLevels } from '@lib/levels'
+import SiteHeader from '../components/SiteHeader.astro'
+import SeoHead from '../components/SeoHead.astro'
+
+const first = (await allLevels())[0]
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title="Page not found · LLM by Hand" description="This page doesn’t exist. Every level is still on the map." noindex page={{ kind: '404' }} />
+    <script is:inline set:html={settingsBootScript} />
+    <style>
+      .nf { max-width: 640px; margin: 0 auto; padding: 12vh 1.25rem 4rem; }
+      .calc { font-family: 'JetBrains Mono Variable', var(--mono); font-size: clamp(2rem, 7vw, 3.4rem); font-weight: 700; letter-spacing: -0.02em; }
+      .calc .q { color: var(--warn); }
+      h1 { font-family: 'Bricolage Grotesque Variable', system-ui, sans-serif; font-size: 1.6rem; margin: 1.2rem 0 0.4rem; }
+      p { color: var(--dim); margin: 0 0 1.6rem; }
+      .links { display: flex; gap: 1rem; flex-wrap: wrap; }
+      .links a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+      .links a.go { color: var(--accent); border-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <SiteHeader />
+    <main class="nf">
+      <div class="calc" aria-hidden="true">4 · 0 · 4 = <span class="q">?</span></div>
+      <h1>This page doesn’t exist</h1>
+      <p>The link may be old, or the level may have moved. Every level is still on the map.</p>
+      <div class="links">
+        <a class="go" href="/">Go to the map</a>
+        <a href={`/learn/${first.id}/`}>Start with level 1</a>
+        <a href="/glossary/">Glossary</a>
+      </div>
+    </main>
+  </body>
+</html>

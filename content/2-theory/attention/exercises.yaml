@@ -1,0 +1,215 @@
+rnn-fade:
+  type: number
+  prompt: "In an RNN with w = 0.5, ignoring tanh, each later word multiplies word 1’s effect on the hidden state by 0.5. After 3 more words, what is word 1’s effect multiplied by?"
+  answer: 0.125
+  tol: 0.0005
+  after: "0.5 × 0.5 × 0.5 = 0.125. After 10 words it is 0.000977, after 50 it is 8.88 × 10⁻¹⁶: gone."
+  hints:
+    - when: { equals: 1.5 }
+      say: "That adds the three 0.5s. Each step multiplies: 0.5 × 0.5 × 0.5."
+    - when: { equals: 0.5 }
+      say: "That is one step. There are 3 more words, so 3 multiplications by 0.5."
+    - when: { any: true }
+      say: ["Each later word multiplies the effect by 0.5. How many multiplications happen in 3 words?", "Start from 1 and halve it three times."]
+
+cat-dog-score:
+  type: number
+  prompt: "Before dividing by √2, what is the score of cat looking at dog? (cat = [2, 0], dog = [1, 1])"
+  answer: 2
+  tol: 0
+  after: "cat · dog = 2×1 + 0×1 = 2. Divided by √2, the score is 1.41."
+  hints:
+    - when: { equals: 1.41 }
+      say: "That is after dividing by √2. The question asks for the dot product itself."
+    - when: { equals: 4 }
+      say: "4 is cat · cat. Use dog = [1, 1] for the second vector."
+    - when: { any: true }
+      say: ["A score is a dot product: multiply the two vectors number by number, then add.", "cat = [2, 0], dog = [1, 1]. First numbers: 2 × 1. Second numbers: 0 × 1."]
+
+cat-out-x:
+  type: number
+  prompt: "cat = [2, 0], dog = [1, 1], car = [0, 2]. Cat’s attention weights over (cat, dog, car) are [0.768, 0.187, 0.045]. What is the first number (x) of cat’s output? (2 decimals)"
+  answer: 1.72
+  tol: 0.01
+  after: "0.768×2 + 0.187×1 + 0.045×0 = 1.72. Cat’s output is mostly cat, plus a little of dog."
+  hints:
+    - when: { equals: 2 }
+      say: "2 is cat’s own x. The output also adds some of dog and car."
+    - when: { equals: 0.28 }
+      say: "That is the y number. For x, use the x of cat (2), dog (1) and car (0)."
+    - when: { any: true }
+      say: ["The output is a weighted average. Use only the x numbers of the three words.", "x numbers: cat 2, dog 1, car 0. Multiply each by its weight and add."]
+
+who-looks:
+  type: predict
+  prompt: "In an attention weight table for the words cat, dog, car (in that order), rows are words and columns are words. weights[0][2] = 0.045. What does that number say?"
+  options: ["Cat (row 0) looks at car (column 2) with weight 0.045", "Car (column 2) looks at cat (row 0) with weight 0.045", "Cat and car are 0.045 apart"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "Row i is the word that does the looking. Which word is row 0?"
+    - when: { equals: 2 }
+      say: "A weight is not a distance. It is how much of one word goes into another word’s output."
+  reveal: "Row 0 is cat, the word that looks. Each row is one word’s weights over all the words, so the row adds up to 1."
+
+car-55:
+  type: predict
+  prompt: "Three words attend to each other with scores = X @ X.T / √2, then softmax: cat = [2, 0], dog = [1, 1], car = [0, 2]. If car becomes [5, 5] (cat and dog stay the same), what happens to car’s row of weights?"
+  options: ["About the same as before", "Car looks almost only at itself", "Car spreads evenly over all three"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "Car’s scores change a lot: car · car becomes 5×5 + 5×5. Compare it with car · cat."
+    - when: { equals: 2 }
+      say: "Even spreading needs equal scores. Compute car · car and car · cat for car = [5, 5]: are they close?"
+  reveal: "Car looks almost only at itself: the row becomes [0.00, 0.00, 1.00]. Car · car = 50, while car · cat = 10 and car · dog = 10. After dividing by √2 that is a gap of 28, and e^28 is about 10^12. A long vector gets a very high score with itself, so softmax gives it almost all the weight."
+
+attention-fn:
+  type: code
+  prompt: "Write the scores line of attention."
+  template: |
+    def attention(Q, K, V):
+        d_k = Q.shape[1]
+        scores = ____ / np.sqrt(d_k)
+        weights = softmax(scores)       # softmax of each row
+        return weights @ V
+
+    X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]])
+    print(attention(X, X, X))
+  solution: "Q @ K.T"
+  tests:
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]])"
+      expr: "attention(X, X, X).shape"
+      expect: [3, 2]
+      say: "one output row per word"
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]])"
+      expr: "attention(X, X, X)[0]"
+      expect: [1.723, 0.277]
+      tol: 0.001
+      say: "cat’s output should be [1.723, 0.277]"
+    - setup: "Q = np.array([[1.0, 0.0]]); K = np.array([[1.0, 0.0], [0.0, 1.0]]); V = np.array([[10.0], [20.0]])"
+      expr: "attention(Q, K, V)"
+      expect: [[13.302]]
+      tol: 0.001
+      say: "works when Q and K are different"
+  hints:
+    - when: { error: "could not be broadcast" }
+      wrong: "Q * K.T"
+      say: ["`*` multiplies number by number, and these two shapes don’t fit that. A score needs a full dot product.", "Every query dotted with every key is one matrix product, not an element-wise one."]
+    - when: { error: "matmul|not aligned|shapes" }
+      say: ["The shapes don’t match for a matrix product. Q is (3, 2) and K is (3, 2).", "(n, k) @ (k, m) needs the inner sizes equal. What does K look like flipped?"]
+    - when: { any: true }
+      say: ["scores[i][j] = word i’s query · word j’s key. Every query dotted with every key is one matrix product.", "Q is (3, 2) and K is (3, 2). Which version of K makes the inner sizes match?"]
+  after: "Each key is a row of K, so K.T turns the keys into columns. Then (3, 2) @ (2, 3) → (3, 3), and cell [i][j] is query i · key j: one score for every pair of words."
+
+oneway-car-cat:
+  type: number
+  prompt: "Take the “one-way keys” example: `W_Q` is the identity and `W_K` = [[0, 0], [1, 0]], so K = X @ `W_K` turns each word [x, y] into the key [y, 0]. cat = [2, 0] and car = [0, 2]. What is the score of car looking at cat, car’s query · cat’s key?"
+  answer: 0
+  tol: 0
+  after: "Car’s query [0, 2] · cat’s key [0, 0] = 0, while cat’s query [2, 0] · car’s key [2, 0] = 4. Cat looks at car, car does not look back."
+  hints:
+    - when: { equals: 4 }
+      say: "4 is cat looking at car (row = the word that looks). Or did you compute `W_K` @ x? Vectors are rows here: K = X @ `W_K`, so cat’s key = [2, 0] @ `W_K` = 2 × (row 0 of `W_K`) + 0 × (row 1)."
+    - when: { any: true }
+      say: ["Car’s query is car itself, [0, 2], because `W_Q` is the identity. Now find cat’s key.", "Cat’s key = [2, 0] @ `W_K`: 2 times row 0 of `W_K` plus 0 times row 1."]
+
+scores-shape:
+  type: shape
+  prompt: "A sentence has 5 words. Q and K are both (5, 4). What shape is Q @ K.T?"
+  answer: [5, 5]
+  after: "One score for every pair of words: 5 × 5. The 4 disappears in the dot product."
+  hints:
+    - when: { shape: [5, 4] }
+      say: "That is the shape of Q itself. K.T is (4, 5)."
+    - when: { shape: [4, 4] }
+      say: "(5, 4) @ (4, 5): the 4s are the ones that disappear."
+    - when: { any: true }
+      say: ["K.T flips K’s shape.", "(n, k) @ (k, m) → (n, m)."]
+
+knob-start:
+  type: number
+  prompt: "At c = 0, sweet’s query is [0, 0]. Its keys are apple = [1, 0] and sweet = [0, 1]. How much weight does sweet put on apple?"
+  answer: 0.5
+  tol: 0.001
+  after: "Sweet’s scores are [0, 0], and softmax of two equal scores is [0.5, 0.5]. Its output is [0.5, 0.5], half way to the target [1, 0]."
+  hints:
+    - when: { equals: 0 }
+      say: "A score of 0 is not a weight of 0. Softmax of [0, 0] is not [0, 0]: the weights still add up to 1."
+    - when: { any: true }
+      say: ["Sweet’s query is [0, 0]. What are both of its scores?", "What does softmax do with two equal scores?"]
+
+infer-change:
+  type: predict
+  prompt: "The model is trained and saved. A user types a new sentence. Which numbers are different from the last time the model ran?"
+  options: ["`W_Q`, `W_K` and `W_V`", "Q, K, V and the attention weights", "Both: the matrices and Q, K, V", "Nothing changes"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "After training, the matrices are fixed. What is computed again from the new input?"
+    - when: { equals: 2 }
+      say: "Only training changes `W_Q`, `W_K`, `W_V`. Running the model on new input is inference."
+    - when: { equals: 3 }
+      say: "The input is new. Q = X @ `W_Q`: if X is new, is Q the same?"
+  reveal: "Q, K, V and the weights are activations: computed from the new X every time. `W_Q`, `W_K`, `W_V` are parameters: fixed after training."
+
+knob-forever:
+  type: predict
+  prompt: "Guess before you try it: if you keep pressing “200 steps”, what happens to c?"
+  options: ["It stops at a fixed value", "It keeps growing, slower and slower", "It goes back to 0"]
+  reveal: "It keeps growing. The weight on apple is a softmax, and it only reaches exactly 1 when c is infinite, so there is always a little loss left and the gradient keeps pushing. Real training stops long before; 0.98 is good enough."
+
+unscaled-self:
+  type: number
+  prompt: "Without dividing by √2, cat’s scores are cat·cat, cat·dog, cat·car = [4, 2, 0]. Use e⁴ ≈ 54.6, e² ≈ 7.4, e⁰ = 1. What weight does cat put on itself after softmax? (2 decimals)"
+  answer: 0.87
+  tol: 0.01
+  after: "54.6 / (54.6 + 7.4 + 1) = 54.6 / 63 ≈ 0.87 without scaling, 0.77 with it. The scores [4, 2, 0] are further apart than [2.83, 1.41, 0], so softmax is sharper."
+  hints:
+    - when: { equals: 0.77 }
+      say: "That is with the scaling on, scores [2.83, 1.41, 0]. Use the unscaled scores [4, 2, 0]."
+    - when: { any: true }
+      say: ["Softmax: e to each score, then divide by the total. Cat’s own score is the first one, 4.", "The total is 54.6 + 7.4 + 1 = 63. Cat’s own part of it is e⁴."]
+
+self-attention:
+  type: code
+  prompt: "Write one attention head from start to end: the three projections, the scaled scores, softmax, the weighted average. Several lines."
+  template: |
+    def self_attention(X, W_Q, W_K, W_V):
+        d_k = W_Q.shape[1]
+        # 1. Q, K, V   2. scores divided by sqrt(d_k)   3. softmax of each row, then @ V
+        ____
+        return out
+
+    X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]])
+    W_K = np.array([[0.0, 1.0], [1.0, 0.0]])
+    print(self_attention(X, np.eye(2), W_K, np.eye(2)))
+  solution: "Q, K, V = X @ W_Q, X @ W_K, X @ W_V\n    scores = Q @ K.T / np.sqrt(d_k)\n    out = softmax(scores) @ V"
+  tests:
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]])"
+      expr: "self_attention(X, np.eye(2), np.eye(2), np.eye(2))"
+      expect: [[1.723, 0.277], [1.0, 1.0], [0.277, 1.723]]
+      tol: 0.001
+      say: "with every matrix the identity, this is section 2’s attention: cat’s output is [1.723, 0.277]"
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]]); W_K = np.array([[0.0, 1.0], [1.0, 0.0]])"
+      expr: "self_attention(X, np.eye(2), W_K, np.eye(2))"
+      expect: [[0.277, 1.723], [1.0, 1.0], [1.723, 0.277]]
+      tol: 0.001
+      say: "swapped keys: cat now looks mostly at car"
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]]); W_V = np.array([[1.0, 0.0], [0.0, 0.0]])"
+      expr: "self_attention(X, np.eye(2), np.eye(2), W_V)"
+      expect: [[1.723, 0.0], [1.0, 0.0], [0.277, 0.0]]
+      tol: 0.001
+      say: "“V keeps only x”: same weights, but the outputs lose their y number"
+  hints:
+    - when: { error: "not defined" }
+      say: ["A name is missing. Make sure each of Q, K, V, scores and out gets assigned before it is used.", "The function must set `out` before `return out`."]
+    - when: { error: "matmul|not aligned|shapes" }
+      say: ["A matrix product has mismatched shapes. Q and K are (3, 2); the scores must be (3, 3).", "Which of Q, K needs flipping for Q @ ? to give (3, 3)?"]
+    - when: { testFailed: 1 }
+      say: ["The first test passed, so the formula is close. With different matrices, are the scores made from Q and K (not from X)?", "Compute Q and K from X with their own matrices first. The scores must use those two."]
+    - when: { testFailed: 2 }
+      say: "The weights are right but the outputs are not. The weighted average uses V = X @ `W_V`, not X."
+    - when: { any: true }
+      say: ["Three steps: projections, scaled scores, softmax and the weighted average. Section 2’s code did the last two.", "Each projection is X times its own matrix. The scores compare every query with every key, as in the attention function of section 2.", "Divide the scores by np.sqrt(dₖ), and apply softmax before you multiply by V."]
+  after: "The three matrices give every word its own query, key and value. The (3, 3) scores compare every query with every key. The weights then average the rows of V, not of X: that is why “V keeps only x” changes the outputs but not the weights."

@@ -1,0 +1,179 @@
+---
+title: Neurons and classification loss
+short: "Neurons and loss"
+level: "3"
+order: 3
+part: foundations
+question: How does a model answer yes or no, and how do you measure a wrong answer?
+run: browser
+checkpoint: neuron-loss
+testOut: [z-11, flat-loss, neuron, bce-code, neuron-loss]
+recap:
+  can:
+    - "Compute a neuron’s $z$ and $p = \\text{sigmoid}(z)$ for a point, and say which side of its line the point is on."
+    - "Explain why one neuron cannot solve XOR: its decision boundary is one straight line."
+    - "Compute the binary cross-entropy of a few yes/no answers, by hand and in NumPy."
+  keys:
+    - "$z = w_1 x_1 + w_2 x_2 + b$, in code `X @ w + b`"
+    - "$p = \\text{sigmoid}(z) = \\frac{1}{1 + e^{-z}}$; the neuron says 1 where $z > 0$"
+    - "$\\text{loss} = -\\text{mean}\\big(y \\ln p + (1 - y) \\ln(1 - p)\\big)$"
+    - "$p = 0.5$ everywhere costs $\\ln 2 \\approx 0.693$: a coin flip"
+  mistakes:
+    - "Using $\\ln p$ for a target-0 point: its cost is $-\\ln(1 - p)$."
+    - "Forgetting the minus sign, so the loss is negative."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import NeuronLab from '@viz/NeuronLab.astro'
+
+In level 2 the model answered with a number. Now it answers yes or no. That takes one **neuron**:
+
+$$
+z = w_1 x_1 + w_2 x_2 + b
+$$
+
+$$
+p = \text{sigmoid}(z) = \frac{1}{1 + e^{-z}}
+$$
+
+The first part is the line from level 2, with two inputs instead of one. Sigmoid then squeezes any number into
+the range 0 to 1, so $p$ reads as "how sure the neuron is that the answer is 1". If $p > 0.5$, it says 1.
+The lab also has a **steepness** $k$: it computes $p = \text{sigmoid}(k \cdot z)$, so a bigger $k$ makes the
+switch from 0 to 1 sharper. The lab also shows a **loss** for yes/no answers; section 3 explains how it is measured.
+($e \approx 2.72$ and $e^{-z}$ are on the [math page](/math/#exp-ln) if you have forgotten them.)
+
+## 1. One neuron draws one line
+
+The data is four points, the four corners of a square. Start with **AND**: the answer is 1 only when both inputs are 1.
+
+<NeuronLab hide={{ z: "z-11", p: "p-11" }} />
+
+<Blank id="z-11" />
+
+<Gate requires="z-11">
+
+Now pass that z through the sigmoid (with $k = 1$).
+
+<Blank id="p-11" />
+
+The neuron says 1 exactly where $z > 0$, because sigmoid(0) = 0.5. So the boundary between "1" and "0"
+is the line $w_1 x_1 + w_2 x_2 + b = 0$: the dashed line in the lab. This line is the **decision boundary**.
+**One neuron draws one straight line.**
+
+Make the steepness larger. The colors get sharper, but the line doesn't move. Now switch the data to OR and press the OR neuron preset.
+A line works for OR too. Now press XOR: the answer is 1 when the inputs differ.
+
+<Predict id="xor-line" />
+
+</Gate>
+
+<Gate requires="xor-line">
+
+<Stuck q="Sigmoid is a curve, not a line. So why does one neuron still always have a straight boundary?">
+
+The sigmoid comes **after** the line. It bends the output, turning a big negative $z$ into almost 0 and a big
+positive $z$ into almost 1. But it never changes *where* $z = 0$, and that is where the answer flips.
+The boundary is decided by $w_1 x_1 + w_2 x_2 + b$ alone, and that is a straight line.
+
+</Stuck>
+
+<TryIt>
+
+With the OR data, change only $b$ and watch the dashed line. Then change only $w_1$. Which one moves the line
+without turning it, and which one turns it? Then try to get more than 3 out of 4 right on XOR.
+
+</TryIt>
+
+## 2. Write the neuron
+
+Write the neuron in NumPy. `x` can be one point of shape (2,) or all four points as a (4, 2) matrix.
+`x @ w` handles both.
+
+<CodeBlank id="neuron" />
+
+</Gate>
+
+<Gate requires="neuron">
+
+## 3. How wrong is a yes/no answer?
+
+The lab shows a loss. Level 2 measured a mistake with the squared error. For a yes/no answer there is a better
+measure, the **cross-entropy loss**. It uses $\ln$, the natural logarithm (NumPy's `np.log`). You only need a few
+values of $-\ln p$ (the [math page](/math/#exp-ln) explains $\ln$):
+
+| $p$ | 1 | 0.75 | 0.5 | 0.25 | 0.1 |
+|---|---|---|---|---|---|
+| $-\ln p$ | 0 | 0.29 | 0.69 | 1.39 | 2.30 |
+
+The smaller $p$ is, the bigger the cost, and $p = 1$ costs nothing. Take one point at a time:
+
+- target 1: the cost is $-\ln p$. If the neuron is sure and right ($p = 1$) the cost is 0.
+  The closer $p$ gets to 0, the bigger the cost.
+- target 0: the cost is $-\ln(1 - p)$. This is the same idea with the neuron's confidence in 0.
+
+One formula covers both, because $y$ is 1 or 0, which makes one of the two terms 0:
+
+$$
+\text{loss} = -\text{mean}\big(y \ln p + (1 - y) \ln(1 - p)\big)
+$$
+
+This loss is also called **binary cross-entropy** ("binary" because there are two answers).
+A neuron that answers $p = 0.5$ for everything costs $-\ln 0.5 \approx 0.69$ per point. This is the cost of a
+coin flip. On XOR one neuron can do no better than that, so its loss stops at 0.6931.
+Level 10 extends the loss to more than two answers and explains where it comes from.
+
+How much better is a model that is only partly sure, but right on every point?
+
+<Blank id="flat-loss" />
+
+</Gate>
+
+<Gate requires="flat-loss">
+
+<Deeper title="Why not the squared error for yes/no answers?">
+
+Squared error would cost $(p - y)^2$. For a target of 1, the worst answer $p = 0$ costs only 1, and the
+cost hardly changes as $p$ moves from 0.01 to 0.001. A neuron that is confidently wrong gets almost no gradient, so it hardly changes.
+
+Cross-entropy costs $-\ln p$ instead, which grows without limit as $p$ goes to 0: $-\ln 0.1 = 2.30$,
+$-\ln 0.01 = 4.61$. Being sure and wrong is expensive, so the gradient stays large exactly where the model
+needs to change most. Level 6 shows a second reason: with sigmoid and cross-entropy together, the gradient
+of the loss with respect to $z$ is simply $p - y$.
+
+</Deeper>
+
+Now write the loss for a whole array of answers. `np.log` works on every element of an array, and `np.mean`
+averages them (level 2):
+
+```
+p = np.array([0.5, 0.25])
+np.log(p)            # array([-0.6931, -1.3863])
+np.mean(np.log(p))   # -1.0397
+```
+
+<CodeBlank id="bce-code" />
+
+</Gate>
+
+<Gate requires="bce-code">
+
+## 4. The neuron and its loss together
+
+Training (level 6) needs one number for the whole dataset. Run the neuron on every point, then score all the
+answers at once. This combines section 2 and section 3:
+
+1. `z = X @ w + b` gives one z per point, shape (4,).
+2. The sigmoid turns each z into a p.
+3. The loss compares the four p values with the four targets.
+
+<CodeBlank id="neuron-loss" />
+
+One neuron draws one line, and XOR needs more than one line. Level 4 stacks neurons and shows what must sit
+between them so the stack can do more than a single neuron.
+
+</Gate>

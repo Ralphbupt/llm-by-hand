@@ -1,0 +1,167 @@
+two-layer:
+  type: number
+  prompt: "x = [2, 1], W1 = [[1, 2], [0, 1]] and W2 = [[1], [1]]. First h = x @ W1, then out = h @ W2. What is out?"
+  answer: 7
+  tol: 0
+  after: "h = [2×1 + 1×0, 2×2 + 1×1] = [2, 5]. out = 2×1 + 5×1 = 7."
+  hints:
+    - when: { equals: 3 }
+      say: "3 is what you get from x @ W2 directly, skipping W1. First compute h = x @ W1."
+    - when: { equals: 5 }
+      say: "You multiplied the rows of W1 by x, as if x were a column. Here x is a row on the left, so h[0] uses column 0 of W1, which is [1, 0]."
+    - when: { any: true }
+      say: ["x is a row, so h = x @ W1: h[j] = x[0]·W1[0][j] + x[1]·W1[1][j] (row times column, as in level 1).", "h[0] = 2×1 + 1×0 = 2. Now h[1], with column 1 of W1.", "With h = [2, 5], out = h @ W2 = h[0]×1 + h[1]×1."]
+
+merged:
+  type: number
+  prompt: "W1 = [[1, 2], [0, 1]] and W2 = [[1], [1]]. W1 @ W2 has shape (2, 1). What is its top entry?"
+  answer: 3
+  tol: 0
+  after: "W1 @ W2 = [[1×1 + 2×1], [0×1 + 1×1]] = [[3], [1]]. And x @ [[3], [1]] = 2×3 + 1×1 = 7, the same answer as two layers."
+  hints:
+    - when: { equals: 1 }
+      say: "1 is the second entry. The first is row 0 of W1, [1, 2], times the column [1, 1]."
+    - when: { any: true }
+      say: ["The top entry is row 0 of W1 times the column W2.", "Row 0 of W1 is [1, 2]. W2 is the column [1, 1]. Multiply pairwise and add."]
+
+no-activation:
+  type: predict
+  prompt: "Guess before you try it: if you uncheck “activation on (tanh)” and press Train, what happens? Two layers, 6 hidden neurons, but no tanh."
+  options: ["It learns XOR, just more slowly", "It gets 3 out of 4, like one neuron", "It stops learning and answers 0.5 for every point"]
+  reveal: "It answers 0.5 for all four points. Without tanh the whole network computes the same thing as one linear neuron. That doesn’t contradict “3 out of 4”: that was the best a line can do counting right answers. Training doesn’t count right answers, it lowers the cross-entropy loss, and on XOR the line with the lowest loss is the one that does not choose: 0.5 everywhere, loss ln 2 ≈ 0.693. A line that gets 3 right must be confidently wrong on the fourth point, and that costs more."
+
+sig-d0:
+  type: number
+  prompt: "σ(0) = 0.5. Using f′(x) = σ(x)·(1 − σ(x)), what is the slope of sigmoid at x = 0?"
+  answer: 0.25
+  tol: 0.0001
+  after: "0.5 × (1 − 0.5) = 0.25. This is sigmoid’s steepest point: everywhere else its slope is smaller."
+  hints:
+    - when: { equals: 0.5 }
+      say: "0.5 is σ(0) itself. The slope is σ(0) × (1 − σ(0))."
+    - when: { any: true }
+      say: ["Use the slope rule σ·(1 − σ) with σ = σ(0) = 0.5.", "1 − σ(0) = 1 − 0.5 = 0.5. Now multiply it by σ(0)."]
+
+relu-dneg:
+  type: number
+  prompt: "ReLU(x) = max(0, x). What is its slope at x = −2?"
+  answer: 0
+  tol: 0
+  after: "For every negative x, ReLU outputs 0, a flat line. A flat line has slope 0."
+  hints:
+    - when: { equals: 1 }
+      say: "1 is the slope on the right side, for x > 0. Is ReLU changing at all to the left of 0?"
+    - when: { equals: -2 }
+      say: "That is x, not the slope. How much does max(0, x) change when x moves a little around −2?"
+    - when: { any: true }
+      say: ["The slope is how much the output changes when x moves a little. Look at ReLU to the left of 0.", "ReLU(−2.1) = 0 and ReLU(−1.9) = 0. How much did the output change?"]
+
+deep-sigmoid:
+  type: predict
+  prompt: "A gradient flows back through 10 sigmoid layers. Each layer multiplies it by that layer’s σ′, which is at most 0.25. Start with a gradient of 1 and ignore the weights. What reaches the first layer, at most?"
+  options: ["About 0.25", "About 0.06", "Less than one millionth"]
+  answer: 2
+  hints:
+    - when: { equals: 0 }
+      say: "0.25 is what one layer does at best. The gradient passes through 10 of them, and each one multiplies again."
+    - when: { equals: 1 }
+      say: "0.0625 is 0.25 × 0.25, two layers. Keep multiplying: ten factors of 0.25."
+  reveal: "Less than one millionth: 0.25 multiplied by itself 10 times. The first layers barely learn."
+
+vanish-10:
+  type: number
+  prompt: "Five sigmoid layers, ignoring the weights, best case: the gradient is multiplied by 0.25 five times. 0.25⁵ = 1 / N. What is N?"
+  answer: 1024
+  tol: 0
+  after: "0.25 = 1/4, so 0.25⁵ = 1/4⁵ = 1/1024. Five layers shrink the gradient about a thousand times; ten layers, 1024 × 1024 ≈ a million times. And that is the best case, with every input exactly at 0. Away from 0 the slope is even smaller."
+  hints:
+    - when: { equals: 20 }
+      say: "That is 4 × 5. The gradient is multiplied, not added: 4 × 4 × 4 × 4 × 4."
+    - when: { equals: 256 }
+      say: "That is 4⁴. Count the factors: there are five layers."
+    - when: { any: true }
+      say: ["0.25 is 1/4. Multiplying by 1/4 five times is dividing by 4 five times.", "N = 4 × 4 × 4 × 4 × 4. 4 × 4 = 16, 16 × 4 = 64, …"]
+
+gelu-neg:
+  type: number
+  prompt: "GELU(x) = x · Φ(x), and Φ(−1) = 0.1587. What is GELU(−1)? (Four decimals.)"
+  answer: -0.1587
+  tol: 0.0002
+  after: "−1 × 0.1587 = −0.1587. A small negative output, where ReLU would give exactly 0."
+  hints:
+    - when: { equals: 0.1587 }
+      say: "Check the sign. x is −1, so x · Φ(x) is negative."
+    - when: { equals: 0 }
+      say: "0 is what ReLU gives. GELU multiplies x by Φ(x) instead of setting it to 0."
+    - when: { any: true }
+      say: ["Use GELU(x) = x · Φ(x) with x = −1.", "x is −1 and Φ(−1) = 0.1587. Multiply them, and keep the sign."]
+
+relu-grad:
+  type: code
+  prompt: "Write the slope of ReLU for every element of an array x (1 where x > 0, else 0)."
+  template: |
+    def relu(x):
+        return np.maximum(0, x)
+
+    def relu_grad(x):
+        return ____
+
+    x = np.array([-2.0, -0.5, 0.0, 0.5, 3.0])
+    print("x        ", x)
+    print("relu     ", relu(x))
+    print("relu_grad", relu_grad(x))
+  solution: "(x > 0).astype(float)"
+  tests:
+    - expr: "relu_grad(np.array([-2.0, -0.5, 0.0, 0.5, 3.0]))"
+      expect: [0, 0, 0, 1, 1]
+      say: "slopes for [−2, −0.5, 0, 0.5, 3]"
+    - expr: "relu_grad(np.array([[1.0, -1.0], [-3.0, 2.0]]))"
+      expect: [[1, 0], [0, 1]]
+      say: "works on a matrix too"
+  hints:
+    - when: { error: "truth value of an array" }
+      wrong: "1.0 if x > 0 else 0.0"
+      say: "A plain if cannot test a whole array. Use the comparison on the array itself, as in the example above the question."
+    - when: { testFailed: 0 }
+      say: ["The answer should be [0, 0, 0, 1, 1] for x = [−2, −0.5, 0, 0.5, 3]. At exactly 0 the slope is 0.", "Compare every element with 0 at once. That gives True/False.", "Turn True/False into numbers with the method shown above the question."]
+    - when: { any: true }
+      say: ["The slope is 1 where x > 0 and 0 elsewhere. Which comparison gives that for every element?", "A comparison gives True/False. The example above shows how to turn that into 1.0/0.0."]
+  after: "x > 0 compares every element at once and gives an array of True/False. .astype(float) turns True into 1.0 and False into 0.0. At exactly 0 the comparison is False, so the slope there is 0."
+
+
+sigmoid-grad:
+  type: code
+  prompt: "Write the slope of sigmoid for every element of an array x: first σ(x), then σ(x)·(1 − σ(x)). Two lines."
+  template: |
+    def sigmoid_grad(x):
+        ____
+
+    x = np.array([-2.0, 0.0, 3.0])
+    print("sigmoid_grad", sigmoid_grad(x).round(4))
+    print("five layers at x = 0:", sigmoid_grad(np.array([0.0]))[0] ** 5)
+  solution: "s = 1 / (1 + np.exp(-x))\n    return s * (1 - s)"
+  tests:
+    - expr: "sigmoid_grad(np.array([0.0]))"
+      expect: [0.25]
+      tol: 0.0001
+      say: "at x = 0, σ = 0.5 and the slope is 0.5 × 0.5 = 0.25"
+    - expr: "sigmoid_grad(np.array([-2.0, 0.0, 3.0]))"
+      expect: [0.1049936, 0.25, 0.0451767]
+      tol: 0.0001
+      say: "slopes for [−2, 0, 3]: largest at 0, small far from 0"
+    - expr: "sigmoid_grad(np.array([[0.0, 3.0], [-3.0, 0.0]]))"
+      expect: [[0.25, 0.0451767], [0.0451767, 0.25]]
+      tol: 0.0001
+      say: "works on a matrix too"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented block|unindent" }
+      say: "Both lines inside the function need the same 4 spaces in front."
+    - when: { error: "is not defined" }
+      say: "Compute σ(x) and give it a name on the first line, then use that name on the second line."
+    - when: { error: "NoneType" }
+      say: "The function returns nothing. Put return in front of the slope on the last line."
+    - when: { testFailed: 0 }
+      say: ["At x = 0 the answer should be 0.25. Check σ(0) first: it is 0.5.", "Is the slope σ·(1 − σ), with σ computed from x, and not x·(1 − x)?"]
+    - when: { any: true }
+      say: ["First line: σ(x) with np.exp, as in the neuron of level 3.", "Second line: return σ times (1 − σ)."]
+  after: "Compute σ(x) once and keep it in a name, then reuse it: the slope is σ·(1 − σ). A common trap is x·(1 − x), which uses x instead of σ(x). The largest slope is 0.25, at x = 0."

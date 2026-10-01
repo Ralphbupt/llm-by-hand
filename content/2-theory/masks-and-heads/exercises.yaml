@@ -1,0 +1,161 @@
+fill-zero:
+  type: predict
+  prompt: "Cat’s scores are [0.34, 0.05, blocked]; the third word is a PAD token. What if a blocked score were set to 0 instead of −∞? Use e^0.34 ≈ 1.40, e^0.05 ≈ 1.05, e^0 = 1. The PAD token would get…"
+  options: ["0% of the weight", "about 29% of the weight", "exactly 50% of the weight"]
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "e^0 is 1, not 0. A score of 0 still goes into softmax as a normal score."
+    - when: { equals: 2 }
+      say: "Compute it: 1 / (1.40 + 1.05 + 1)."
+  reveal: "1 / (1.40 + 1.05 + 1) = 1 / 3.45 ≈ 0.29. A score of 0 is an ordinary score, not “nothing”. Only −∞ gives e^−∞ = 0, so the PAD token gets exactly 0."
+
+mask-shape:
+  type: shape
+  prompt: "A sentence has 6 tokens. What shape is its causal mask?"
+  answer: [6, 6]
+  after: "One cell per (looking word, looked-at word) pair."
+  hints:
+    - when: { shape: [6] }
+      say: "A causal mask depends on both who is looking and who is looked at. Whether word j is blocked depends on the word i that looks."
+    - when: { shape: [1, 6] }
+      say: "That is the shape of a padding mask. Whether word i may see word j depends on i too."
+    - when: { any: true }
+      say: ["The mask has one cell per weight.", "Rows are the words looking, columns the words looked at."]
+
+open-cells:
+  type: number
+  prompt: "Causal mask only, 4 tokens. How many of the 16 weights can be non-zero?"
+  answer: 10
+  tol: 0
+  after: "1 + 2 + 3 + 4 = 10. Row i can see i + 1 tokens: itself and everything before it."
+  hints:
+    - when: { equals: 6 }
+      say: "6 is the number of blocked cells, the ones above the diagonal."
+    - when: { equals: 4 }
+      wrong: "4"
+      say: "That is only the diagonal. Each word can also see the words before it."
+    - when: { any: true }
+      say: ["A word may see itself and every word before it. Count row by row.", "Row 0 sees 1 token, row 1 sees 2. Keep going and add them up."]
+
+pad-broadcast:
+  type: shape
+  prompt: "A batch has 2 sentences of 5 tokens. The padding mask is (2, 1, 5) and the scores are (2, 5, 5). What shape is the mask after broadcasting?"
+  answer: [2, 5, 5]
+  after: "The 1 is copied 5 times, once per query row. Each sentence keeps its own padding pattern."
+  hints:
+    - when: { shape: [2, 1, 5] }
+      say: "That is before broadcasting. The 1 is stretched to match the scores."
+    - when: { shape: [5, 5] }
+      say: "Don’t drop the batch: there are 2 sentences, each with its own mask."
+    - when: { any: true }
+      say: ["Compare the shapes from the right: (2, 1, 5) and (2, 5, 5).", "A 1 stretches to whatever the other side has."]
+
+causal-mask:
+  type: code
+  prompt: "Build the causal mask: True (or 1) wherever a word would look ahead (column > row), False (or 0) elsewhere."
+  template: |
+    def causal_mask(L):
+        return ____
+
+    print(causal_mask(4).astype(int))
+  solution: "np.triu(np.ones((L, L), dtype=bool), k=1)"
+  tests:
+    - expr: "np.asarray(causal_mask(3)).astype(bool)"
+      expect: [[false, true, true], [false, false, true], [false, false, false]]
+      say: "3 tokens: block the 3 cells above the diagonal"
+    - expr: "causal_mask(5).shape"
+      expect: [5, 5]
+    - expr: "int(causal_mask(6).sum())"
+      expect: 15
+      say: "6 tokens: 15 blocked cells"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Compare the table the code printed with the rule: blocked (1) exactly where column > row. A word may look at itself, so the diagonal is not blocked, and nothing below it is.", "Which k of np.triu starts one step above the diagonal?"]
+    - when: { any: true }
+      say: ["Blocked = strictly above the diagonal (column > row). np.triu keeps the upper triangle of a table.", "Start from a full L×L table of True values, then keep only its part above the diagonal.", "np.triu has a second argument k. k = 0 keeps the main diagonal too; you need the triangle one step above it."]
+  after: "np.triu with k = 1 keeps only the cells where column > row: the words that come later. The diagonal stays False because a word may look at itself. L tokens give L(L − 1)/2 blocked cells, 15 for 6 tokens."
+
+concat-shape:
+  type: shape
+  prompt: "3 words, 2 heads, each head outputs 2 numbers per word. The heads’ outputs are joined into one table called concat, one row per word. What shape is concat?"
+  answer: [3, 4]
+  after: "The heads are placed side by side: 2 + 2 = 4 columns, back to `d_model`."
+  hints:
+    - when: { shape: [6, 2] }
+      say: "The heads go side by side (more columns), not on top of each other (more rows)."
+    - when: { any: true }
+      say: ["Each head gives (3, 2).", "Put the heads next to each other, not on top of each other."]
+
+head2-col:
+  type: number
+  prompt: "2 heads each output 2 numbers per word. Their outputs are placed side by side in one table, concat, head 0 first. Heads and columns both count from 0. At which column of concat does head 1’s output start?"
+  answer: 2
+  tol: 0
+  after: "Head 0 fills columns 0 and 1, head 1 fills columns 2 and 3."
+  hints:
+    - when: { equals: 1 }
+      say: "Head 0 has two numbers per word, so it takes columns 0 and 1."
+    - when: { equals: 3 }
+      wrong: "1 + 2"
+      say: "Count from 0: head 0 takes columns 0 and 1."
+    - when: { any: true }
+      say: ["Head 0’s two numbers come first, in columns 0 and 1.", "Which column comes right after columns 0 and 1?"]
+
+dk-512:
+  type: number
+  prompt: "A model has `d_model` = 512 and 8 heads. How many numbers does each head get (dₖ)?"
+  answer: 64
+  tol: 0
+  after: "512 / 8 = 64. That is why the √dₖ of level 14 (section 5) is usually √64 = 8."
+  hints:
+    - when: { equals: 512 }
+      wrong: "512"
+      say: "The heads share `d_model` between them; each one doesn’t get a full copy."
+    - when: { equals: 4096 }
+      wrong: "512*8"
+      say: "The heads split `d_model`, they don’t multiply it."
+    - when: { any: true }
+      say: ["The heads share the `d_model` numbers between them, evenly.", "Split 512 numbers into 8 equal slices."]
+
+masked-attention:
+  type: code
+  prompt: "Write one attention head with a causal mask, from X and the three weight tables to the output out. Several lines."
+  template: |
+    def masked_attention(X, W_Q, W_K, W_V):
+        L, d_k = X.shape[0], W_Q.shape[1]
+        # 1. Q, K, V   2. scaled scores
+        # 3. causal mask: True = blocked, blocked scores become -inf
+        # 4. softmax, then @ V
+        ____
+        return out
+
+    X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]])
+    W_K = np.array([[0.0, 1.0], [1.0, 0.0]])
+    print(masked_attention(X, np.eye(2), W_K, np.eye(2)))
+  solution: "Q, K, V = X @ W_Q, X @ W_K, X @ W_V\n    scores = Q @ K.T / np.sqrt(d_k)\n    mask = np.triu(np.ones((L, L), dtype=bool), k=1)\n    scores = np.where(mask, -np.inf, scores)\n    out = softmax(scores) @ V"
+  tests:
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]]); W_K = np.array([[0.0, 1.0], [1.0, 0.0]])"
+      expr: "masked_attention(X, np.eye(2), W_K, np.eye(2))[0]"
+      expect: [2.0, 0.0]
+      say: "cat is the first word: it can only see itself, so its output is cat"
+    - setup: "X = np.array([[2.0, 0.0], [1.0, 1.0], [0.0, 2.0]]); W_K = np.array([[0.0, 1.0], [1.0, 0.0]])"
+      expr: "masked_attention(X, np.eye(2), W_K, np.eye(2))"
+      expect: [[2.0, 0.0], [1.5, 0.5], [1.723, 0.277]]
+      tol: 0.001
+      say: "all three rows"
+    - setup: "rng = np.random.default_rng(3); Xr = rng.normal(size=(4, 3)); Wq, Wk, Wv = rng.normal(size=(3, 2)), rng.normal(size=(3, 2)), rng.normal(size=(3, 2))"
+      expr: "np.allclose(masked_attention(Xr, Wq, Wk, Wv)[0], (Xr @ Wv)[0])"
+      expect: true
+      say: "with any matrices, the first word only sees itself"
+  hints:
+    - when: { error: "not defined" }
+      say: ["A name is missing. Make sure each of Q, K, V, scores and out gets assigned before it is used.", "The function must set `out` before `return out`."]
+    - when: { error: "matmul|not aligned|shapes" }
+      say: ["A matrix product has mismatched shapes. Q and K are (L, dₖ); the scores must be (L, L).", "Which of Q, K needs flipping for Q @ ? to give (L, L)?"]
+    - when: { testFailed: 0 }
+      say: ["The first word should see only itself, so its weights must be [1, 0, 0]. Two things can break that: the mask, or the axis of softmax.", "Is the mask blocking the cells above the diagonal (column > row)? Blocked scores must become −∞ before softmax, not after. np.where can put −∞ wherever the mask is True.", "softmax must work along the last axis, over each row (axis=-1, the default), so each word’s weights sum to 1. Along axis 0, each column would sum to 1 instead."]
+      wrong: "Q, K, V = X @ W_Q, X @ W_K, X @ W_V\n    scores = Q @ K.T / np.sqrt(d_k)\n    mask = np.triu(np.ones((L, L), dtype=bool), k=1)\n    scores = np.where(mask, -np.inf, scores)\n    out = softmax(scores, axis=0) @ V"
+    - when: { any: true }
+      say: ["Four steps, in order: projections, scaled scores, mask, softmax and the weighted average. Level 14’s `self_attention` did all of them except the mask.", "Section 1 showed np.triu for the mask and np.where to put −∞ into the blocked cells."]
+  after: "The mask goes between the scores and softmax. A −∞ score becomes e^−∞ = 0, so the weights of the open cells still add up to 1. The first word has only one open cell, itself, so its output is its own value row."

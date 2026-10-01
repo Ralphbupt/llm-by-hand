@@ -1,0 +1,170 @@
+---
+/**
+ * The mistake book: every question the learner got wrong at least once, grouped by level, with a "Redo" in place.
+ * Which questions show depends on this browser's progress, so all of them are rendered hidden at build time
+ * and the script below reveals the ones with misses. The exercise islands hydrate only when opened.
+ */
+import '../styles/global.css'
+import 'katex/dist/katex.min.css'
+import { allLevels, sectionName } from '@lib/levels'
+import { loadExercises } from '@lib/quiz'
+import { settingsBootScript } from '@lib/settings'
+import { levelIndex, toJsonScript } from '@lib/score'
+import SiteHeader from '../components/SiteHeader.astro'
+import SeoHead from '../components/SeoHead.astro'
+import Blank from '../components/quiz/Blank.astro'
+import CodeBlank from '../components/quiz/CodeBlank.astro'
+import Predict from '../components/quiz/Predict.astro'
+
+const levels = (await allLevels()).map((l) => ({
+  slug: l.id,
+  level: l.data.level,
+  title: l.data.short ?? l.data.title,
+  section: sectionName(l),
+  // ungraded predictions can't be missed; graded ones (with `answer`) can
+  items: Object.entries(loadExercises(l.id)).filter(([, ex]) => ex.type !== 'predict' || (ex as any).answer !== undefined).map(([id, ex]) => ({ id, ex })),
+}))
+const index = await levelIndex()
+// for the empty state: the first main-line level not cleared yet is where to go next
+const mainline = (await allLevels()).filter((l) => !l.data.branch).map((l) => ({ slug: l.id, level: l.data.level, title: l.data.title }))
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title="Mistakes · LLM by Hand" description="The questions you missed, to try again. Saved in this browser only." noindex page={{ kind: 'review' }} />
+    <script is:inline set:html={settingsBootScript} />
+    <style>
+      .wrap { max-width: 760px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .top a.home { color: var(--fg); text-decoration: none; font-weight: 700; }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 1.2rem 0 0.3rem; }
+      .lede { color: var(--dim); margin: 0 0 1.5rem; max-width: 62ch; }
+      .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 1.2rem; font-size: 0.85rem; }
+      .filters button { font: inherit; padding: 0.2rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--fg); cursor: pointer; }
+      .filters button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+      .group { margin: 1.6rem 0 0; }
+      .group h2 { font-size: 1.05rem; margin: 0 0 0.5rem; display: flex; gap: 0.6rem; align-items: baseline; }
+      .group h2 .lv { font-family: var(--mono); font-size: 0.8rem; color: var(--dim); }
+      .group h2 a { color: var(--fg); text-decoration: none; }
+      .group h2 a:hover { color: var(--accent); }
+      .group h2 .sec { font-weight: 400; font-size: 0.78rem; color: var(--dim); }
+      .item { border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; margin: 0.5rem 0; background: var(--card); }
+      .item .row { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: baseline; }
+      .item .q { flex: 1 1 22rem; min-width: 0; }
+      .item .meta { font-size: 0.78rem; color: var(--dim); font-family: var(--mono); white-space: nowrap; }
+      .item .meta .miss { color: var(--warn); }
+      .item .meta .ok { color: var(--ok); }
+      .item .redo-btn { font: inherit; font-size: 0.82rem; padding: 0.15rem 0.7rem; border: 1px solid var(--accent); border-radius: 4px; background: transparent; color: var(--accent); cursor: pointer; }
+      .item .redo :global(.blank), .item .redo :global(.code) { margin: 0.6rem 0 0; background: var(--bg); }
+      /* the row above already shows the question; don't repeat it inside the opened exercise */
+      .item .redo :global(.prompt) { display: none; }
+      .empty { padding: 1.2rem; border: 1px dashed var(--line); border-radius: 8px; color: var(--dim); }
+      .empty p { margin: 0 0 0.8rem; }
+      .empty .go { display: inline-block; padding: 0.5rem 1rem; border-radius: 8px; background: var(--accent); color: var(--on-solid);
+        text-decoration: none; font-weight: 600; }
+      .empty .go:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <SiteHeader current="mistakes" />
+    <div class="wrap">
+      <h1>Mistakes</h1>
+      <p class="lede">Every question you got wrong at least once, so you can try it again. Redoing a question here never
+        takes away a level you cleared. Progress is saved in this browser only.</p>
+
+      <div class="filters" role="group" aria-label="Which mistakes to show">
+        <button type="button" data-filter="all" aria-pressed="true">All <span data-count="all"></span></button>
+        <button type="button" data-filter="open" aria-pressed="false">Not solved yet <span data-count="open"></span></button>
+        <button type="button" data-filter="solved" aria-pressed="false">Solved since <span data-count="solved"></span></button>
+      </div>
+
+      <div class="empty" data-empty hidden>
+        <p>No mistakes yet. When you get a question wrong, it shows up here.</p>
+        <a class="go" href={`/learn/${mainline[0].slug}/`} data-next-level>Start with level {mainline[0].level}: {mainline[0].title}</a>
+      </div>
+      <p class="empty" data-empty-filter hidden>Nothing here with this filter.</p>
+      <script type="application/json" id="mainline" set:html={toJsonScript(mainline)} />
+
+      {levels.map((l) => (
+        <section class="group" data-group={l.slug} hidden>
+          <h2><span class="lv">{l.level}</span><a href={`/learn/${l.slug}/`}>{l.title}</a><span class="sec">{l.section}</span></h2>
+          {l.items.map(({ id, ex }) => (
+            <div class="item" data-qid={`${l.slug}/${id}`} hidden>
+              <div class="row">
+                <span class="q">{ex.prompt}</span>
+                <span class="meta" data-meta></span>
+                <button type="button" class="redo-btn" aria-expanded="false">Redo</button>
+              </div>
+              <div class="redo" hidden>
+                {ex.type === 'code' ? <CodeBlank id={id} page={l.slug} />
+                  : ex.type === 'predict' ? <Predict id={id} page={l.slug} />
+                  : <Blank id={id} page={l.slug} />}
+              </div>
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
+
+    <script type="application/json" id="level-index" set:html={toJsonScript(index)} />
+    <script>
+      import { allMisses, hasReal, subscribe } from '@lib/progress'
+      import { scoreOf } from '@lib/marks'
+
+      let filter: 'all' | 'open' | 'solved' = 'all'
+
+      function sync() {
+        const misses = allMisses()
+        const counts = { all: 0, open: 0, solved: 0 }
+        document.querySelectorAll<HTMLElement>('[data-qid]').forEach((el) => {
+          const n = misses[el.dataset.qid!] ?? 0
+          const solved = hasReal(el.dataset.qid!)
+          if (n > 0) {
+            counts.all++
+            counts[solved ? 'solved' : 'open']++
+          }
+          el.hidden = n === 0 || (filter === 'open' && solved) || (filter === 'solved' && !solved)
+          el.querySelector<HTMLElement>('[data-meta]')!.innerHTML =
+            `<span class="miss">missed ${n}×</span> · ${solved ? '<span class="ok">solved</span>' : 'not solved yet'}`
+        })
+        document.querySelectorAll<HTMLElement>('[data-group]').forEach((g) => {
+          g.hidden = !g.querySelector('[data-qid]:not([hidden])')
+        })
+        for (const k of ['all', 'open', 'solved'] as const) document.querySelector(`[data-count="${k}"]`)!.textContent = `(${counts[k]})`
+        document.querySelector<HTMLElement>('[data-empty]')!.hidden = counts.all > 0
+        document.querySelector<HTMLElement>('[data-empty-filter]')!.hidden = counts.all === 0 || counts[filter] > 0
+        // empty state: point to the first main-line level that isn't cleared yet
+        if (counts.all === 0) {
+          const ml: { slug: string; level: string; title: string }[] = JSON.parse(document.getElementById('mainline')!.textContent!)
+          const next = ml.find((l) => !scoreOf(l.slug)?.cleared)
+          const a = document.querySelector<HTMLAnchorElement>('[data-next-level]')!
+          if (next) { a.href = `/learn/${next.slug}/`; a.textContent = `${next === ml[0] ? 'Start' : 'Continue'} with level ${next.level}: ${next.title}` }
+          else a.hidden = true
+        }
+      }
+
+      document.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach((b) =>
+        b.addEventListener('click', () => {
+          filter = b.dataset.filter as typeof filter
+          document.querySelectorAll('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)))
+          sync()
+        }),
+      )
+
+      // "Redo" opens the question right here; its island hydrates when it becomes visible
+      document.querySelectorAll<HTMLButtonElement>('.redo-btn').forEach((b) =>
+        b.addEventListener('click', () => {
+          const box = b.closest('.item')!.querySelector<HTMLElement>('.redo')!
+          box.hidden = !box.hidden
+          b.setAttribute('aria-expanded', String(!box.hidden))
+          b.textContent = box.hidden ? 'Redo' : 'Close'
+        }),
+      )
+
+      subscribe(sync)
+      sync()
+    </script>
+  </body>
+</html>

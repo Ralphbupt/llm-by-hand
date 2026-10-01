@@ -1,0 +1,116 @@
+---
+/**
+ * "Already know this? Test out": a quiet link at the top of a level that opens a panel with a few of the
+ * level's own questions (the real quiz components, same ids as on the page). Solving all of them on your own,
+ * after opening the panel, records a test-out: the level counts as cleared with three stars and every Gate opens.
+ * The link hides once the level is cleared, and in reading mode.
+ */
+import Blank from './Blank.astro'
+import CodeBlank from './CodeBlank.astro'
+import Predict from './Predict.astro'
+import { loadExercises } from '@lib/quiz'
+
+interface Props { slug: string; ids: string[] }
+const { slug, ids } = Astro.props
+const ex = loadExercises(slug)
+const items = ids.filter((id) => ex[id])
+const n = items.length
+---
+{n > 0 && (
+  <div class="testout" data-testout={slug} data-ids={items.join(' ')} hidden>
+    <button type="button" class="to-link" aria-expanded="false" aria-controls="testout-panel">
+      Already know this? <span>Skip it with a short test</span>
+    </button>
+    <section id="testout-panel" class="to-panel" aria-labelledby="testout-h" tabindex="-1" hidden>
+      <div class="to-head">
+        <h2 id="testout-h">A short test to skip this level</h2>
+        <button type="button" class="to-close" data-testout-close>Close</button>
+      </div>
+      <p class="to-lede">
+        Solve {n === 1 ? 'this question' : `these ${n} questions`} on your own. Answer all of them correctly and the level counts as
+        cleared with three stars, and every part of the page opens. Showing an answer doesn’t count.
+      </p>
+      <p class="to-status" data-testout-status aria-live="polite"></p>
+      {items.map((id) => (
+        ex[id].type === 'code' ? <CodeBlank id={id} short /> : ex[id].type === 'predict' ? <Predict id={id} short /> : <Blank id={id} short />
+      ))}
+    </section>
+  </div>
+)}
+
+<script>
+  import { readingMode, recordTestOut, snapshot, subscribe, testedOut } from '@lib/progress'
+  import { scoreOf } from '@lib/marks'
+  import { testOutStatus } from '@lib/testout'
+
+  const root = document.querySelector<HTMLElement>('[data-testout]')
+  if (root) {
+    const slug = root.dataset.testout!
+    const ids = root.dataset.ids!.split(' ')
+    const link = root.querySelector<HTMLButtonElement>('.to-link')!
+    const panel = root.querySelector<HTMLElement>('.to-panel')!
+    const status = root.querySelector<HTMLElement>('[data-testout-status]')!
+    // a test-out counts only when it is finished through the panel (not by working through the page)
+    let opened = false
+
+    const setOpen = (open: boolean, focus = true) => {
+      panel.hidden = !open
+      link.setAttribute('aria-expanded', String(open))
+      if (open) {
+        opened = true
+        if (focus) panel.focus({ preventScroll: false })
+      } else if (focus) link.focus()
+      sync()
+    }
+    link.addEventListener('click', () => setOpen(panel.hidden))
+    root.querySelector('[data-testout-close]')!.addEventListener('click', () => setOpen(false))
+    panel.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !(e.target instanceof Element && e.target.closest('input, textarea'))) setOpen(false)
+    })
+
+    function sync() {
+      const st = testOutStatus(slug, ids, snapshot().progress)
+      if (opened && st.complete && !testedOut(slug) && !readingMode()) recordTestOut(slug)
+      const done = testedOut(slug)
+      // nothing to test out of: already cleared (unless the panel is open and showing its result), or reading mode
+      root!.hidden = readingMode() || (!!scoreOf(slug)?.cleared && panel.hidden)
+      root!.classList.toggle('is-done', done)
+      if (done) status.textContent = '✓ Test passed. This level counts as cleared with three stars, and every part is open.'
+      else if (st.shown > 0) status.textContent = 'You showed an answer, so this test can’t count. Do the level step by step instead; nothing is lost.'
+      else status.textContent = `${st.solved} of ${st.total} solved on your own`
+      status.dataset.state = done ? 'done' : st.shown > 0 ? 'off' : ''
+    }
+    subscribe(sync)
+    sync()
+  }
+</script>
+
+<style>
+  .testout { margin: -0.6rem 0 1.1rem; }
+  .to-link {
+    font: inherit; font-size: 0.86rem; color: var(--dim); background: none; border: 0; padding: 0.3rem 0; cursor: pointer;
+    min-height: 2rem;
+  }
+  .to-link span { color: var(--accent); text-decoration: underline; text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+  .to-link:hover span { text-decoration-thickness: 2px; }
+  .to-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .to-link[aria-expanded='true'] { color: var(--fg); }
+  .to-panel {
+    margin-top: 0.5rem; padding: 0.9rem 1rem 0.3rem; border: 1px solid var(--line); border-top: 3px solid var(--accent);
+    border-radius: 8px; background: var(--bg);
+  }
+  .to-panel:focus { outline: none; }
+  .to-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .to-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .to-head h2 { margin: 0; font-size: 1.02rem; }
+  .to-close {
+    font: inherit; font-size: 0.82rem; padding: 0.2rem 0.7rem; border: 1px solid var(--line); border-radius: 4px;
+    background: transparent; color: var(--dim); cursor: pointer;
+  }
+  .to-close:hover, .to-close:focus-visible { color: var(--fg); border-color: var(--fg); }
+  .to-lede { margin: 0.4rem 0 0.2rem; color: var(--dim); font-size: 0.9rem; max-width: 62ch; }
+  .to-status { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .to-status[data-state='done'] { color: var(--ok); }
+  .to-status[data-state='off'] { color: var(--warn); font-weight: 400; }
+  @media (max-width: 760px) { .to-close { min-height: 40px; } .to-link { min-height: 40px; } }
+</style>

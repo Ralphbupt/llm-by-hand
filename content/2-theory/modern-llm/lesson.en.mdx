@@ -1,0 +1,269 @@
+---
+title: Modern blocks
+short: "Modern blocks"
+level: "19"
+order: 19
+part: theory
+question: What do today’s models change inside each block, and why?
+run: browser
+checkpoint: swiglu-code
+testOut: [postnorm-count, rmsnorm-code, rope-code, swiglu-code]
+recap:
+  can:
+    - "Explain why pre-norm, which levels 16 and 17 already use, trains deep stacks better than the 2017 post-norm."
+    - "Compute RMSNorm and a RoPE rotation by hand, and write both in NumPy."
+    - "Write a SwiGLU FFN, and size its hidden layer so it has as many weights as a plain FFN."
+  keys:
+    - "Pre-norm: `x = x + f(norm(x))`, plus one final norm; post-norm: `x = norm(x + f(x))`"
+    - "$\\text{RMSNorm}(x) = x \\,/\\, \\sqrt{\\tfrac{1}{d}\\sum_i x_i^2}$, no mean subtracted"
+    - "RoPE: rotate each pair of q and k by `position × θ`; the score depends only on the distance"
+    - "$\\text{FFN}(x) = \\big(\\text{SiLU}(x\\,W_{\\text{gate}}) \\odot (x\\,W_{\\text{up}})\\big)\\,W_{\\text{down}}$, with $d_{ff}' = \\tfrac{2}{3} d_{ff}$"
+    - "A modern block: `x = x + attn(RMSNorm(x))` with RoPE on q and k, then `x = x + SwiGLU(RMSNorm(x))`"
+  mistakes:
+    - "Averaging over the wrong axis (or without `keepdims=True`), so each word is not normalized separately."
+    - "Putting SiLU on the value instead of the gate, or multiplying gate and value with `@` instead of number by number."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import NormPathLab from '@viz/NormPathLab.astro'
+import RmsLab from '@viz/RmsLab.astro'
+import RopeLab from '@viz/RopeLab.astro'
+import GluLab from '@viz/GluLab.astro'
+
+The model you built in level 17 already has two habits of today’s large language models: it is one stack, and it
+puts the LayerNorm in front of each sublayer (pre-norm). A model built today has the same overall design:
+embeddings, attention, a feed-forward network, residuals, normalization. Inside each block, three parts are new.
+Each one answers a question. Can the normalization do less work? RMSNorm does. Can a score depend only on how far apart
+two tokens are, not on where they are? RoPE, positions by rotation, does. Can the feed-forward network reach a lower loss
+with the same number of weights? SwiGLU, a gated FFN, does. Section 2 first reviews pre-norm, the change your model
+already has.
+
+## 1. Decoder-only: one stack
+
+The 2017 design had two stacks: an encoder that reads the source and a decoder that writes the target, joined by
+cross-attention. Side trip [N7](/learn/encoder-decoder/) builds it. It is where the cross-attention in that diagram
+comes from. Every model from level 16 to level 21 is one stack. Nearly every large language model today is
+one stack too. Every block uses masked self-attention, and the “source” is just the beginning of the sequence.
+
+<Predict id="why-decoder-only" />
+
+## 2. Pre-norm, again: nothing rescales the residual path
+
+In level 16, section 3, each sublayer (attention or FFN, written `f`) was wrapped as `x = LayerNorm(x + f(x))`: add, then normalize. That is **post-norm**, the 2017 placement.
+Level 16’s decoder block, level 17’s model and nearly every model today use **pre-norm**: `x = x + f(LayerNorm(x))`.
+Only the input of the sublayer is normalized. One more LayerNorm comes after the last block.
+
+The difference is on the residual path: the straight path from the input to the output (level 16).
+Count the LayerNorms on it.
+
+<Gate requires="why-decoder-only">
+
+<NormPathLab />
+
+<Blank id="postnorm-count" />
+
+<Stuck q="Pre-norm still normalizes. Where did the normalization go?">
+
+Into the sublayer’s input, on the sublayer side. Each attention or FFN still sees a normalized input, so it works with
+numbers of a sensible size. What changes is the residual path: things are only *added* to it. In post-norm, every layer
+rescales the whole sum x, including all that the earlier layers added.
+
+Take x = [1, −1, 0.5, −0.5] and a sublayer output of [3, 3, −3, −3]. Post-norm keeps LN(x + f(x)) = [1.29, 0.64, −0.81, −1.13].
+From these numbers, x is hard to find again. Pre-norm keeps x + f(x) = [4, 2, −2.5, −3.5]: x is still in there, untouched, just added.
+
+</Stuck>
+
+Why does this help training? The gradient goes back along the same path. In a pre-norm stack, the gradient passes the
+one final norm first. After that it can go back along the residual path to an early layer, multiplied only by 1:
+there is no norm per layer. So early layers always get a gradient
+that is not too small, even in a very deep stack.
+
+<Deeper title="What post-norm needs instead, and what pre-norm costs">
+
+In a post-norm stack, that gradient passes through one normalization per layer, each dividing it by its input’s standard deviation.
+With dozens of layers, post-norm models only train with a long, careful learning-rate warmup; pre-norm models train well with many more settings.
+The cost: in pre-norm the residual path keeps growing as layers add to it, which is why there is one final LayerNorm before the output.
+
+</Deeper>
+
+</Gate>
+
+## 3. RMSNorm: skip the mean
+
+LayerNorm subtracts the mean of each vector, then divides by its standard deviation (std). **RMSNorm** skips the mean.
+It divides by the root mean square, the square root of the average of the squares:
+
+$$
+\text{RMSNorm}(x) = \frac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2}}
+$$
+
+<Gate requires="postnorm-count">
+
+<RmsLab hide={{ rms: "rms-value", out: "rms-out0" }} />
+
+<Blank id="rms-value" />
+
+<Gate requires="rms-value">
+
+<Blank id="rms-out0" />
+
+Experiments showed that subtracting the mean contributes little: models with RMSNorm train just as well. RMSNorm computes
+one average instead of two and has no shift. The saving is small for one norm, but every layer makes it at every step.
+In real models, both versions then multiply each column by a learned gain. Level 16’s examples did not use it, to keep the
+numbers simple. RMSNorm also has no learned shift.
+
+In the code, `keepdims=True` keeps the averaged axis with size 1, so a (B, L, d) input gives a (B, L, 1) result.
+So each word is divided by its own number: `np.mean(np.ones((2, 3)), axis=-1, keepdims=True).shape` is `(2, 1)`.
+
+<CodeBlank id="rmsnorm-code" />
+
+</Gate>
+
+</Gate>
+
+## 4. RoPE: positions by rotation
+
+Level 16 *added* a position vector to each word. Today’s models instead **rotate** q and k by an angle that grows with
+the position. Take the numbers of q in pairs; rotate each pair by `position × θ`. Do the same for k. Then take the dot product as usual.
+
+Rotating a pair [x, y] counter-clockwise by an angle a gives
+
+$$
+[\,x\cos a - y\sin a,\;\; x\sin a + y\cos a\,]
+$$
+
+Check it on a quarter turn, a = 90°, where cos a = 0 and sin a = 1: [1, 0] becomes [0, 1], and [0, 1] becomes [−1, 0].
+The length never changes; only the direction does. Angles here are in radians: a full turn is 2π ≈ 6.28, so 1 radian is about 57°.
+
+Here is a single pair with θ = 0.5 radians per position. q = [1, 0] and k = [0, 1]: without rotation they are at
+right angles, so their score is 0 wherever they are in the sentence.
+
+<Gate requires="rmsnorm-code">
+
+<RopeLab hide={{ qx: "rope-qx", score: "rope-score" }} />
+
+<Blank id="rope-qx" />
+
+<Gate requires="rope-qx">
+
+<Predict id="rope-shift" />
+
+<Blank id="rope-score" />
+
+Rotating q by mθ and k by nθ changes the angle between them by exactly (m − n)θ. A dot product only depends on
+the lengths and the angle, so **the score only depends on the distance m − n**, never on where the pair sits in the text.
+A language model needs this: “the word two places back” means the same at position 5 and at position 5,000.
+
+<CodeBlank id="rope-code" />
+
+<Deeper title="Many pairs, many frequencies">
+
+A real head has `d_k` numbers, so `d_k` / 2 pairs. Each pair rotates at its own speed: θᵢ = 10000^(−2i/`d_k`).
+With `d_k` = 4 the two pairs turn at 1 and 0.01 radians per position. Fast pairs distinguish neighboring words.
+Slow pairs still change between words that are thousands of positions apart. A clock works the same way: the minute
+hand is fast and the hour hand is slow.
+`demo.py` checks it with a random 4-number q and k: the score at positions (7, 4) and (107, 104) is the same 1.058526.
+
+RoPE does not make a model work on texts longer than the ones it trained on. A distance longer than any seen in
+training gives the slow pairs angles the model has never seen, so the scores there are still new to it.
+
+With a KV cache (level 18), k is rotated before it is stored. So the k rows in the cache already carry their
+positions, and an old k is never rotated again. v is not rotated at all: RoPE changes only the scores, not the
+numbers that the weights mix.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 5. SwiGLU: a gate inside the feed-forward network
+
+The 2017 FFN is `ReLU(x @ W1) @ W2`. Today’s FFN has a third matrix and multiplies two things: a **gate** that decides
+how much passes, and a **value** that is passed:
+
+$$
+\text{FFN}(x) = \big(\text{SiLU}(x\,W_{\text{gate}}) \odot (x\,W_{\text{up}})\big)\,W_{\text{down}}
+$$
+
+$$
+\text{SiLU}(z) = z \cdot \text{sigmoid}(z)
+$$
+
+The symbol ⊙ means “multiply number by number”, like `*` in NumPy. Each hidden unit computes one number from its gate
+column and one from its value column, then multiplies them.
+
+<Gate requires="rope-code">
+
+<GluLab hide="silu-1" />
+
+<Blank id="silu-1" />
+
+<Gate requires="silu-1">
+
+Three matrices instead of two would mean 50% more weights. So the hidden size `d_ff` is shrunk to keep the total the same.
+
+<Blank id="swiglu-hidden" />
+
+<Stuck q="If the total number of weights is the same, why is it better?">
+
+There is no simple proof. Measured on real training runs, gated FFNs reach a lower loss for the same number of weights.
+Here is one way to see it. In ReLU, a unit is on or off, and only its own input decides. In SwiGLU, one product of x
+(the gate) decides how much of another product of x (the value) passes. So the FFN can multiply two different numbers
+made from the same word. A plain FFN cannot do that in one layer.
+
+</Stuck>
+
+Now write it. Each word is one row of `x`.
+
+1. `x @ W_gate` and `x @ W_up` are both (L, `d_ff`).
+2. `*` multiplies them number by number (the ⊙).
+3. `@ W_down` turns each row into `d_model` numbers again.
+
+<CodeBlank id="swiglu-code" />
+
+</Gate>
+
+</Gate>
+
+
+## 6. A modern block, all together
+
+Put the three new parts into level 16’s pre-norm decoder block. You get the block of nearly every large language model today:
+
+```python
+h = RMSNorm(x)
+# causal mask; q and k rotated by RoPE, no position vector added
+x = x + attention(h)
+h = RMSNorm(x)
+x = x + SwiGLU(h)
+```
+
+A stack of these blocks, one final RMSNorm, then the output layer. Every part on this page made something better:
+
+- pre-norm keeps deep stacks stable;
+- RMSNorm is cheaper;
+- RoPE makes scores depend on distance only;
+- SwiGLU reaches a lower loss with the same number of weights.
+
+<Gate requires="swiglu-code">
+
+<TryIt>
+
+In the RoPE lab of section 4, set q’s position to 2 and k’s to 0, then press “both +1” a few times.
+The score stays 0.84: both vectors turn, but the distance stays 2. Now move only k’s slider and watch the score
+follow the distance m − n. In a very long text, the same distance appears at position 5 and at position 5,000.
+Which of the three new parts makes the scores agree there?
+
+</TryIt>
+
+The GPT you write in level 21 uses pre-norm and one of the three new parts, RMSNorm. It keeps learned position vectors and a
+ReLU FFN. At the end of level 21, an optional exercise lets you replace the learned positions with RoPE. Before that, level 20 asks what
+running such a model costs: how much GPU memory it needs while it writes, and how many tokens per second it can produce.
+
+</Gate>

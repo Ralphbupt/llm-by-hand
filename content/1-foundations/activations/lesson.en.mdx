@@ -1,0 +1,226 @@
+---
+title: Activation functions
+level: "4"
+order: 4
+part: foundations
+question: Why does a network need a non-linear step, and which one should it use?
+run: browser
+checkpoint: sigmoid-grad
+testOut: [two-layer, sig-d0, vanish-10, relu-grad, sigmoid-grad]
+recap:
+  can:
+    - "Show that two layers with no activation between them merge into one layer."
+    - "Read the slope of sigmoid, tanh, ReLU and GELU, and compute them in NumPy for a whole array."
+    - "Explain why the gradient vanishes through many sigmoid layers."
+  keys:
+    - "`(x @ W1) @ W2 = x @ (W1 @ W2)`: without an activation, a stack is still one line"
+    - "$\\sigma'(x) = \\sigma(x)\\,(1 - \\sigma(x))$, at most 0.25"
+    - "ReLU slope: 1 on the right of 0, 0 on the left"
+    - "Through $n$ sigmoid layers, ignoring the weights, at most $(\\max \\sigma')^n$ reaches the first layer"
+  mistakes:
+    - "Writing `if x > 0:` for a whole array; compare the array itself instead."
+    - "Computing `h = W1 @ x` with x as a column; in this course x is a row, so `h = x @ W1`."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import MlpLab from '@viz/MlpLab.astro'
+import ActivationLab from '@viz/ActivationLab.astro'
+
+In level 3 one neuron drew one straight line, and no line can separate XOR. On XOR the neuron's best
+cross-entropy loss was ln 2 ≈ 0.6931, the cost of a coin flip. This level stacks neurons, finds out what must sit
+between them, and compares the four functions used there most often.
+
+## 1. Stacking neurons: does that fix it?
+
+
+If one line is not enough, use several neurons side by side (a **layer**) and pass their outputs to
+another neuron. First try it without sigmoid, with plain linear layers.
+
+Take a point $x = [2, 1]$ and two layers:
+
+$$
+W_1 = \begin{bmatrix} 1 & 2 \\ 0 & 1 \end{bmatrix} \qquad W_2 = \begin{bmatrix} 1 \\ 1 \end{bmatrix}
+$$
+
+The first layer computes $h = x W_1$. The second computes $h W_2$.
+(In math, $x W_1$ with nothing between the two letters means the matrix product `x @ W1` in code.)
+
+<Blank id="two-layer" />
+
+<Gate requires="two-layer">
+
+Matrix multiplication lets you group the two weight matrices first: $(x W_1) W_2 = x (W_1 W_2)$.
+
+<Blank id="merged" />
+
+So the two layers are really one layer with weights $W_1 W_2$. However many linear layers you stack,
+the result is still a single line. Extra layers add nothing unless something nonlinear sits **between** them.
+
+<Deeper title="What the nonlinearity actually does">
+
+Put a nonlinear function between the layers, for example $h = \tanh(x W_1 + b_1)$. tanh is sigmoid stretched to
+the range −1 to 1: $\tanh(x) = 2\,\text{sigmoid}(2x) - 1$. Now $(\tanh(\cdot)) W_2$
+can't be rewritten as one matrix, because tanh does not distribute over addition: $\tanh(a + b) \ne \tanh(a) + \tanh(b)$.
+
+Each hidden neuron still draws one line, then tanh bends its output into "this side" (about +1) or
+"that side" (about −1). The output neuron combines those answers. Two lines plus a combination can make
+the XOR pattern: "between the two lines" is 1, "outside" is 0. That is the pattern you'll see the network
+find in the lab below.
+
+Any nonlinear function works in principle. The last part of this page compares the four you will meet most.
+
+</Deeper>
+
+Here is a network with 6 hidden neurons, learning XOR for real in your browser. Its hidden neurons use tanh
+(sigmoid stretched to −1…1, see the box above). Press Train.
+
+<MlpLab />
+
+<Predict id="no-activation" />
+
+</Gate>
+
+<Gate requires="no-activation">
+
+With the activation back on, the network gets all four points right.
+
+<TryIt>
+
+Press “New random weights” a few times with the activation on. The network finds a different boundary each time, but always
+gets all four points right. What patterns do you see? Does it ever use one line?
+
+</TryIt>
+
+Each of the 6 hidden neurons in the lab uses tanh. Is tanh the best choice? The next sections compare it with three other functions.
+
+## 2. Four activation functions
+
+The function between the layers is called the **activation function**. Here are the four you will meet. f′(x), “f prime of x”, is the
+slope of f at x (level 2).
+
+| name | f(x) | slope f′(x) |
+|---|---|---|
+| sigmoid | $\sigma(x) = 1 / (1 + e^{-x})$ | $\sigma(x)\,(1 - \sigma(x))$ |
+| tanh | $\tanh(x)$ | $1 - \tanh(x)^2$ |
+| ReLU | $\max(0, x)$ | 1 if $x > 0$, else 0 |
+| GELU | $x \cdot \Phi(x)$ | $\Phi(x) + x\,\varphi(x)$ |
+
+$\Phi(x)$ is the chance that a random number from the bell curve (mean 0, standard deviation 1; level 10 shows it)
+lands below $x$, and $\varphi$ is the bell curve itself.
+You don't need to memorize them. What matters is the **slope**, because training is driven by slopes:
+level 6 shows that the gradient passes backwards through every layer, and at each layer it is multiplied
+by that layer's f′.
+
+<Blank id="sig-d0" />
+
+</Gate>
+
+<Gate requires="sig-d0">
+
+ReLU is even simpler. Its slope has only two values.
+
+<Blank id="relu-dneg" />
+
+</Gate>
+
+<Gate requires="relu-dneg">
+
+Now chain the slopes. Every layer multiplies the gradient by its own f′. (The weights multiply it too. Here we
+ignore them; level 7 shows how the starting weight scale changes the picture.)
+
+<Predict id="deep-sigmoid" />
+
+<Blank id="vanish-10" />
+
+</Gate>
+
+<Gate requires="vanish-10">
+
+## 3. See all four at once
+
+Drag on any panel. The solid line is f and the dashed line is its slope. The table at the bottom multiplies
+the slope through n layers.
+
+<ActivationLab hide={{ gelu: "gelu-neg" }} />
+
+Three things to see:
+
+- **Sigmoid and tanh become flat at both ends.** Move x to 3: tanh′(3) is about 0.0099. A neuron whose input
+  is that far from 0 passes almost no gradient back. This is called **saturation**. Stack many such layers and the
+  gradient for the early layers shrinks toward zero: the **vanishing gradient**.
+- **ReLU never flattens on the right.** Its slope is exactly 1 for every positive input, so gradients pass
+  through unchanged. That is why it made deep networks trainable.
+- **ReLU is completely flat on the left.** A neuron whose input is negative for every example gets zero gradient
+  and never changes again.
+
+<Stuck q="If ReLU’s slope is 0 on the left, how does a neuron that went negative ever come back?">
+
+It doesn't, through that path. If a neuron's input $z$ is negative for every training example, its slope is 0
+for every example, so none of its incoming weights get any gradient. Nothing moves it back. This is a
+**dead ReLU**. With a large learning rate a big update can push many neurons there at once, and a large part of the
+network stops learning.
+
+Other neurons can still change what feeds into it, so it can sometimes start learning again. But this does not happen reliably.
+The usual ways to prevent it are a sensible starting scale for the weights (level 7), a learning rate that isn't too large,
+and variants that keep a small slope on the left, such as Leaky ReLU ($0.01x$ for $x < 0$). GELU also has a small
+negative side near 0, though for very negative inputs its slope gets close to 0 too.
+
+</Stuck>
+
+<Blank id="gelu-neg" />
+
+</Gate>
+
+<Gate requires="gelu-neg">
+
+<Deeper title="Why GELU replaced ReLU in many Transformers">
+
+GELU looks like ReLU from far away: about 0 for very negative inputs, about $x$ for large positive ones.
+Up close it differs in two ways that help training:
+
+1. **It is smooth.** ReLU has a corner at 0, so its slope jumps from 0 to 1. GELU's slope changes
+   gradually, which makes the loss surface smoother for the optimizer.
+2. **It is not dead on the left.** Between about −3 and 0 it dips slightly below zero and still has a slope,
+   so a neuron whose input becomes negative keeps getting gradient and can come back.
+
+You can read GELU as "multiply $x$ by the chance that it should pass": large $x$ passes almost fully,
+very negative $x$ is blocked, and values near 0 pass partly. The small Transformer in level 16 keeps ReLU because it is simpler to compute
+by hand. Many large models use GELU there instead, and level 19 shows the gated version that most models use today.
+
+</Deeper>
+
+## 4. Write the slope yourself
+
+Backpropagation (level 6) needs each activation's slope as a function. Two NumPy tools make this one line.
+A comparison works on every element of an array at once, and `.astype(float)` turns True/False into 1.0/0.0:
+
+```
+x = np.array([-1.0, 0.0, 2.0])
+x > 0                  # array([False, False,  True])
+(x < 1).astype(float)  # array([1., 1., 0.])
+```
+
+A plain `if x > 0:` does not work on a whole array, because Python cannot decide if the whole array is "true".
+Write ReLU's slope for a whole array.
+
+<CodeBlank id="relu-grad" />
+
+Now the sigmoid's slope from the table in section 2: $\sigma(x)\,(1 - \sigma(x))$. In code, $\sigma(x)$ is
+`1 / (1 + np.exp(-x))`, as in the neuron of level 3, and `np.exp` works on every element of an array.
+Compute $\sigma(x)$ once, give it a name, then use it twice.
+
+<CodeBlank id="sigmoid-grad" />
+
+<TryIt>
+
+In the lab, set x = 0.5 and n = 20. Which functions still pass a usable gradient after 20 layers?
+Now set x = −0.5. What happens to ReLU, and what happens to GELU?
+
+</TryIt>
+
+</Gate>

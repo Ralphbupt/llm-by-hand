@@ -1,0 +1,343 @@
+bcast-shape:
+  type: shape
+  prompt: "pred has shape (4, 1) and y has shape (4,). What is the shape of pred − y?"
+  answer: [4, 4]
+  after: "Broadcasting compares the shapes from the right: (4, 1) and (1, 4). Both 1s are repeated, so the result is (4, 4): every prediction minus every target. No error, just a wrong loss."
+  hints:
+    - when: { shape: [4] }
+      say: "That is what you wanted, but NumPy doesn’t know that. Compare the shapes from the right: (4, 1) and (4,)."
+    - when: { shape: [4, 1] }
+      say: "y is (4,), which broadcasts like (1, 4). Which sizes of 1 get repeated?"
+    - when: { any: true }
+      say: ["Broadcasting compares sizes from the right (level 1). Write y as (1, 4).", "(4, 1) against (1, 4): each 1 is repeated to match the other side."]
+
+bcast-b:
+  type: number
+  prompt: "A line fit on 4 points has a shape bug: pred − y has shape (4, 4), so the loss compares EVERY prediction with EVERY target 3, 3, 7, 7. The best the model can do is predict one number everywhere: the one with the smallest mean squared distance to 3, 3, 7, 7. Which number is it?"
+  answer: 5
+  tol: 0.01
+  after: "The mean, (3 + 3 + 7 + 7) / 4 = 5. The line ends flat at y = 5: w = 0, b = 5, and the loss stops at 4 instead of 0.8."
+  hints:
+    - when: { equals: 7 }
+      say: "7 is far from the two 3s. Which number is in the middle of all four?"
+    - when: { equals: 3 }
+      say: "3 is far from the two 7s. Which number is in the middle of all four?"
+    - when: { any: true }
+      say: ["Which single number is closest, on average, to all four targets?", "The number with the smallest mean squared distance to a list of numbers is their mean."]
+
+pred-overfit:
+  type: predict
+  prompt: "You train a small MLP on just 4 examples, again and again. After 500 steps the loss is still 0.69, the same as at the start. What does that tell you?"
+  options:
+    - "It needs more data"
+    - "Something in the model, the loss or the update is broken: a working setup memorizes 4 examples easily"
+    - "The model is too small for the task"
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "With only 4 examples, the model can simply memorize them. More data makes memorizing harder, not easier."
+    - when: { equals: 2 }
+      say: "Even a small MLP has hundreds of weights. That is plenty to memorize 4 examples."
+  reveal: "A working model memorizes 4 examples in a few hundred steps. If it can’t, the bug is in the code: the loss, the gradient, the update or the data you feed it. More data or a bigger model won’t fix that."
+
+numgrad:
+  type: number
+  prompt: "f(w) = w², w = 3, h = 0.01. f(w + h) = 9.0601 and f(w − h) = 8.9401. What is the numeric slope (f(w + h) − f(w − h)) / (2h)?"
+  answer: 6
+  tol: 0.01
+  after: "(9.0601 − 8.9401) / 0.02 = 0.12 / 0.02 = 6. The formula 2w also gives 6, so a gradient function that returns 2w passes the check."
+  hints:
+    - when: { equals: 0.12 }
+      say: "That is the top part only. Divide by 2h = 0.02."
+    - when: { equals: 12 }
+      say: "Divide by 2h = 0.02, not by h."
+    - when: { any: true }
+      say: ["Subtract first: 9.0601 − 8.9401.", "The top part is 0.12. Now divide by 2h."]
+
+pred-gradbug:
+  type: predict
+  prompt: "Fitting y = w·x + b to (1, 3), (2, 3), (3, 7), (4, 7) at w = 0.5, b = 0. The numeric gradient is dw = −21.5, db = −7.5. Someone’s formula gives dw = −10.75, db = −3.75. What is the most likely bug?"
+  options:
+    - "The formula forgot the factor 2 from the square"
+    - "The numeric gradient is wrong, because h is too small"
+    - "The formula has the wrong sign"
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "The numeric gradients are −21.5 and −7.5. Compare the formula’s numbers with them: what is the ratio?"
+    - when: { equals: 2 }
+      say: "Both answers are negative. Compare their sizes instead."
+  reveal: "Both formula numbers are exactly half the numeric ones. The derivative of error² is 2 × error, and the formula dropped the 2. The numeric check shows THAT something is wrong; the ratio between the numbers often shows WHAT."
+
+numgrad-code:
+  type: code
+  prompt: "Write the body of the loop: the numeric slope for entry i of w. Move w[i] up by h, then down by h, and put it back where it was. Replace ____ with as many lines as you need."
+  template: |
+    def num_grad(f, w, h=1e-5):
+        g = np.zeros_like(w)
+        for i in range(len(w)):
+            ____
+        return g
+
+    x = np.array([1., 2., 3., 4.])
+    y = np.array([3., 3., 7., 7.])
+    def loss_wb(p):                       # p = [w, b]
+        return ((p[0] * x + p[1] - y) ** 2).mean()
+
+    print(num_grad(loss_wb, np.array([0.5, 0.0])))   # the formula gives [-21.5, -7.5]
+  solution: |-
+    w[i] += h
+            fp = f(w)
+            w[i] -= 2 * h
+            fm = f(w)
+            w[i] += h
+            g[i] = (fp - fm) / (2 * h)
+  tests:
+    - expr: "num_grad(loss_wb, np.array([0.5, 0.0]))"
+      expect: [-21.5, -7.5]
+      tol: 0.001
+      say: "the line fit at w = 0.5, b = 0"
+    - expr: "num_grad(lambda v: (v ** 2).sum(), np.array([3.0, -1.0]))"
+      expect: [6, -2]
+      tol: 0.001
+      say: "f = w0² + w1² at (3, −1): slopes 2·3 and 2·(−1)"
+    - setup: "_p = np.array([0.5, 0.0]); num_grad(loss_wb, _p)"
+      expr: "_p"
+      expect: [0.5, 0.0]
+      tol: 0.0000001
+      say: "w is back where it was afterwards"
+  hints:
+    - when: { testFailed: 2 }
+      say: "The slopes are right, but w moved. After the two moves, add h back so w[i] ends where it started."
+    - when: { error: "IndentationError|unindent" }
+      say: "Every line goes inside the for loop, at the indentation of the ____."
+    - when: { error: "not defined" }
+      say: "Compute f(w) after each move and keep both values, for example fp and fm."
+    - when: { testFailed: 0 }
+      say: ["Move w[i] up by h and compute f(w). Then move it down to w[i] − h and compute f(w) again.", "From w[i] + h, how far must you move to reach w[i] − h?", "Keep the two values of f in two names, then use the numeric slope formula from above for g[i]."]
+    - when: { any: true }
+      say: ["Three moves of w[i]: up, down, and back. Call f(w) after the first two.", "The moves are +h, then −2h, then +h, so w[i] ends where it started.", "g[i] is the difference of the two f values, divided by the distance between the two points."]
+  after: "Moving one entry at a time gives one slope per entry: g[i] is the slope of f in the direction of w[i]. Putting w[i] back matters, because the next entry’s slope must be measured at the same w. This costs two calls of f per weight, so it is a check, not a way to train."
+
+diverge-w:
+  type: number
+  prompt: "f(w) = w², so the gradient is 2w. Start at w = 1 and take gradient steps w ← w − lr · 2w with lr = 1.5. What is w after 3 steps?"
+  answer: -8
+  tol: 0
+  after: "Each step is w − 3w = −2w: 1 → −2 → 4 → −8. The step jumps past the minimum and lands farther away each time."
+  hints:
+    - when: { equals: 8 }
+      say: "Check the sign: each step multiplies w by −2."
+    - when: { equals: -2 }
+      say: "That is after one step. Two more."
+    - when: { any: true }
+      say: ["w − 1.5 · 2w = w − 3w. What does one step multiply w by?", "After one step, w = 1 − 3 = −2. Do the same twice more."]
+
+pred-nan:
+  type: predict
+  prompt: "The loss goes 16, 86, 466, 2550, … then inf, and a few dozen steps later NaN. Where can NaN come from, if every number started out normal?"
+  options:
+    - "From inf in a calculation: inf − inf, 0 × inf and inf / inf are NaN"
+    - "From very small numbers that round to 0"
+    - "NaN appears at random on a GPU"
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "A number that rounds to 0 is just 0, and 0 + 1 is still 1. Which operations on inf have no answer?"
+    - when: { equals: 2 }
+      say: "NaN has a cause. Look at what the numbers were just before it."
+  reveal: "Once a value is inf, sums like inf − inf or products like 0 × inf have no answer, so they give NaN. After that, NaN spreads: NaN + 1 = NaN, and every weight it touches becomes NaN. Look for the first step where a value is inf or NaN, and fix the cause there, usually a learning rate that is too large or a log(0)."
+
+zero-grad-sum:
+  type: number
+  prompt: "A loop forgets `opt.zero_grad()`. For one weight, backward() gives a gradient of 2 at each of the first 3 steps. What is that weight’s .grad when opt.step() runs at step 3?"
+  answer: 6
+  tol: 0
+  after: "backward() adds into .grad: 2, then 4, then 6. The third step uses 6, three times the real gradient, and it keeps growing."
+  hints:
+    - when: { equals: 2 }
+      say: "That is the gradient of one step. backward() adds into .grad (level 9). Nothing clears it here."
+    - when: { any: true }
+      say: ["backward() adds the new gradient to what .grad already holds.", "After step 1, .grad is 2. After step 2, it is 2 + 2 = 4. And after step 3?"]
+
+pred-shift:
+  type: predict
+  prompt: "A next-token model is trained on [<bos>, a, b, c]. The bug: the targets are the inputs themselves, [<bos>, a, b], instead of [a, b, c]. The training loss falls almost to 0 within a few steps. What happens when it writes text?"
+  options:
+    - "It writes well: the loss is almost 0"
+    - "It writes nonsense: it learned to copy the token it is looking at, which needs no learning about language"
+    - "It does not write anything"
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "A loss near 0 that fast is suspicious. What is the easiest way to predict the token you can already see?"
+    - when: { equals: 2 }
+      say: "It always writes something. What has it learned to predict?"
+  reveal: "It learned to copy its own input, which is easy, so the loss drops fast. At generation time it keeps repeating the last token. A loss that falls much faster than you expect is a symptom too: usually the input already contains the answer (no shift, or a mask that lets a word see the future)."
+
+boss-line:
+  type: code
+  prompt: "Boss, part A. The teammate’s version, in the comments, has three bugs. Write a working body for `train_line` in place of ____. As many lines as you need."
+  template: |
+    def train_line(x, y, lr=0.05, steps=2000):
+        # A teammate's version. It runs without an error, but the line it learns is wrong.
+        #   w, b = 0.5, 0.0
+        #   gw, gb = 0.0, 0.0
+        #   losses = []
+        #   for step in range(steps):
+        #       pred = (w * x + b).reshape(-1, 1)
+        #       err = pred - y
+        #       losses.append((err ** 2).mean())
+        #       gw += (2 * err * x.reshape(-1, 1)).mean()
+        #       gb += (2 * err).mean()
+        #       w = w + lr * gw
+        #       b = b + lr * gb
+        #   return w, b, losses
+        ____
+
+    x = np.array([1., 2., 3., 4.])
+    y = np.array([3., 3., 7., 7.])
+    w, b, losses = train_line(x, y)
+    print(round(w, 3), round(b, 3), round(losses[-1], 3))    # should be 1.6 1.0 0.8
+  reference: |-
+    w, b = 0.5, 0.0
+        losses = []
+        for step in range(steps):
+            err = w * x + b - y
+            losses.append((err ** 2).mean())
+            gw = (2 * err * x).mean()
+            gb = (2 * err).mean()
+            w = w - lr * gw
+            b = b - lr * gb
+        return w, b, losses
+  tests:
+    - expr: "list(train_line(np.array([1., 2., 3., 4.]), np.array([3., 3., 7., 7.]))[:2])"
+      expect: [1.6, 1.0]
+      tol: 0.01
+      say: "the four points: the best line is w = 1.6, b = 1"
+    - expr: "train_line(np.array([1., 2., 3., 4.]), np.array([3., 3., 7., 7.]))[2][-1]"
+      expect: 0.8
+      tol: 0.01
+      say: "the final loss is the best possible, 0.8"
+    - expr: "train_line(np.array([1., 2., 3., 4.]), np.array([3., 3., 7., 7.]))[2][0]"
+      expect: 16.375
+      tol: 0.001
+      say: "the first loss, at w = 0.5, b = 0, is 16.375"
+    - expr: "list(train_line(np.array([0., 1., 2.]), np.array([1., 3., 5.]), lr=0.1)[:2])"
+      expect: [2.0, 1.0]
+      tol: 0.01
+      say: "three points exactly on y = 2x + 1"
+  hints:
+    - when: { error: "IndentationError|unindent" }
+      say: "Every line goes inside the function, at the indentation of the ____ (the for-loop body one step deeper)."
+    - when: { testFailed: 2 }
+      say: ["The line is right, but losses[0] is not the loss at the start, w = 0.5 and b = 0. Print losses[0].", "Record the loss of each step before you change w and b in that step."]
+    - when: { testFailed: 0 }
+      say: ["Run the three checks of this level on it: shapes, how .grad is reset, and the direction of the step.", "pred should be (4,), the gradient of each step should be that step’s alone, and a step goes against the gradient."]
+    - when: { any: true }
+      say: ["Three bugs: one shape, one sum that is never reset, one sign.", "Print the shape of pred − y for the 4 points. Is it the shape you expect?", "Then follow gw for two steps: is it this step’s gradient alone? And does the update go with the gradient or against it?"]
+  after: "Three bugs that raise no error, three checks: err had shape (4, 4) because (4, 1) − (4,) broadcasts; gw and gb added up every step’s gradient because += never resets them; and w + lr × gw makes the loss larger instead of smaller."
+
+boss-lm:
+  type: code
+  prompt: "Boss, part B. `lm_batch` builds one next-token batch: inputs X, targets Y, and keep (True where the loss should count). The teammate’s version, in the comments, has two bugs. Write a working body in place of ____."
+  template: |
+    def collate(seqs, pad=0):                 # correct (level U4)
+        L = max(len(s) for s in seqs)
+        P = np.full((len(seqs), L), pad)
+        for i, s in enumerate(seqs):
+            P[i, :len(s)] = s
+        return P
+
+    def lm_batch(seqs, pad=0):
+        # A teammate's version:
+        #   P = collate(seqs, pad)            # (B, L), PAD at the end
+        #   X = P[:, :-1]
+        #   Y = P[:, :-1]
+        #   keep = Y == pad
+        #   return X, Y, keep
+        ____
+
+    X, Y, keep = lm_batch([[1, 5, 3, 8], [1, 2, 9], [1, 7]])
+    print(X); print(Y); print(keep)
+  reference: |-
+    P = collate(seqs, pad)
+        X = P[:, :-1]
+        Y = P[:, 1:]
+        keep = Y != pad
+        return X, Y, keep
+  tests:
+    - expr: "lm_batch([[1, 5, 3, 8], [1, 2, 9], [1, 7]])[0]"
+      expect: [[1, 5, 3], [1, 2, 9], [1, 7, 0]]
+      say: "X: every token except the last of each row"
+    - expr: "lm_batch([[1, 5, 3, 8], [1, 2, 9], [1, 7]])[1]"
+      expect: [[5, 3, 8], [2, 9, 0], [7, 0, 0]]
+      say: "Y: the next token at every position (shifted by one)"
+    - expr: "lm_batch([[1, 5, 3, 8], [1, 2, 9], [1, 7]])[2]"
+      expect: [[true, true, true], [true, true, false], [true, false, false]]
+      say: "keep: True for real targets, False for PAD targets"
+    - expr: "int(lm_batch([[1, 4], [1, 6, 2]], pad=-1)[2].sum())"
+      expect: 3
+      say: "pad = −1: three real targets"
+  hints:
+    - when: { testFailed: 1 }
+      say: ["Print X and Y for the first row, [1, 5, 3, 8]. How should they differ?", "Y equals X. The target at position t is the token at position t + 1. Which column of P holds the target for the first column of X?"]
+    - when: { testFailed: 2 }
+      say: ["Print keep for the third row, [1, 7]. Which of its targets are PAD?", "keep is True on the PAD targets. It should be the opposite. Which comparison is True for a real token and False for PAD?"]
+    - when: { error: "IndentationError|unindent" }
+      say: "Every line goes inside `lm_batch`, at the indentation of the ____."
+    - when: { any: true }
+      say: ["Two bugs: the shift and the mask.", "Write out X and Y for the first row, [1, 5, 3, 8]. They must differ by one position.", "Then read keep for the third row, [1, 7]: which targets are real tokens?"]
+  after: "X drops the last token and Y drops the first, so Y[t] is the token after X[t]. keep marks the targets the loss counts: real tokens, not PAD. With Y = X, the model learns to copy its input: the loss falls fast, but the model learns nothing useful."
+
+boss-report:
+  type: code
+  prompt: "Boss, part C. Paste the last line that python check.py `my_train.py` printed, between the quotes. If a check still fails, you can paste its FAIL line for a hint on the first failing check."
+  paste: check.py
+  template: |
+    line = "____"      # it looks like: U5 PASS 0.980 1a2b3c4d
+    print(line)
+  mustFail: ["U5 PASS 1.000 00000000", "U5 PASS 0.980", "U5 PASS 7 eae66215"]
+  tests:
+    - setup: "import re\n_p = line.split()\n_bits = _p[2] if _p[1] == 'FAIL' else '11111'"
+      expr: "int(len(_p) == 4 and _p[0] == 'U5' and (_p[1] == 'PASS' and bool(re.fullmatch(r'0\\.[0-9]{3}|1\\.000', _p[2])) or _p[1] == 'FAIL' and bool(re.fullmatch('[01]{5}', _p[2]))))"
+      expect: 1
+      say: "a line from check.py: U5, PASS or FAIL, a number, the code"
+    - expr: "['llm-by-hand/U5/' + _p[2], _p[3]]"
+      sha256Pair: true
+      say: "the code matches the rest: the line is unchanged"
+    - expr: "int(_bits[0] == '1')"
+      expect: 1
+      say: "check 1, split"
+    - expr: "int(_bits[1] == '1')"
+      expect: 1
+      say: "check 2, batches"
+    - expr: "int(_bits[2] == '1')"
+      expect: 1
+      say: "check 3, forward"
+    - expr: "int(_bits[3] == '1')"
+      expect: 1
+      say: "check 4, `train_step`"
+    - expr: "int(_bits[4] == '1' and _p[1] == 'PASS' and float(_p[2]) >= 0.95)"
+      expect: 1
+      say: "check 5: held-out accuracy at least 0.95"
+  hints:
+    - when: { error: "IndexError|ValueError" }
+      say: "Paste the whole last line, with all four parts: U5, PASS or FAIL, the number and the code."
+    - when: { testFailed: 0 }
+      say: "Paste the last line that check.py printed, the one that starts with U5."
+    - when: { testFailed: 1 }
+      say: "The code doesn’t match the rest of the line. Copy the line again exactly as check.py printed it, without editing it."
+    - when: { testFailed: 2 }
+      say: ["Check 1 says some points are in both sets. A held-out point the model trained on makes the held-out accuracy look better than it is.", "Look at split: which rows does each set take? Write out the two slices for n = 10.", "The held-out set should start where the training set stops."]
+    - when: { testFailed: 3 }
+      say: ["Check 2 says points arrive with the wrong class: about half of them, as if the classes were shuffled separately.", "Look at batches: how many random orders does it make?", "The inputs and the classes must be picked with the same order (level U4)."]
+    - when: { testFailed: 4 }
+      say: ["Check 3 says every row of forward(x) sums to 1. What has turned the scores into that?", "Look at what `F.cross_entropy` expects as its input (level 10): probabilities, or raw scores?", "`F.cross_entropy` applies softmax itself. A softmax in forward makes it apply softmax twice."]
+    - when: { testFailed: 5 }
+      say: ["Check 4 says that two calls on the same batch move the weights about 1.5 times as far as two plain gradient steps. The second step is too big.", "loss.backward() adds into .grad (level 9). What resets it?", "Each step needs `opt.zero_grad()` before loss.backward()."]
+    - when: { testFailed: 6 }
+      say: ["Checks 1 to 4 pass, but the held-out accuracy is below 0.95.", "Did you change train or `make_data`? They were correct. Compare them with `broken_train.py`."]
+    - when: { any: true }
+      say: "Paste the last line exactly as check.py printed it."
+  after: "Four bugs, and none raised an error: a held-out set that was also trained on, classes shuffled separately from their points, softmax applied twice, and gradients that kept adding up. Each one showed only as a number that was wrong. The code at the end of the line only shows that you pasted it unchanged; this part relies on your honesty."

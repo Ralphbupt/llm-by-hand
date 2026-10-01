@@ -1,0 +1,6 @@
+---
+import Lab from './NeuronLab.svelte'
+interface Props { hide?: { z?: string; p?: string } }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

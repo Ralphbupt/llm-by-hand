@@ -1,0 +1,318 @@
+---
+title: The parts of a Transformer
+short: "Transformer parts"
+level: "16"
+order: 16
+part: theory
+question: What do positional encoding, the feed-forward network, residuals, and LayerNorm each do, and how do they make a decoder block?
+run: browser
+checkpoint: decoder-block
+testOut: [cat-lit, ln-clean, ffn-block, block-ln-count, decoder-block]
+recap:
+  can:
+    - "Say why attention needs positional encoding and give the shape of the position table."
+    - "Run the FFN and LayerNorm by hand on one word, and write the FFN sublayer with its residual in NumPy."
+    - "Build a pre-norm decoder block from masked self-attention and the FFN, and write a stack of them in NumPy."
+  keys:
+    - "$PE[pos][2k] = \\sin\\!\\left(\\frac{pos}{10000^{2k/d}}\\right)$, cos for column 2k + 1; PE is `(L, d_model)`"
+    - "FFN: `(3, 2) @ (2, 4)` → `(3, 4)` → ReLU → `@ (4, 2)` → `(3, 2)`, each word separately"
+    - "Post-norm wraps a sublayer as `LayerNorm(x + sublayer(x))`; LayerNorm uses the last axis: [1, 1, 5, 5] → [−1, −1, 1, 1]"
+    - "A pre-norm decoder block adds attention, then the FFN, to x; each reads only a LayerNorm copy of x. A stack of blocks ends with one final LayerNorm"
+  mistakes:
+    - "Normalizing each column across words instead of each word’s own numbers: LayerNorm works on the last axis."
+    - "Normalizing the sum in a pre-norm block: the LayerNorm goes only into the sublayer, and x is added back untouched."
+glossarySkip: [activation function]
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import PositionLab from '@viz/PositionLab.astro'
+import FfnLab from '@viz/FfnLab.astro'
+import NormLab from '@viz/NormLab.astro'
+import LayerFlowLab from '@viz/LayerFlowLab.astro'
+
+Attention is the main part, but a Transformer layer has four more. Each one fixes a specific problem.
+The best way to see what a part does is to remove it and see what goes wrong. That is what every lab on this page lets you do.
+
+## 1. Positional encoding: attention can't see order
+
+Look at the formula from level 14 again: every word is compared with every word, and the output is a weighted sum.
+Nothing in it says which word came first. Try it before you continue.
+
+<Predict id="swap-no-pe" />
+
+<PositionLab hide={{ pe01: "pe-0-1" }} />
+
+<Gate requires="swap-no-pe">
+
+The fix: before attention, **add** a different vector to each position. Word vector + position vector.
+Now "cat at position 0" and "cat at position 2" are different inputs, so they give different outputs.
+
+The position vectors are made of sines and cosines at different frequencies (how fast each one repeats).
+With 2 numbers per word, position `pos` gets `[sin(pos), cos(pos)]`.
+
+<Blank id="pe-0-1" />
+
+<Blank id="pe-shape" />
+
+<Stuck q="Why not just add 1, 2, 3, … to every number?">
+
+Two problems. The numbers grow without limit. Position 500 would add 500, but a word’s numbers are only a few units in size.
+So the word’s own numbers would be too small to matter. And a model trained on sentences of length 20 would see
+position 300 for the first time when it is used.
+
+Sines and cosines stay between −1 and 1 forever, and every position still gets its own pattern. In the stripes,
+the left columns change quickly (they distinguish neighbors) and the right columns change slowly (they distinguish
+far-apart positions). A clock works the same way: the minute hand is fast and the hour hand is slow.
+
+</Stuck>
+
+<Stuck q="Why does the position table have 16 rows when this sentence uses only 3?">
+
+The position table is built once, for the longest sentence the model will see (16 here). A sentence of L tokens takes
+the first L rows: `PE[:3]` for 3 tokens. The two tables are used differently:
+
+| table | which row a token gets |
+|---|---|
+| embedding table (level 13) | chosen by **which** token it is (any row; “cat” is always row 5) |
+| position table | chosen by **where** the token is: always rows 0, 1, 2, … in order |
+
+</Stuck>
+
+<Stuck q="Why is the word vector multiplied by a number before the position is added?">
+
+Level 17’s model does `x = embedding * √d_model + PE`. With `d_model` = 4, take the word [−0.77, −0.62, 0.91, −0.28]
+and PE[0] = [0, 1, 0, 1]:
+
+- word + PE[0] = [−0.77, 0.38, 0.91, 0.72]. The second and fourth numbers change sign: the position replaced part of the word.
+- word × 2 + PE[0] = [−1.54, −0.24, 1.82, 0.44]. The word’s numbers are now bigger than the position’s.
+
+Position numbers are fixed, between −1 and 1, so the factor decides how strong the word is compared with its position.
+The usual explanation: if the embedding table starts with numbers of size about 1/√`d_model`, multiplying by √`d_model`
+makes the word about the same size as the position. So “what the word is” is not hidden by “where it is”.
+Level 17 shows the numbers in a real model, and level 21 shows a model that needs no factor.
+
+</Stuck>
+
+<Blank id="sqrt-dmodel" />
+
+<Deeper title="The formula for any model width">
+
+For position `pos`, the pair of columns 2k and 2k + 1 gets:
+
+$$PE[pos][2k] = \sin\!\left(\frac{pos}{10000^{2k/d}}\right)$$
+
+$$PE[pos][2k+1] = \cos\!\left(\frac{pos}{10000^{2k/d}}\right)$$
+
+Columns are grouped in pairs. Pair 0 turns at speed 1 per position; each later pair turns more slowly. The last pair turns at $10000^{-(d-2)/d}$: close to 1/10000 when d is large, and 1/100 when d = 4.
+With d = 2 there is only pair 0, so the vector is `[sin(pos), cos(pos)]`. Many newer models learn their position vectors instead,
+or rotate Q and K by the position (level 19). The goal is the same: give attention something that differs by position.
+
+</Deeper>
+
+<Deeper title="A causal mask alone shows a little of the order">
+
+With the causal mask of level 15, word i can see exactly i + 1 words. So even without positional encoding, the first word
+always averages over one word and the tenth over ten: the outputs do depend a little on position. That is far too weak to
+distinguish “dog bites man” from “man bites dog”, which is why decoders still add position vectors (or rotate Q and K).
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="pe-shape">
+
+## 2. The feed-forward network: each word is processed separately
+
+Attention mixes words together. It is a weighted average, so by itself it can only average.
+After it, every word passes through a small MLP, the same kind you built in level 5:
+widen, ReLU, narrow back. The same weights are used for every word, and each word is processed **separately**.
+It is called **feed-forward** because the numbers only flow forward through it, with no loop back.
+Because it works on each position separately, it is also called the **position-wise** feed-forward network. The width of the
+hidden layer is called **`d_ff`**: here 4, and in the 2017 design 2048 = 4 × `d_model`.
+
+W1, b1 and W2 are **parameters**: learned during training, then fixed. The hidden numbers are **activations**: computed again
+for every word, every time the model runs (the same split as Q, K, V versus `W_Q`, `W_K`, `W_V` in level 14).
+
+Three words, each with 2 numbers, so X is (3, 2). The first layer is W1 (2, 4) plus a bias b1, then ReLU
+(every negative number becomes 0), then W2 (4, 2):
+
+$$W_1 = \begin{bmatrix} 1 & -1 & 0 & 1 \\ 0 & 1 & -1 & 1 \end{bmatrix}$$
+
+$$b_1 = [0, 0, 1, -2]$$
+
+<Blank id="ffn-hidden-shape" />
+
+<Blank id="cat-lit" />
+
+<Predict id="ffn-alone" />
+
+<Gate requires="ffn-alone">
+
+Check all three answers in the lab. Point at or tap a word to see its hidden units.
+
+<FfnLab />
+
+</Gate>
+
+<Deeper title="Why widen first?">
+
+The nonlinear work happens in the hidden layer. Each unit is on or off, depending on the input.
+So the network can split its inputs into regions and treat each region differently. More units means more regions.
+That is why real models make the hidden layer 4 times wider than `d_model` (512 → 2048 → 512, for example).
+The FFN holds about two thirds of the weights in each layer (attention has 4 × d_model², the FFN 8 × d_model²),
+not counting the embedding table.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="ffn-alone">
+
+## 3. Residuals and LayerNorm: keeping deep stacks stable
+
+A Transformer stacks the same kind of layer many times, often 12, 32 or more. Stacking causes a problem.
+Each layer multiplies the numbers by something. Multiply by 0.5 thirty times and you get almost nothing; by 1.5 thirty times and you get a huge number.
+
+Two small additions fix it:
+
+- **Residual**: add the layer's input back to its output, `x + f(x)`. The layer only has to learn a change, and the original x always reaches the output.
+  The plain `x` that goes from the input to the output without passing through any layer is the **residual path**.
+- **LayerNorm**: rescale each word's numbers to mean 0 and standard deviation (std) 1, so the size stays the same from layer to layer.
+  The std measures how spread out the numbers are: it is the square root of the variance (the average squared distance from the mean).
+
+A layer has two parts inside it that each get their own residual: the attention and the FFN. Each of these parts is a **sublayer**.
+The first Transformer wrapped each sublayer as `LayerNorm(x + sublayer(x))`. Section 4 moves the LayerNorm to a better place.
+[Side trip N2](/learn/residuals-and-norms/) measures both on a 30-layer stack and compares LayerNorm with BatchNorm. If you did N2, you can skip
+to the LayerNorm exercise below.
+
+<Predict id="deep-plain" />
+
+<NormLab />
+
+<TryIt>
+
+In the “Stack layers” lab, pick `x ← f(x)` and slide the gain from 0.5 to 2: the line goes down to 0, then becomes huge.
+Switch to `x ← x + f(x)`: it no longer vanishes, but it can still grow. Switch to `LayerNorm(x + f(x))`: it stays at about 2.83 whatever you do.
+Why 2.83? The lab’s vector has 8 numbers. After LayerNorm they have mean 0 and std 1, so their squares add up to 8,
+and the size (length) of the vector is √8 ≈ 2.83.
+
+</TryIt>
+
+<Blank id="ln-clean" />
+
+<Blank id="ln-count" />
+
+<Stuck q="Which axis does LayerNorm normalize?">
+
+The last one: the numbers of a single word. A batch of shape (B, L, d) gets B × L separate means and stds,
+one per word. Nothing is shared between words or between sentences, so a word's result never depends on what else is in the batch.
+Switch the LayerNorm lab to "each column" to see what goes wrong otherwise.
+
+</Stuck>
+
+In NumPy, `x.mean(axis=-1)` averages the last axis. With `keepdims=True` the result keeps that axis with size 1:
+for x of shape (2, 4), the mean has shape (2, 1) instead of (2,), so `x - mu` subtracts each word’s own mean.
+
+<CodeBlank id="layer-norm" />
+
+<Deeper title="The two learned numbers per column: γ and β">
+
+A real LayerNorm doesn’t stop at mean 0 and std 1. It then multiplies each column by a learned gain γ (gamma) and adds a learned
+shift β (beta): `out = γ * normalized + β`. This is element by element. γ and β both have the shape (`d_model`,). They start at γ = 1, β = 0,
+so a new LayerNorm is exactly the one you just wrote. Training can then let some columns have larger values, or undo the
+normalization where it is not useful.
+
+</Deeper>
+
+<Gate requires="layer-norm">
+
+Now put sections 2 and 3 together: the FFN as one sublayer, with its residual, `x + ffn(x)`.
+Section 4 adds the LayerNorm. ReLU in NumPy is `np.maximum(0, …)`, as in level 4:
+
+```python
+# [2, 0, 1, 0]: every negative number becomes 0
+np.maximum(0, np.array([2.0, -2.0, 1.0, 0.0]))
+```
+
+<CodeBlank id="ffn-block" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="ffn-block">
+
+## 4. Putting a decoder block together
+
+Now every part has a job. A **decoder block** is two sublayers: masked self-attention (level 15), where each token is mixed with
+the tokens before it, then the FFN, which works on each token separately. Each sublayer gets a residual and a LayerNorm.
+A model is the same block stacked several times. The token embeddings and positions enter the first block, and an
+output layer comes after the last block. It is called a decoder because it writes one token at a time, and each new token is computed from the tokens before it.
+
+Section 3 showed the placement of the first Transformer, in 2017: `LayerNorm(x + sublayer(x))`.
+The main-line models of this course, from level 17 to the GPT you write in level 21, move the LayerNorm to the front.
+They normalize only what goes **into** the sublayer, and add the sublayer’s output to the unchanged x.
+For a sublayer f, one step is
+
+$$x \leftarrow x + f(\mathrm{LayerNorm}(x))$$
+
+A decoder block does this twice: first with masked self-attention as f, then with the FFN as f.
+This is **pre-norm**. The same parts, in a different order. The plain x now passes through the whole stack without ever
+being rescaled: every block only adds to it. [Level 19](/learn/modern-llm/), section 2, explains why this trains deep stacks better. Because nothing
+normalizes the sum at the end, the stack ends with one final LayerNorm, after the last block and just before the output layer.
+
+<Predict id="zero-sublayer" />
+
+<Gate requires="zero-sublayer">
+
+Select a block to see its shapes, where Q, K and V come from, and what goes wrong without it.
+
+<LayerFlowLab />
+
+<Stuck q="Why does every block keep the same shape?">
+
+The shape is (B, L, `d_model`) everywhere, because each block’s output is the next block’s input. Attention gives one vector of `d_model` numbers per token, and the
+FFN widens to `d_ff` but narrows back to `d_model`. The residual adds two tensors of the same shape. So you can stack 2 blocks
+or 96 without changing any code: only the weights inside differ.
+
+</Stuck>
+
+<Blank id="block-ln-count" />
+
+<Stuck q="Isn’t a Transformer an encoder and a decoder?">
+
+The first one was. It was built for translation, so it had two stacks: an encoder that reads the source sentence and a
+decoder that writes the target and reads the encoder through cross-attention. Today’s chat models keep only the
+decoder stack: the prompt and the answer are one sequence, and the model continues it. A model like this is called
+decoder-only. Level 17 builds that kind of model.
+[Side trip N7](/learn/encoder-decoder/), after level 17, builds the two-stack design and reads its original diagram.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="block-ln-count">
+
+Last step: write a whole decoder stack, `decoder(x, n_blocks)`. It runs `n_blocks` decoder blocks, one after another,
+then the final LayerNorm. To keep the numbers small, the attention below has no weight matrices.
+Q, K and V are all the normalized x itself, as in level 14, section 2. It uses the causal mask of level 15.
+The FFN has the weights of section 2.
+
+A one-token sentence, x = [0, 4], computed by hand: LayerNorm turns it into [−1, 1]. The token sees only itself, so
+attention gives [−1, 1] back, and x becomes [0, 4] + [−1, 1] = [−1, 5]. LayerNorm again gives [−1, 1]; the FFN’s hidden
+layer is [0, 2, 0, 0] after ReLU, and W2 turns it into [0, 2]. The block’s output is [−1, 5] + [0, 2] = [−1, 7].
+A second block would start from [−1, 7].
+
+<CodeBlank id="decoder-block" />
+
+Optional side trip: the Diffusion branch ([level D1](/learn/noise-and-denoise/) to [D3](/learn/latents-and-dit/)) ends
+with a Transformer that draws pictures. It is made of blocks like this one. Level 17 continues the main line.
+
+</Gate>
+
+</Gate>

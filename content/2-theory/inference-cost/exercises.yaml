@@ -1,0 +1,342 @@
+kv-full:
+  type: number
+  prompt: "A model has 32 layers and 32 attention heads with dₖ = 128, and every head keeps its own K and V. Each number takes 2 bytes. How many KiB of KV cache does one token need? (1 KiB = 1,024 bytes)"
+  answer: 512
+  tol: 0
+  after: "2 × 32 × 128 × 32 × 2 = 524,288 bytes = 512 KiB per token. A 4,000-token conversation needs about 2,000,000 KiB, almost 2 GiB, for one user."
+  hints:
+    - when: { equals: 256 }
+      say: "Don’t forget the 2 for K and V: each token stores both."
+      wrong: "1*32*128*32*2/1024"
+    - when: { equals: 524288 }
+      say: "That is in bytes. Divide by 1,024."
+      wrong: "2*32*128*32*2"
+    - when: { equals: 128 }
+      say: "That would be 8 K/V heads. Here every one of the 32 heads keeps its own K and V."
+      wrong: "2*8*128*32*2/1024"
+    - when: { any: true }
+      say: ["In every layer and every head, one token stores a k vector and a v vector, each of dₖ numbers.", "Multiply: 2 (k and v) × heads × dₖ × layers × 2 bytes. Then divide by 1,024."]
+
+gqa-head:
+  type: number
+  prompt: "A model has 32 query heads and 8 K/V heads, numbered from 0; consecutive query heads share a K/V head. Which K/V head does query head 13 use?"
+  answer: 3
+  tol: 0
+  after: "Each K/V head serves 32 / 8 = 4 query heads: 0–3 use KV0, 4–7 KV1, 8–11 KV2, 12–15 KV3. So 13 // 4 = 3."
+  hints:
+    - when: { equals: 13 }
+      say: "That would be one K/V head per query head. Here 4 query heads share each K/V head."
+      wrong: "13/1"
+    - when: { equals: 1 }
+      say: "Group size is 32 / 8 = 4, not 8. Divide 13 by 4 and drop the remainder."
+      wrong: "round(13/8 - 0.5)"
+    - when: { any: true }
+      say: ["How many query heads share each K/V head?", "Each K/V head serves 32 / 8 query heads, in order. Which group of 4 is head 13 in, counting groups from 0?"]
+
+gqa-quality:
+  type: predict
+  prompt: "Guess first: going from 32 K/V heads to 1 (all 32 query heads share one K and one V) cuts the KV cache by 32×. What happens to quality?"
+  options: ["Nothing changes: K and V hold the same information either way", "It drops a little", "It gets much worse: the query heads can no longer look for different things"]
+  reveal: "It drops a little with one K/V head: every query head has to look at the same keys and values. With a few groups, such as 8 K/V heads, it hardly drops at all. With 8 K/V heads, the 512 KiB per token of section 1 becomes 128 KiB, 4× less. So most models choose a number of K/V heads between the two extremes."
+
+kv-context:
+  type: number
+  prompt: "A GPU has 24 GiB of memory, and the model’s weights take 16 GiB of it. The rest holds the KV cache. The model uses grouped-query attention with 4 K/V heads, dₖ = 128 and 32 layers, and stores each number in 2 bytes. How many tokens of KV cache fit? (1 KiB = 1,024 bytes, 1 GiB = 1,024 × 1,024 KiB)"
+  promptShort: "A 24 GiB GPU, 16 GiB of weights, the rest for the KV cache. 4 K/V heads, dₖ = 128, 32 layers, 2 bytes per number. How many tokens of cache fit?"
+  answer: 131072
+  tol: 0
+  after: "Per token: 2 × 4 × 128 × 32 × 2 = 65,536 bytes = 64 KiB. Free memory: 24 − 16 = 8 GiB = 8,388,608 KiB. 8,388,608 / 64 = 131,072 tokens. This memory is for all users together: 16 users at once get about 8,000 tokens each. With half as many K/V heads, twice as many tokens fit. This is why grouped-query attention matters when one GPU serves many users."
+  hints:
+    - when: { equals: 393216 }
+      say: "That uses all 24 GiB. The weights take 16 GiB first, so only the rest is free for the cache."
+      wrong: "24*1024*1024/64"
+    - when: { equals: 65536 }
+      say: "That uses 128 KiB per token, the size with 8 K/V heads. This model has 4 K/V heads."
+      wrong: "8*1024*1024/128"
+    - when: { equals: 262144 }
+      say: "That is twice too many. Did you forget one of the two 2s: k and v, or 2 bytes per number?"
+      wrong: "8*1024*1024/32"
+    - when: { equals: 16384 }
+      say: "That uses 512 KiB per token, as if every query head kept its own K and V. Here only the 4 K/V heads store K and V."
+      wrong: "8*1024*1024/512"
+    - when: { equals: 128 }
+      say: "Check the units: the free memory and the size per token must both be in KiB (or both in bytes)."
+      wrong: "8*1024*1024/65536"
+    - when: { any: true }
+      say: ["First find the KV cache of one token, as in section 1, but with 4 K/V heads.", "Free memory is 24 − 16 = 8 GiB. Turn it into KiB, then divide by the KiB per token."]
+
+flops-token:
+  type: number
+  prompt: "A model has 7 billion weights. A GPU does 10¹⁴ FLOPs per second (100 trillion). Using the 2N rule for the forward pass, at most how many tokens per second can it produce, counting only the arithmetic?"
+  answer: 7143
+  tol: 50
+  after: "One token costs 2 × 7 × 10⁹ = 1.4 × 10¹⁰ FLOPs. Then 10¹⁴ / (1.4 × 10¹⁰) = 10⁴ / 1.4 ≈ 7,143 tokens per second. This counts only the arithmetic. Section 4 compares it with the time to read the weights from memory."
+  hints:
+    - when: { equals: 14286 }
+      say: "That counts one FLOP per weight. Each weight does one multiply and one add, so 2N."
+      wrong: "round(1e14/7e9)"
+    - when: { equals: 2381 }
+      say: "6N is the cost of a training step. Producing tokens runs only the forward pass."
+      wrong: "round(1e14/(6*7e9))"
+    - when: { any: true }
+      say: ["First find the FLOPs for one token: 2 × the number of weights.", "One token costs 1.4 × 10¹⁰ FLOPs. Divide 10¹⁴ by it: subtract the powers of ten first.", "10¹⁴ / (1.4 × 10¹⁰) = 10⁴ / 1.4."]
+
+flops-block:
+  type: number
+  prompt: "One block has model width d = 64 and FFN width 256. A new token attends to L = 128 tokens. Its attention needs two products: the scores, (1, 64) @ (64, 128), and the weighted sum, (1, 128) @ (128, 64). How many FLOPs does this token cost in the whole block, weights and attention together?"
+  promptShort: "One block: model width 64, FFN width 256, and the new token attends to 128 tokens. How many FLOPs does this token cost in the block? (Count the matrix products only.)"
+  answer: 131072
+  tol: 0
+  after: "Weights part: 2 × (4 × 64² + 2 × 64 × 256) = 2 × 49,152 = 98,304. Each attention product costs 2 × 64 × 128 = 16,384, so the attention part is 32,768 = 4 × L × d. Total 131,072. Only the attention part grows with the context."
+  hints:
+    - when: { equals: 98304 }
+      say: "That is the weights part only. Add the two attention products, the scores and the weighted sum."
+      wrong: "2*(4*64**2 + 2*64*256)"
+    - when: { equals: 114688 }
+      say: "The attention part is too small. It has two products, and each one costs 2 × a × b FLOPs."
+      wrong: "98304 + 2*64*128"
+    - when: { equals: 32768 }
+      say: "That is the attention part. Add the weights part: four (d, d) matrices and the two FFN matrices."
+      wrong: "2*2*64*128"
+    - when: { equals: 81920 }
+      say: "That counts one FLOP per weight. Each weight does a multiply and an add, so double the weights part."
+      wrong: "4*64**2 + 2*64*256 + 32768"
+    - when: { any: true }
+      say: ["Compute the weights part and the attention part separately, then add them.", "Weights part: 2 × (4 × 64² + 2 × 64 × 256) = 98,304. The scores are a (1, 64) @ (64, 128) product: use the 2 × a × b rule.", "The scores cost 2 × 64 × 128 = 16,384 FLOPs. The weighted sum is a (1, 128) @ (128, 64) product."]
+
+flops-even:
+  type: number
+  prompt: "One block has model width 64 and FFN width 256, so its weights part is 98,304 FLOPs per token. Its attention part is 4 × L × 64 FLOPs. At what context length L are the two parts equal?"
+  answer: 384
+  tol: 0
+  after: "4 × L × 64 = 98,304 gives L = 384, which is 2 × 64 + 256 (twice the model width plus the FFN width). Below that, the weights cost more; above it, attention does. At L = 1,280 the attention part is 327,680, more than three times the weights part."
+  hints:
+    - when: { equals: 128 }
+      say: "At L = 128 the attention part is only 32,768. Solve 4 × L × 64 = 98,304 for L."
+    - when: { equals: 1536 }
+      say: "Divide by 4 × 64 = 256, not by 64."
+      wrong: "98304/64"
+    - when: { any: true }
+      say: ["Set the two parts equal: 4 × L × 64 = 98,304.", "4 × 64 = 256. Divide 98,304 by 256."]
+
+decode-predict:
+  type: predict
+  prompt: "Before you compute it: a GPU computes 10¹⁴ FLOPs per second and reads 10¹² bytes per second from its memory. It writes one user’s answer with a 7-billion-weight model. What limits the speed?"
+  options: ["The arithmetic: 1.4 × 10¹⁰ FLOPs per token is a lot", "Reading the weights from memory", "Both take about the same time"]
+  reveal: "Reading the weights. The arithmetic for one token takes 1.4 × 10¹⁰ / 10¹⁴ s = 0.14 ms. Reading 14 GB of weights takes 14 ms, 100 times longer. The GPU waits for memory most of the time."
+
+decode-bound:
+  type: number
+  prompt: "A model has 7 billion weights of 2 bytes each. The GPU reads 10¹² bytes per second from its memory and must read every weight once for each new token. For one user, at most how many tokens per second can it write? (1 decimal)"
+  promptShort: "7 billion weights of 2 bytes each. The GPU reads 10¹² bytes per second. One user: at most how many tokens per second? (1 decimal)"
+  answer: 71.4
+  tol: 0.2
+  after: "The weights are 7 × 10⁹ × 2 = 1.4 × 10¹⁰ bytes. Reading them takes 1.4 × 10¹⁰ / 10¹² = 0.014 s. So at most 1 / 0.014 ≈ 71.4 tokens per second, about 100 times fewer than the 7,143 the arithmetic would allow."
+  hints:
+    - when: { equals: 142.9 }
+      say: "That forgets the 2 bytes per weight. The model is 14 × 10⁹ bytes, not 7 × 10⁹."
+      wrong: "round(1e12/7e9, 1)"
+    - when: { equals: 7142.9 }
+      say: "That is the arithmetic limit. Here the limit is reading the weights from memory."
+      wrong: "round(1e14/1.4e10, 1)"
+    - when: { any: true }
+      say: ["First find the size of the weights in bytes.", "The weights are 1.4 × 10¹⁰ bytes. How long does it take to read them at 10¹² bytes per second? One token per read."]
+
+batch-even:
+  type: number
+  prompt: "A model has 7 billion weights of 2 bytes each. One decode step reads the 1.4 × 10¹⁰ bytes of weights at 10¹² bytes per second. Each user’s token costs 1.4 × 10¹⁰ FLOPs at 10¹⁴ FLOPs per second. One step serves B users at once, with one read of the weights. For which B does the arithmetic take as long as the read?"
+  answer: 100
+  tol: 0
+  after: "The read takes 0.014 s whatever B is; the arithmetic takes B × 0.00014 s. They are equal at B = 100. Below 100 users, extra users cost almost nothing: the GPU writes 100 × 71.4 ≈ 7,143 tokens per second in total instead of 71.4. Above 100, the arithmetic is the limit, and each user’s tokens come more slowly."
+  hints:
+    - when: { equals: 1 }
+      say: "With one user the read takes 100 times as long as the arithmetic. How many users’ arithmetic takes as long as one read?"
+      wrong: "0.014/0.014"
+    - when: { equals: 0.01 }
+      say: "You divided the arithmetic time by the read time. Divide the read time by the arithmetic time of one user."
+      wrong: "0.00014/0.014"
+    - when: { any: true }
+      say: ["Find the two times: the read for one step, and the arithmetic for one user’s token.", "The read takes 0.014 s and one user’s arithmetic 0.00014 s. How many users’ arithmetic fits into one read?"]
+
+batch-byte:
+  type: number
+  prompt: "Store each of the 7 billion weights in 1 byte instead of 2. The GPU still reads 10¹² bytes per second, and each user’s token still costs 1.4 × 10¹⁰ FLOPs at 10¹⁴ FLOPs per second. For which B does the arithmetic now take as long as the read?"
+  promptShort: "A 7-billion-weight model is stored in 1 byte per weight. The GPU reads 10¹² bytes and does 10¹⁴ FLOPs per second, and each user’s token costs 1.4 × 10¹⁰ FLOPs. For which batch size B does the arithmetic take as long as the read?"
+  answer: 50
+  tol: 0
+  after: "The weights are now 7 × 10⁹ bytes, so the read takes 0.007 s. One user’s arithmetic still takes 0.00014 s. So B = 0.007 / 0.00014 = 50. Fewer bytes per weight make each decode step faster. The arithmetic doesn’t change, so the crossover moves down from 100 to 50 users. In general, B = bytes per weight × FLOPs per second / (2 × bandwidth). N cancels, so the crossover depends on the GPU and the bytes per weight, not on the size of the model."
+  hints:
+    - when: { equals: 100 }
+      say: "That is the crossover with 2 bytes per weight. With 1 byte, the read takes half as long."
+      wrong: "0.014/0.00014"
+    - when: { equals: 200 }
+      say: "The read gets shorter, not longer. With 1 byte per weight there are fewer bytes to read."
+      wrong: "0.028/0.00014"
+    - when: { equals: 0.02 }
+      say: "You divided the arithmetic time by the read time. Divide the read time by the arithmetic time of one user."
+      wrong: "0.00014/0.007"
+    - when: { any: true }
+      say: ["First find the new read time. How many bytes do the weights take now?", "The read takes 0.007 s and one user’s arithmetic 0.00014 s. How many users’ arithmetic fits into one read?"]
+
+prefill-time:
+  type: number
+  prompt: "A model has 7 billion weights of 2 bytes each. The GPU reads 10¹² bytes per second and does 10¹⁴ FLOPs per second. It reads a prompt of 2,000 tokens in one pass. The weights are read once (14 ms), and each token costs 1.4 × 10¹⁰ FLOPs. How many ms does the pass take?"
+  answer: 280
+  tol: 1
+  after: "The arithmetic is 2,000 × 1.4 × 10¹⁰ = 2.8 × 10¹³ FLOPs, and 2.8 × 10¹³ / 10¹⁴ = 0.28 s = 280 ms. That is 20 times the 14 ms read, so this prefill is limited by arithmetic. A prompt is like a batch of 2,000 users for one step. This holds for a long prompt; the next question tries a short one. The attention part, which grows with the prompt, adds about 4% here (with d = 4096 and 32 layers). For prompts of tens of thousands of tokens it is no longer small."
+  hints:
+    - when: { equals: 14 }
+      say: "14 ms is the read. The arithmetic for all 2,000 tokens happens in the same pass, and the pass takes the longer of the two times."
+    - when: { equals: 294 }
+      say: "The read and the arithmetic happen at the same time. The pass takes the longer one, not the sum."
+      wrong: "14 + 280"
+    - when: { equals: 28000 }
+      say: "That reads the weights once per token, as in decode. In prefill all 2,000 tokens share one read."
+      wrong: "2000*14"
+    - when: { equals: 0.28 }
+      say: "That is in seconds. The question asks for ms."
+      wrong: "2000*1.4e10/1e14"
+    - when: { any: true }
+      say: ["Find the two times, the read and the arithmetic. The pass takes the longer one.", "The arithmetic is 2,000 × 1.4 × 10¹⁰ = 2.8 × 10¹³ FLOPs. Divide by 10¹⁴ FLOPs per second, then turn seconds into ms."]
+
+prefill-short:
+  type: number
+  prompt: "The same model and GPU: 7 billion weights of 2 bytes, 10¹² bytes per second, 10¹⁴ FLOPs per second. Now the prompt has only 50 tokens. How many ms does the prefill pass take?"
+  promptShort: "A 7-billion-weight model, 2 bytes per weight, runs on a GPU that reads 10¹² bytes and does 10¹⁴ FLOPs per second. The prompt has 50 tokens. How many ms does the prefill pass take?"
+  answer: 14
+  tol: 0.5
+  after: "The arithmetic is 50 × 1.4 × 10¹⁰ = 7 × 10¹¹ FLOPs, which takes 7 ms. The weights still take 14 ms to read, and the pass takes the longer time: 14 ms. A 50-token prompt is like 50 users in section 4. That is below this GPU’s crossover of 100, so reading is the limit. On this GPU, prefill is limited by arithmetic only when the prompt is longer than about 100 tokens."
+  hints:
+    - when: { equals: 7 }
+      say: "That is the arithmetic. The weights must still be read once, and the pass takes the longer of the two times."
+      wrong: "50*1.4e10/1e14*1000"
+    - when: { equals: 21 }
+      say: "The read and the arithmetic happen at the same time. The pass takes the longer one, not the sum."
+      wrong: "14+7"
+    - when: { equals: 700 }
+      say: "That reads the weights once per token, as in decode. In prefill all 50 tokens share one read."
+      wrong: "50*14"
+    - when: { equals: 0.014 }
+      say: "That is in seconds. The question asks for ms."
+      wrong: "1.4e10/1e12"
+    - when: { any: true }
+      say: ["Find the two times, the read and the arithmetic, as in the last question.", "The arithmetic is 50 × 1.4 × 10¹⁰ = 7 × 10¹¹ FLOPs. Compare its time with the time to read the weights."]
+
+serve-fit:
+  type: number
+  prompt: "A GPU has 80 GB of memory. It holds the 14 GB of weights of the 7-billion-weight model, and the KV cache of every user. Each user has 4,000 tokens of cache, at 128 KiB per token. At most how many users fit? (1 GB = 10⁹ bytes, 1 KiB = 1,024 bytes)"
+  promptShort: "An 80 GB GPU holds 14 GB of weights and the KV caches. Each user has 4,000 tokens at 128 KiB per token. At most how many users fit? (1 GB = 10⁹ bytes, 1 KiB = 1,024 bytes)"
+  answer: 125
+  tol: 0
+  after: "One user’s cache is 4,000 × 128 × 1,024 = 524,288,000 bytes, about 0.524 GB. The free memory is 80 − 14 = 66 GB, and 66 / 0.524 ≈ 125.9, so 125 users fit. Each step then reads 14 + 125 × 0.524 ≈ 79.5 GB, which takes 79.5 ms. Each user gets only about 12.6 tokens per second, about 1,570 in total. The arithmetic takes 125 × 0.14 = 17.5 ms, much less than the read. So with long conversations, the memory is full before the batch reaches the crossover, and every step is limited by the read."
+  hints:
+    - when: { equals: 152 }
+      say: "That gives all 80 GB to the caches. The 14 GB of weights are in memory too."
+      wrong: "round(80/0.524288 - 0.5)"
+    - when: { equals: 153 }
+      say: "That gives all 80 GB to the caches. The 14 GB of weights are in memory too."
+      wrong: "round(80/0.524288)"
+    - when: { equals: 126 }
+      say: "126 users need 126 × 0.524 ≈ 66.1 GB of cache, more than the 66 GB that is free. Round down."
+      wrong: "round(66/0.524288)"
+    - when: { equals: 128 }
+      say: "1 KiB is 1,024 bytes, not 1,000. One user’s cache is 4,000 × 128 × 1,024 bytes."
+      wrong: "round(66/0.512 - 0.5)"
+    - when: { equals: 129 }
+      say: "1 KiB is 1,024 bytes, not 1,000. One user’s cache is 4,000 × 128 × 1,024 bytes."
+      wrong: "round(66/0.512)"
+    - when: { equals: 135 }
+      say: "Here 1 GB is 10⁹ bytes, not 1,024³. Turn the cache into bytes and divide 66 × 10⁹ by it."
+      wrong: "round(66*1024**3/524288000)"
+    - when: { any: true }
+      say: ["First find the free memory: the weights take 14 of the 80 GB.", "One user’s cache is 4,000 × 128 KiB. Turn it into bytes, then into GB, and divide the free memory by it. Round down: a user’s cache can’t be split."]
+
+cost-code:
+  type: code
+  prompt: "Write serve for one decode step. B users each have a KV cache of the given number of tokens. The step reads the weights once and every user’s cache. It also does 2N FLOPs for each user’s token. `bytes_per` is the bytes of every stored number: the weights and the KV cache. The step takes the longer of the read and the arithmetic. Return the step time in ms, the tokens per second for each user, and the tokens per second in total."
+  promptShort: "Write serve: for one decode step with B users, return the step time in ms, the tokens per second for each user, and the tokens per second in total. The step reads the weights and every user’s cache, and does B × 2N FLOPs (the weights only, not attention’s part). `bytes_per` applies to the weights and the cache. Reading and arithmetic overlap, so the step takes the longer one."
+  template: |
+    def serve(n_weights, kv_heads, d_k, layers, tokens, B,
+              bandwidth, flops, bytes_per=2):  # bytes per number: weights and KV cache
+        ____
+
+    # 7 billion weights, 8 K/V heads, 10¹² bytes/s, 10¹⁴ FLOPs/s
+    print(serve(7e9, 8, 128, 32, 0, 1, 1e12, 1e14))     # one user
+    print(serve(7e9, 8, 128, 32, 4000, 8, 1e12, 1e14))  # 8 users
+  solution: |-
+    weights = n_weights * bytes_per                        # read once per step
+        kv = 2 * kv_heads * d_k * layers * bytes_per * tokens  # one user's cache
+        read = (weights + B * kv) / bandwidth                  # every user's cache
+        math = B * 2 * n_weights / flops                       # 2N FLOPs per token
+        step = max(read, math)
+        return step * 1000, 1 / step, B / step
+  tests:
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 0, 1, 1e12, 1e14)]"
+      expect: [14.0, 71.43, 71.43]
+      tol: 0.01
+      say: "one user, no cache yet: the step is the 14 ms read of the weights"
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 0, 1, 1e12, 1e14, 1)]"
+      expect: [7.0, 142.86, 142.86]
+      tol: 0.01
+      say: "1 byte per weight: the read takes half as long"
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 0, 8, 1e12, 1e14)]"
+      expect: [14.0, 71.43, 571.43]
+      tol: 0.01
+      say: "8 users share one read: each still gets 71.43 tokens per second"
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 0, 256, 1e12, 1e14)]"
+      expect: [35.84, 27.9, 7142.86]
+      tol: 0.01
+      say: "256 users: the arithmetic (35.84 ms) takes longer than the read"
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 0, 256, 1e12, 1e14, 1)]"
+      expect: [35.84, 27.9, 7142.86]
+      tol: 0.01
+      say: "256 users with 1 byte per weight: the arithmetic doesn’t change"
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 4000, 8, 1e12, 1e14)]"
+      expect: [18.19, 54.96, 439.7]
+      tol: 0.01
+      say: "8 users with 4,000 tokens each: the step reads 14 + 4.2 GB"
+    - expr: "[round(float(v), 2) for v in serve(7e9, 8, 128, 32, 4000, 8, 1e12, 1e14, 1)]"
+      expect: [9.1, 109.92, 879.4]
+      tol: 0.01
+      say: "1 byte per number: the caches shrink too"
+  hints:
+    - when: { error: "unpack|not iterable|NoneType|not subscriptable" }
+      say: "Return three numbers: the step time in ms, the tokens per second for each user, and the tokens per second in total."
+    - when: { testFailed: 0 }
+      say: ["With one user and no cache, the step is the read time: weight bytes / bandwidth, in ms.", "The read and the arithmetic happen at the same time, so the step takes the longer one, not the sum. Multiply seconds by 1,000 for ms."]
+    - when: { testFailed: 1 }
+      say: "With 1 byte per weight, the weights take as many bytes as there are weights. Use the bytes-per-number argument, not a fixed 2. The 2 in 2N counts FLOPs, not bytes."
+    - when: { testFailed: 2 }
+      say: "The second number is per user (1 / step). The third is all users together (B / step)."
+      wrong: |-
+        weights = n_weights * bytes_per
+            kv = 2 * kv_heads * d_k * layers * bytes_per * tokens
+            read = (weights + B * kv) / bandwidth
+            math = B * 2 * n_weights / flops
+            step = max(read, math)
+            return step * 1000, B / step, 1 / step
+    - when: { testFailed: 3 }
+      say: ["The arithmetic for one step is B × 2N FLOPs, divided by the FLOPs per second. Check that you have both the B and the 2.", "With 256 users the arithmetic takes longer than the read. The step is the longer of the two: use max."]
+    - when: { testFailed: 4 }
+      say: "The arithmetic must not change with the bytes per weight. Each token costs 2N FLOPs, where N is the number of weights."
+      wrong: |-
+        weights = n_weights * bytes_per
+            kv = 2 * kv_heads * d_k * layers * bytes_per * tokens
+            read = (weights + B * kv) / bandwidth
+            math = B * weights / flops
+            step = max(read, math)
+            return step * 1000, 1 / step, B / step
+    - when: { testFailed: 5 }
+      say: ["Each user has a cache of its own, and one step reads all of them.", "The read time is (weight bytes + B × one user’s cache bytes) / bandwidth."]
+    - when: { testFailed: 6 }
+      say: "The cache uses `bytes_per` as well, not a fixed 2."
+      wrong: |-
+        weights = n_weights * bytes_per
+            kv = 2 * kv_heads * d_k * layers * 2 * tokens
+            read = (weights + B * kv) / bandwidth
+            math = B * 2 * n_weights / flops
+            step = max(read, math)
+            return step * 1000, 1 / step, B / step
+    - when: { any: true }
+      say: ["Work in bytes and seconds. Find the read time and the arithmetic time, then take the longer one.", "One user’s cache is 2 (k and v) × K/V heads × dₖ × layers × bytes per number × tokens."]
+  after: "One read of the weights serves every user, so the total speed grows with B until the arithmetic takes longer than the read. Each user’s cache is read for that user alone, so long conversations make every step slower. With 8 users of 4,000 tokens, a step takes 18.19 ms instead of 14 ms. The FLOPs count only the weights, not attention’s part (section 3). At 4,000 tokens that part adds about 15% to 2N: 4 × 4,000 × 4,096 × 32 ≈ 2.1 × 10⁹ FLOPs per token, with d = 4,096 and 32 layers. Here the read takes much longer than the arithmetic anyway, so the step time doesn’t change."

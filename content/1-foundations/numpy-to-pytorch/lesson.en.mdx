@@ -1,0 +1,388 @@
+---
+title: From NumPy to PyTorch
+level: "9"
+order: 9
+part: foundations
+question: What does PyTorch do for you, and what is still your job?
+run: browser
+checkpoint: loop-code
+testOut: [linear-shape, grad-twice, broadcast-shape, forward-code, loop-code]
+recap:
+  can:
+    - "Translate a NumPy network into a PyTorch `nn.Module` with `__init__` and `forward`."
+    - "Write the training step in the right order: `zero_grad`, `backward`, `step`."
+    - "Spot the bugs that give no error message: gradients that add up, labels that broadcast, layers hidden in a plain list."
+  keys:
+    - "`nn.Linear(in, out).weight` has shape `(out, in)` and computes `x @ W.T + b`"
+    - "`loss.backward()` adds to `.grad`; `opt.zero_grad()` clears it"
+    - "A column `(n, 1)` minus a flat `(n,)` gives an `(n, n)` square: print both shapes before the loss"
+    - "`loss.item()` turns a one-number tensor into a Python number"
+  mistakes:
+    - "Forgetting `opt.zero_grad()`: each step then uses the sum of all the old gradients, and w jumps past the lowest point."
+    - "Keeping layers in a plain Python list: `parameters()` cannot see them, so they never train. Use `nn.ModuleList`."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import TorchCompareLab from '@viz/TorchCompareLab.astro'
+import GradAccumLab from '@viz/GradAccumLab.astro'
+
+In level 6 you trained a network to learn XOR with NumPy. You wrote the forward pass, the loss,
+every line of the backward pass, and the update. It worked, but the backward pass was the hard part,
+and it gets longer with every layer you add.
+
+**PyTorch** is NumPy plus two things: tensors that can run on a GPU (a graphics card, which does many
+multiplications at once; you don't need one for this course), and gradients computed for you. This level is the
+translation: the same network, written both ways, line by line. Then come the few things PyTorch does **not** do
+for you, because that is where most bugs come from.
+
+Levels 10 to 19 stay in NumPy in your browser, so you can see every number. PyTorch comes back when you train real
+models on your computer: the GPT you write in level 21, the LSTM boss, and the diffusion boss.
+
+> **Every question on this page runs in your browser.** Section 8 has one optional exercise that runs PyTorch on your
+> own computer. When you want to do it, [Run it on your computer](/setup/) shows how to install Python and PyTorch.
+
+## 1. The same network, written twice
+
+<TorchCompareLab />
+
+Point at or tap the backward lines in the NumPy code. Four lines of chain rule turn into `loss.backward()`.
+Everything else maps one to one. Two names in the code may be new. `logits` are the raw scores before the
+sigmoid. `binary_cross_entropy_with_logits` is level 3's yes/no cross-entropy with the sigmoid built in
+(it is more accurate than doing the two steps separately).
+
+<Blank id="param-count" />
+
+<Gate requires="param-count">
+
+## 2. Tensors and parameters
+
+A **tensor** is PyTorch's array. Most of what you know from NumPy works the same way: `@`, `.shape`, `.sum(0)`,
+slicing, broadcasting. Three things are new:
+
+| | NumPy array | PyTorch tensor |
+|---|---|---|
+| number type | `float64` by default (about 16 digits) | `float32` by default for weights (about 7 digits, half the memory) |
+| where it lives | main memory | `"cpu"`, `"cuda"` (NVIDIA GPU) or `"mps"` (Apple GPU) |
+| gradients | none | if `requires_grad=True`, `backward()` fills `.grad` |
+
+The weights inside `nn.Linear` are created with `requires_grad=True`, so they get a `.grad` after every
+`loss.backward()`. Your data does not need one.
+
+Almost everyone makes one mistake the first time: how each side stores a weight matrix.
+In NumPy you wrote `X @ W` with `W` of shape `(inputs, outputs)`. `nn.Linear(in, out)` stores its weight in the opposite
+layout, **one row per output**, and computes `x @ W.T + b`. For example, `nn.Linear(3, 5).weight` has shape `(5, 3)`.
+
+<Blank id="linear-shape" />
+
+</Gate>
+
+<Gate requires="linear-shape">
+
+<Deeper title="Why nn.Linear stores (out, in) and multiplies by its transpose">
+
+Why one row per output? Each row is the 2 numbers that make one hidden unit, so `weight[3]` is everything
+about unit 3. To compute the layer it does `x @ W.T + b`, which is `(4, 2) @ (2, 6) → (4, 6)`,
+exactly the NumPy shape.
+
+Same numbers, stored in the opposite layout. It only matters when you copy weights between the two,
+or when you print `.weight.shape` and expect NumPy's layout. The demo for this level copies NumPy weights
+into PyTorch and has to transpose them for exactly this reason.
+
+</Deeper>
+
+## 3. A model is a class
+
+On the PyTorch side of the lab, the model is one object, `model`, and you call it like a function: `model(X)`.
+That object is an instance of a **class**. A class is a recipe for a box that keeps its own numbers and its own
+functions. Compare two ways to write the first layer:
+
+```python
+def layer(x, W, b):            # a function: you pass the weights in every time
+    return x @ W + b
+
+class Layer:                   # a class: the box keeps its weights
+    def __init__(self, W, b):  # runs once, when you make the box: layer = Layer(W, b)
+        self.W = W             # self means "this box"
+        self.b = b
+    def forward(self, x):      # the computation, using the box's own weights
+        return x @ self.W + self.b
+```
+
+A PyTorch model is a class built the same way, with four rules:
+
+1. `__init__` builds the parts: `self.l1 = nn.Linear(2, 6)`. Its first line is always `super().__init__()` (see the box below).
+2. `forward(self, x)` computes the output from the parts.
+3. `model(x)` calls `forward(x)` for you. You never call `forward` by its name.
+4. `model.parameters()` collects every weight of every part you stored as `self.something`. The optimizer only
+   updates what `parameters()` returns.
+
+```python
+class XorNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.l1 = nn.Linear(2, 6)
+        self.l2 = nn.Linear(6, 1)
+    def forward(self, x):
+        return self.l2(torch.tanh(self.l1(x)))
+
+model = XorNet()
+logits = model(X)              # runs forward(X)
+```
+
+<Stuck q="What are `super().__init__()` and `__call__`?">
+
+`super().__init__()` runs the setup of `nn.Module` itself, which `parameters()` needs later. Without it, PyTorch stops
+with an error as soon as you store the first layer.
+
+`__call__` is the Python name for “what happens when you write `model(x)`”. `nn.Module` writes it for you, and it
+calls `forward`. The NumPy version below writes it by hand.
+
+</Stuck>
+
+Here is the same idea in NumPy, so it runs in your browser.
+
+<CodeBlank id="forward-code" />
+
+</Gate>
+
+<Gate requires="forward-code">
+
+Rule 4 has a trap. Level 21 stacks several identical blocks. The natural Python way to keep them is a list:
+`self.blocks = [Block(), Block(), Block()]`.
+
+<Predict id="plain-list" />
+
+<Stuck q="My model runs, but its blocks never change. Why?">
+
+A plain Python list hides its contents from `model.parameters()`. The blocks still run in `forward`, so nothing
+crashes and the loss is a real number. But the optimizer never sees their weights, so they stay at their
+random starting values. Use `nn.ModuleList([Block(), Block(), Block()])` instead: it is a list that PyTorch looks
+inside. A quick check: `sum(p.numel() for p in model.parameters())` should match the count you expect.
+
+</Stuck>
+
+## 4. `backward()` adds, it doesn’t replace
+
+This one rule causes most beginner bugs. `loss.backward()` computes the gradients and
+**adds** them to whatever is already in `.grad`. It never clears `.grad`. Clearing is your job,
+with `opt.zero_grad()`.
+
+Why add? A parameter can be used in several places, and its total gradient is the sum of the pieces
+(you build this yourself in level U3). Inside one backward pass, adding is right. Across training steps,
+it means old gradients stay until you remove them.
+
+<Predict id="pred-forget" />
+
+Take one weight, `w = 1`, and one example, `x = 2`, `y = 6`, with loss $(w \cdot x - y)^2$.
+Its gradient is $2(w x - y)\,x = 2 \times (2 - 6) \times 2 = -16$.
+
+<Blank id="grad-twice" />
+
+</Gate>
+
+<Gate requires="grad-twice">
+
+Now try it. The buttons do what the PyTorch calls do, on this one weight.
+
+<GradAccumLab />
+
+<TryIt>
+
+Press "10 steps with `zero_grad`": w walks to 3, where w·x = y and the loss is 0. Reset, then press
+"10 steps without". Each step uses the sum of every gradient so far, so w jumps past 5 and swings back.
+Now do it by hand: backward, step, backward, step, and watch w.grad grow.
+
+</TryIt>
+
+Copy how PyTorch keeps track of gradients, in NumPy. `Param` below is a tiny **class** (section 3): a box that holds two numbers,
+`w.data` and `w.grad` (inside the class, `self` means "this box"). `backward` adds to `w.grad`, as PyTorch does.
+Write `zero_grad`.
+
+<CodeBlank id="accum-code" />
+
+</Gate>
+
+<Gate requires="accum-code">
+
+## 5. Shapes that broadcast without asking
+
+PyTorch broadcasts exactly like NumPy. That is convenient, and it hides a classic bug. The model outputs
+one score per example as a column, shape `(4, 1)`. Labels are often stored flat, shape `(4,)`.
+
+<Blank id="broadcast-shape" />
+
+<Stuck q="My loss looks fine but the model learns nothing. Why?">
+
+Check the shapes going into the loss. `(4, 1) − (4,)` does not fail: broadcasting stretches both into a
+`(4, 4)` grid and compares **every** prediction with **every** label. The mean of that grid is a number,
+so nothing crashes, but it is the wrong number and its gradient points the wrong way.
+
+The fix is one line: make the labels a column with `y.reshape(-1, 1)` (or `y.unsqueeze(1)` in PyTorch),
+or flatten the prediction with `pred.squeeze(1)`. A good habit is to print `pred.shape` and `y.shape`
+once, right before the loss.
+
+</Stuck>
+
+<Stuck q="Why does `print(loss)` show `tensor(0.6958, grad_fn=...)` instead of a number?">
+
+`loss` is still a tensor that remembers how it was computed (that is the `grad_fn`), so `backward()` can use it.
+To get a plain Python number, write `loss.item()`. Use it for printing and logging.
+
+Don't keep the tensor itself in a list across steps, like `history.append(loss)`. Each one keeps its
+whole graph and memory grows every step. Append `loss.item()` instead.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="broadcast-shape">
+
+## 6. Same numbers, both ways
+
+PyTorch’s gradients are not an approximation. They are exactly the chain rule you wrote by hand.
+The demo for this level copies the same weights into NumPy and into PyTorch, runs one backward pass in each,
+and prints both: they match to the last digit. (The demo uses `float64` on both sides. With PyTorch's default
+`float32` they agree to about 7 digits.) Check one of them yourself.
+
+For a 2→3→1 version of the network, with the weights below, PyTorch reports this gradient for the last layer
+(shown as a column):
+
+$$
+\frac{\partial L}{\partial W_2} = [\,0.014675,\; -0.005854,\; 0.004884\,]^T
+$$
+
+Write the NumPy line that produces it.
+
+<CodeBlank id="dw2-code" />
+
+<Deeper title="What loss.backward() actually does">
+
+While the forward pass runs, PyTorch writes down every operation and which tensors went into it.
+`loss.backward()` walks that record from the loss back to the weights, and at each step multiplies by the
+local gradient of that one operation: the chain rule from level 6, applied by a program.
+
+Level U3, "Build your own autograd", builds that program in about 50 lines of Python.
+After it, you will know exactly what `loss.backward()` does.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="dw2-code">
+
+## 7. A translation table to keep
+
+When you write PyTorch later, most lines are a NumPy line you already know. This table is what you have used on
+this page.
+
+**Used on this page**
+
+<div style={{ overflowX: 'auto' }}>
+
+| NumPy | PyTorch | example |
+|---|---|---|
+| `np.array(x, dtype=float)` | `torch.tensor(x, dtype=torch.float32)` | `torch.tensor([[0., 1.]])` has shape `(1, 2)` |
+| `A @ B`, `A.T`, `x.sum(0)`, `x.mean()` | the same | `x.sum(0)` goes down the rows: one total per column |
+| `np.exp`, `np.log`, `np.tanh` | `torch.exp`, `torch.log`, `torch.tanh` | `torch.tanh(torch.tensor(0.))` is `0.` |
+| `X @ W + b` with `W` of shape `(in, out)` | `nn.Linear(in, out)` | stores `(out, in)`, computes `x @ W.T + b` |
+| a class with `forward` | a subclass of `nn.Module` | `model(x)` runs `forward(x)` |
+| hand-written backward and update | `loss.backward()`, `opt.step()`, `opt.zero_grad()` | `zero_grad` before each `backward` |
+| a number from an array | `loss.item()` | `torch.tensor(0.5).item()` is `0.5` |
+
+</div>
+
+<Deeper title="Reference for later levels: more PyTorch, Python you will read, one epoch">
+
+Skip this box now. Come back when a later level sends you here.
+
+**For later levels** (the level that needs it is in the last column)
+
+<div style={{ overflowX: 'auto' }}>
+
+| NumPy | PyTorch | example | level |
+|---|---|---|---|
+| softmax, then `-np.log(p[correct])` | `F.cross_entropy(logits, target)` | takes raw scores, not probabilities | 10, 20 |
+| skip some targets in the loss | `F.cross_entropy(..., ignore_index=0)` | targets equal to 0 add nothing | 17, 20 |
+| `E[ids]`, a lookup in a table of shape `(V, d)` | `nn.Embedding(V, d)(ids)` | ids `(2, 5)` → vectors `(2, 5, d)` | 13, 20 |
+| a weight you make yourself | `nn.Parameter(torch.ones(d))` | stored as `self.g`, it appears in `parameters()` | 16, 20 |
+| a list of layers | `nn.ModuleList([Block(), Block()])` | a Python list hides them from `parameters()` | 20 |
+| `np.triu(np.ones((L, L)), k=1)` | `torch.triu(torch.ones(L, L), diagonal=1)` | ones above the diagonal; PyTorch’s name is `diagonal`, not `k` | 15, 20 |
+| `np.where(mask, -np.inf, s)` | `s.masked_fill(mask, float('-inf'))` | `mask` is `True` where blocked | 15, 20 |
+| `x.reshape(B, L, h, d_k)` | `x.view(B, L, h, d_k)` | `view` needs the memory in order | U1, 20 |
+| `x.transpose(0, 2, 1, 3)` | `x.transpose(1, 2)` | PyTorch swaps exactly two axes | U1, 20 |
+| after a transpose, `reshape` | `x.transpose(1, 2).contiguous().view(...)` or `.reshape(...)` | `view` right after `transpose` raises an error | U1, 20 |
+| `np.argmax(p, axis=-1)` | `logits.argmax(-1)` | the index of the largest score | 17, 18, 20 |
+| — | `model.train()` / `model.eval()` | switch training-only behavior on or off | 20 |
+| — | `with torch.no_grad():` | no gradient record: faster, for testing | 20 |
+
+</div>
+
+**Python you will read** in the code of later levels:
+
+<div style={{ overflowX: 'auto' }}>
+
+| Python | example | result |
+|---|---|---|
+| list comprehension | `[x * 2 for x in [1, 2, 3]]` | `[2, 4, 6]` |
+| `enumerate` | `list(enumerate("ab"))` | `[(0, 'a'), (1, 'b')]` |
+| dict comprehension | `{c: i for i, c in enumerate("ab")}` | `{'a': 0, 'b': 1}` |
+| slices | `s = [5, 6, 7]`: `s[:-1]`, `s[1:]` | `[5, 6]`, `[6, 7]` |
+| `range(a, b)` stops before `b` | `list(range(1, 4))` | `[1, 2, 3]` |
+| `zip` | `list(zip([1, 2], "ab"))` | `[(1, 'a'), (2, 'b')]` |
+| a random order | `torch.randperm(3)` | for example `tensor([2, 0, 1])` |
+| add an axis | `torch.tensor([1, 2]).unsqueeze(1)` | shape `(2, 1)` |
+
+</div>
+
+**One epoch**, the loop you will write again and again (one epoch = one pass over all the training data):
+
+```python
+for epoch in range(n_epochs):
+    for xb, yb in batches(train, size=64):  # shuffled mini-batches (level U4 writes batches)
+        logits = model(xb)                   # (64, V): one score per word in the vocabulary
+        loss = F.cross_entropy(logits, yb)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+```
+
+</Deeper>
+
+## 8. Your first PyTorch run (optional, on your computer)
+
+**Optional.** Skip this section if you have not installed PyTorch; nothing on this page depends on it, and the
+level clears without it. It is the only exercise on this page that needs PyTorch ([Run it on your computer](/setup/)).
+Copy these lines into a file `first_run.py` (or download [`first_run.py`](/files/numpy-to-pytorch/first_run.py)) and run `python first_run.py`. The seed makes the random starting
+weights the same on every computer, so everyone gets the same loss.
+
+```python
+import torch, torch.nn as nn, torch.nn.functional as F
+torch.manual_seed(0)
+X = torch.tensor([[0., 0.], [0., 1.], [1., 0.], [1., 1.]])
+y = torch.tensor([[0.], [1.], [1.], [0.]])
+model = nn.Sequential(nn.Linear(2, 6), nn.Tanh(), nn.Linear(6, 1))
+opt = torch.optim.SGD(model.parameters(), lr=0.5)
+for step in range(100):
+    loss = F.binary_cross_entropy_with_logits(model(X), y)
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
+print(round(loss.item(), 3))
+```
+
+<Blank id="first-run" />
+
+## 9. The loop, by yourself
+
+Last, the skill this level is about: the four steps of training, in the right order. Below, `Param` is the box from
+section 4, and the model is a line, `w · x + b`. `backward` adds to `.grad`, like PyTorch. Write the body of the
+inner loop: three calls, one per line.
+
+<CodeBlank id="loop-code" />
+
+</Gate>

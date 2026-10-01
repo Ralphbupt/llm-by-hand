@@ -1,0 +1,199 @@
+---
+title: Multilayer perceptron
+level: "5"
+order: 5
+part: foundations
+question: What do you gain by stacking layers of neurons?
+run: browser
+checkpoint: mlp-deep
+testOut: [fwd-hidden, fwd-out, params-deep, mlp-forward, mlp-deep]
+recap:
+  can:
+    - "Compute an MLP’s forward pass by hand for one example: hidden layer, activation, output."
+    - "Give the shape of every layer’s output for a batch of examples."
+    - "Count the weights and biases of a network from its layer sizes."
+  keys:
+    - "$H = \\text{act}(X W_1 + b_1)$, $p = \\sigma(H W_2 + b_2)$"
+    - "`(N, d_in) @ (d_in, n)` → `(N, n)`: one row per example, one column per hidden unit"
+    - "Parameters per layer: inputs × outputs weights + one bias per output"
+    - "Each first-layer unit draws one line; later layers combine those lines"
+  mistakes:
+    - "Counting only the lines (weights) and forgetting one bias per neuron."
+    - "Adding the bias after the activation instead of before it: `act(X @ W1 + b1)`."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import SpiralLab from '@viz/SpiralLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+In level 3 one neuron drew one straight line. In level 4, XOR needed a second neuron and a bend between the layers.
+That small network has a name: a **multilayer perceptron**, or **MLP**. It is just layers of neurons, each layer
+feeding the next, with an activation function in between.
+
+This level asks what you get from more neurons per layer (**width**) and more layers (**depth**).
+First, the forward pass written the way every library writes it: as matrices.
+
+## 1. One hidden layer, as matrices
+
+Put the inputs in a matrix $X$ with one row per example. A hidden layer of $n$ neurons is one matrix multiplication,
+a bias, and an activation. The output layer is one more:
+
+$$
+H = \text{act}(X W_1 + b_1) \qquad p = \sigma(H W_2 + b_2)
+$$
+
+As in level 4, $X W_1$ is the matrix product `X @ W1` in code.
+Column $j$ of $W_1$ holds neuron $j$'s two weights, so $W_1$ is (2, n). $H$ holds the hidden values: one row per example,
+one column per hidden neuron.
+
+Try one example by hand, with ReLU as the activation:
+
+$$
+x = [2, 1] \quad W_1 = \begin{bmatrix} 1 & -1 \\ 0 & 1 \end{bmatrix} \quad b_1 = [0, 0] \quad W_2 = \begin{bmatrix} 2 \\ -1 \end{bmatrix} \quad b_2 = 0.5
+$$
+
+<Blank id="fwd-hidden" />
+
+<Gate requires="fwd-hidden">
+
+Now the output layer, then the shapes.
+
+<Blank id="fwd-out" />
+
+<Blank id="hidden-shape" />
+
+</Gate>
+
+<Gate requires="hidden-shape">
+
+## 2. A harder pattern: two spirals
+
+XOR had four points. Here are 200, in two arms that wind around each other. No straight line separates them,
+and neither do two or three. Before you press anything:
+
+<Predict id="width-2" />
+
+</Gate>
+
+<Gate requires="width-2">
+
+The lab below starts with 1 hidden layer of 8 tanh units. Press **Train**. The **Map** view shows the network's answer as a background color, one color for each arm; switch to **3D** to see
+the same answer as a height over the plane.
+
+<SpiralLab hide={{ params: ["params-1", "params-deep"] }} />
+
+Now change the width. Set 2 units per layer and train again. Then try 32.
+With 2 units the network can only bend the plane twice, and it fails on most of the spiral.
+With enough units the background starts to follow the arms.
+
+<Stuck q="Why does it find a different answer every time I press New random start?">
+
+Every run starts from different random weights, and training only ever walks downhill from where it starts.
+So two runs can end in different valleys: different boundaries, sometimes one that fits and one that gets stuck.
+That randomness is normal. Real training fixes the random seed when it needs to repeat a run exactly.
+
+</Stuck>
+
+<Stuck q="How does the lab know which way to move all those weights?">
+
+It computes the gradient of the loss for every weight, then takes a small step against it, exactly the
+gradient descent from level 2, with a smarter step size you will meet in level 7. How it gets a gradient for
+a weight buried inside a hidden layer is the chain rule, applied layer by layer. That is level 6.
+
+</Stuck>
+
+## 3. How big is it?
+
+<figure style={{ margin: "1rem 0" }}>
+<svg viewBox="0 0 340 170" role="img" aria-label="A network with 2 inputs, 3 hidden neurons and 1 output. Every line between two circles is one weight." style={{ width: "100%", maxWidth: "380px", display: "block" }}>
+<line x1="40" y1="50" x2="160" y2="30" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="50" x2="160" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="50" x2="160" y2="130" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="110" x2="160" y2="30" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="110" x2="160" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="110" x2="160" y2="130" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="160" y1="30" x2="280" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="160" y1="80" x2="280" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="160" y1="130" x2="280" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<circle cx="40" cy="50" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="40" cy="110" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="160" cy="30" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="160" cy="80" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="160" cy="130" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="280" cy="80" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<text x="40" y="158" textAnchor="middle" style={{ fill: "var(--dim)", fontSize: "12px" }}>2 inputs</text>
+<text x="160" y="158" textAnchor="middle" style={{ fill: "var(--dim)", fontSize: "12px" }}>3 hidden neurons</text>
+<text x="300" y="158" textAnchor="end" style={{ fill: "var(--dim)", fontSize: "12px" }}>1 output</text>
+</svg>
+<figcaption style={{ color: "var(--dim)", fontSize: "0.85rem" }}>A 2 → 3 → 1 network: 6 lines into the hidden layer, 3 into the output. Each line is one weight.</figcaption>
+</figure>
+
+Every line between two neurons is one weight, and every neuron after the input has one bias.
+
+<Blank id="params-1" />
+
+</Gate>
+
+<Gate requires="params-1">
+
+Now add a layer.
+
+<Blank id="params-deep" />
+
+The parameter count in the lab is now unlocked. Compare your answers with it.
+
+Here is the same idea in 3D. It starts with the example from section 1 ($x = [2, 1]$, ReLU). Then pick a width and a depth and
+count the lines: each one is a weight.
+
+<ArchLab which="mlp" hide={{ params: ["params-1", "params-deep"] }} />
+
+## 4. What each hidden unit does
+
+Check **show each first-layer unit's line**. Every unit in the first layer is a neuron from level 3: it draws
+one straight line and reports which side a point is on. The layer after it combines those reports.
+Many lines, combined with bends in between, can trace almost any shape: here, a spiral.
+
+<Deeper title="Width or depth?">
+
+A wide single hidden layer can, in principle, approximate any reasonable function: add enough units and their
+lines can split the plane into as many pieces as you like. But "enough" can be enormous.
+
+Depth reuses work. A second layer does not see points, it sees the first layer's answers, so it can combine
+pieces that the first layer has already found. That is why the same number of parameters often does more
+when it is spread over two or three layers than when it is all in one. Try it below.
+
+Depth has a cost: the gradient has to travel back through every layer, and level 4 showed how it can get smaller at every layer.
+Levels 6 and 7 deal with that.
+
+</Deeper>
+
+<TryIt>
+
+Compare 1 layer of 32 units with 3 layers of 8 units. Which has more parameters? Which one draws the spiral
+better after 1000 steps? Then switch to ReLU: the boundary is made of straight pieces instead of curves. Why?
+
+</TryIt>
+
+## 5. Write it yourself
+
+Write the hidden layer of a one-hidden-layer MLP with tanh. Everything is a matrix, so one line handles
+a whole batch of examples. In NumPy, tanh is `np.tanh`: `np.tanh(np.array([0., 1.]))` gives `[0., 0.76]`, one tanh per element.
+
+<CodeBlank id="mlp-forward" />
+
+Now add depth. A second hidden layer is the same line again, with $H_1$ as its input instead of $X$.
+Use ReLU this time: in NumPy it is `np.maximum(0, …)`, as in level 4. This is the 2 → 2 → 2 → 1 version
+of the network in section 1:
+
+$$
+H_1 = \text{ReLU}(X W_1 + b_1) \qquad H_2 = \text{ReLU}(H_1 W_2 + b_2) \qquad \text{out} = H_2 W_3 + b_3
+$$
+
+<CodeBlank id="mlp-deep" />
+
+</Gate>

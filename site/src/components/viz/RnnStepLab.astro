@@ -1,0 +1,6 @@
+---
+import Lab from './RnnStepLab.svelte'
+interface Props { hide?: { id: string; t: number }[] }
+const { hide } = Astro.props
+---
+<Lab client:visible hide={hide} />

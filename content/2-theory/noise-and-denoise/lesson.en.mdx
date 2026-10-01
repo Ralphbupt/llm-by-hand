@@ -1,0 +1,191 @@
+---
+title: Adding and removing noise
+level: "D1"
+order: 21.1
+part: theory
+branch: diffusion
+question: If you mix a picture with noise step by step, can you undo it?
+run: browser
+checkpoint: guess-clean
+testOut: [alpha-bar-3, x3-first, noisy-at-t, undo-second, guess-clean]
+recap:
+  can:
+    - "Compute alpha-bar from a list of betas: multiply what each step keeps, α = 1 − β."
+    - "Compute the noisy point at any step t in one line, without running the steps in between."
+    - "Undo the formula with a noise guess to get a guess of the clean point."
+  keys:
+    - "$\\bar\\alpha_t = \\alpha_1 \\alpha_2 \\cdots \\alpha_t$ with $\\alpha = 1 - \\beta$; in code `np.prod(1 - betas[:t])`"
+    - "$x_t = \\sqrt{\\bar\\alpha_t}\\; x_0 + \\sqrt{1-\\bar\\alpha_t}\\; \\varepsilon$"
+    - "$x_0 = (x_t - \\sqrt{1-\\bar\\alpha_t}\\;\\varepsilon) / \\sqrt{\\bar\\alpha_t}$"
+    - "The two weights squared add up to 1, so the variance stays the same: $0.6^2 + 0.8^2 = 1$"
+    - "The network sees the noisy point and t and guesses the noise; its loss is `mean((eps_hat - eps)**2)`"
+  mistakes:
+    - "Using alpha-bar itself as the weight: the signal gets $\\sqrt{\\bar\\alpha_t}$ (0.8), not $\\bar\\alpha_t$ (0.64)."
+    - "Multiplying the betas (the noise added) instead of the alphas (the signal kept)."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import NoiseLab from '@viz/NoiseLab.astro'
+import DenoiseTrainLab from '@viz/DenoiseTrainLab.astro'
+
+A Transformer writes one word at a time. Diffusion models make pictures in a different way.
+They start from pure noise and remove a little of it, many times, until a picture is left.
+
+To learn how to remove noise, the model first watches the opposite: clean data being mixed with noise.
+That direction is easy. It takes one line of math.
+
+> **What you need:** Foundations (levels 1–10). D1 and D2 use nothing else. D3 also uses attention and
+> Transformer blocks, so take D3 after level 16.
+
+Our "picture" is a cloud of 2D points shaped like a spiral. Every point is two numbers, so you can see everything.
+
+## 1. Adding noise
+
+Each step mixes a bit of random noise into every point. After `t` steps, a point `x0` has become:
+
+$$x_t = \sqrt{\bar\alpha_t}\; x_0 + \sqrt{1-\bar\alpha_t}\; \varepsilon$$
+
+- `ε` (eps) is noise drawn from the normal distribution you sampled in level 10: one new pair of numbers per point.
+- `ᾱ_t` (alpha-bar) says how much of the original signal (the clean point x0) is left after `t` steps. It starts at 1 and falls toward 0.
+- In this branch, `T` is the number of steps. It is not the temperature T from level 10.
+  The bar over the α means “multiplied over all the steps so far”. In code it is called `ab`.
+
+As `ᾱ_t` falls toward 0, the signal’s weight `√ᾱ_t` falls toward 0 and the noise’s weight `√(1 − ᾱ_t)` rises toward 1.
+The lab below uses 50 steps (call that number T = 50). Before you drag anything, ask yourself: what does the last step look like?
+
+<Predict id="end-of-road" />
+
+Now drag `t` and watch the spiral turn into noise. The highlighted point is the one we follow.
+
+<NoiseLab />
+
+Where does alpha-bar come from? Each step has a small number β (beta), the amount of noise it adds.
+That step keeps α = 1 − β of the signal. After several steps, multiply what each step kept.
+
+Try it on a small example with only 3 steps: β = 0.1, 0.2, 0.5. So α = 0.9, 0.8, 0.5.
+
+<Blank id="alpha-bar-3" />
+
+<Gate requires="alpha-bar-3">
+
+### Why the square roots?
+
+Alpha-bar is 0.36, yet the formula multiplies the signal by √0.36 = 0.6. Both are right, because they measure different things.
+In level 10 you measured how spread out numbers are with the std. Squaring the std gives the **variance**, and variance is what
+alpha-bar counts: 36% of the signal’s variance is left. Multiplying a number by 0.6 multiplies its variance by 0.6² = 0.36.
+
+The noise gets the rest. Its weight is √(1 − 0.36) = √0.64 = 0.8, so its variance is 0.8² = 0.64.
+
+<Blank id="var-sum" />
+
+That sum is the reason for the square roots. The two weights, squared, always add up to 1, at every step.
+So if the clean data has variance 1, the noisy data has variance 1 at every step too: the cloud only changes from
+“spiral” into “noise”, and never grows or shrinks. Real models scale their data to variance 1 for this reason.
+Our spiral has a variance of about 0.6, so its cloud grows a little as it becomes noise with variance 1.
+
+Now compute it for one point. Take `x0 = [1, 2]` and the noise `eps = [0.5, -1]`.
+At t = 3, √0.36 = 0.6 and √(1 − 0.36) = 0.8. After you answer, switch the lab to **Hand example · 3 steps** and drag to t = 3 to watch the point move.
+
+<Blank id="x3-first" />
+
+<Stuck q="Why jump straight to step t? Don’t you have to add the noise one step at a time?">
+
+You can add it one step at a time and get the same kind of result.
+Adding two independent normal noises gives one bigger normal noise, so all t steps combine into one formula.
+That shortcut matters for training: to make a training example at step 37, you don't have to run 37 steps.
+Compute alpha-bar once and jump there.
+
+</Stuck>
+
+Write the shortcut yourself. It works on one point or on a whole array of points at once.
+
+<CodeBlank id="add-noise" />
+
+Now put both parts together: start from the list of betas and return the noisy point at step t.
+Three pieces of NumPy do it:
+
+- `betas[:t]` takes the first t betas (positions 0 to t − 1), so step t uses steps 1 to t.
+- `1 - betas[:t]` turns them into the α values, what each step keeps.
+- `np.prod` multiplies all the numbers of an array: `np.prod(np.array([0.9, 0.8, 0.5]))` is 0.36.
+
+<CodeBlank id="noisy-at-t" />
+
+</Gate>
+
+Adding noise is the easy half. Next comes the half that makes generation possible: removing it.
+
+<Gate requires="noisy-at-t">
+
+## 2. Running it backward
+
+Here is the key idea. If you knew exactly which noise `eps` was added, you could undo the formula and get `x0` back:
+
+$$x_0 = \frac{x_t - \sqrt{1-\bar\alpha_t}\;\varepsilon}{\sqrt{\bar\alpha_t}}$$
+
+Try it on a different point. At t = 3 (so 0.6 and 0.8 again), a point sits at `x_3 = [0.7, 1.0]`, and you are told its noise was `eps = [0.5, 0.5]`.
+
+<Blank id="undo-second" />
+
+When generating, nobody tells you the noise. So a network is trained to **guess** it.
+The network sees a noisy point and the step number `t`, and outputs its guess of the noise.
+The loss is the mean squared error between the guess and the true noise.
+
+<Blank id="zero-loss" />
+
+<Blank id="batch-shape" />
+
+<Deeper title="Why the network needs to know t">
+
+Take the same noisy position at two different steps:
+
+- At step 2 the point has hardly moved, so almost all of it is signal. The right noise guess is small.
+- At step 48 the point is almost pure noise. The right guess is close to the point itself.
+
+The same position needs a different answer at different steps.
+
+So the network gets t as 12 extra numbers: sin and cos of t/T (T = 50, the number of steps) at 6 different frequencies (how fast each one repeats).
+A single number would work too, but those 12 make it easy for the network to treat
+nearby steps alike and far-apart steps differently. Transformers use the same idea for word positions (level 16).
+
+</Deeper>
+
+## 3. Training the noise-guessing network
+
+Next you train this network in your browser. Each training step:
+
+1. takes 128 points from the spiral,
+2. picks a random t for each and adds the matching noise,
+3. asks the network to guess that noise and changes its weights a little to reduce the loss.
+
+The simplest guess, always [0, 0], scored 0.625 on our one point. Averaged over many random noises it scores 1.0,
+because each noise number has variance 1, so the average of ε² is 1. Training should do better than that. How much better?
+
+<Predict id="loss-floor" />
+
+Now press **Train**. This is real gradient descent with Adam, the same loop you met in levels 2 and 7.
+
+<DenoiseTrainLab />
+
+<TryIt>
+
+Train all 4,000 steps, then drag “look at step t”. At t = 5 the guessed points sit right on the spiral.
+At t = 45 they no longer follow the spiral; they land in an unclear cloud. Why can't the network do better from so much noise?
+Is it a bad network, or is the question impossible?
+
+</TryIt>
+
+One piece is left: turning a noise guess into a guess of the clean point. It is the undo formula from section 2, with the network's guess in place of the true noise.
+The guess is written `ε̂` (“eps-hat”, `eps_hat` in code): a hat on a letter marks an estimate of it.
+
+<CodeBlank id="guess-clean" />
+
+You now have both halves. Forward: one line that adds noise. Backward: a network that guesses the noise.
+One guess from heavy noise gives an answer that is not sharp, as you saw. In level D2 you take many small steps instead of one big one,
+and the spiral comes back sharp.
+
+</Gate>

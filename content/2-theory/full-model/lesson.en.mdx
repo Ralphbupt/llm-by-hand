@@ -1,0 +1,281 @@
+---
+title: The whole Transformer
+level: "17"
+order: 17
+part: theory
+question: How does a model produce text one word at a time?
+run: browser
+checkpoint: masked-loss
+testOut: [logits-shape, step-rows, greedy-loop, masked-loss]
+recap:
+  can:
+    - "Follow the shapes through a whole decoder-only model, from token ids to `(B, L, V)` logits."
+    - "Write the greedy loop: run the model, take the last row, append the top id, stop at `<eos>`."
+    - "Build x and y by a shift of one, and compute a loss that counts only the answer."
+  keys:
+    - "One sequence: `4 2 7 = four hundred twenty seven <eos>`; the prompt is the start of the sequence"
+    - "logits: `(B, L, d_model)` → `(B, L, V)`; for the loss, `reshape(-1, V)`"
+    - "`x = seq[:-1]`, `y = seq[1:]`: position t guesses token t + 1"
+    - "Greedy step: `np.argmax(scores[-1])`, the last row only"
+  mistakes:
+    - "Averaging the loss over the skipped rows too: `(nll * keep).mean()` still divides by every row."
+    - "Counting only the words when you count rows: the digits and `=` are in the same sequence."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import FullModelLab from '@viz/FullModelLab.astro'
+import DecodeLab from '@viz/DecodeLab.astro'
+import MicroscopeLab from '@viz/MicroscopeLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+You have every part now: embeddings, attention, masks, the FFN, residuals and LayerNorm, and level 16 put them together
+into a decoder block. In this level you stack those blocks into a whole model and watch it work on a real task.
+
+The task: **read a number aloud.** The input is a string of digits, the output is English words.
+The model sees both as **one sequence**: the digits, then `=`, then the words, then `<eos>` (“end”).
+
+```
+4 2 7 = four hundred twenty seven <eos>
+```
+
+The model only ever does one thing: guess the next token. Give it `4 2 7 =` and it continues the sequence, one word at a
+time, until it writes `<eos>`. The part you give it is the **prompt**; the part it writes is the answer.
+
+There are 1,000 numbers, from 0 to 999. The model trains on 900 of them. The other 100 are held out (the model never trains on them),
+so the only way to get them right is to learn the rule, not to remember the answers.
+
+<Blank id="seq-len" />
+
+<Gate requires="seq-len">
+
+## 1. The whole machine
+
+In order, from input to output: a token table turns each id into a vector. Then the position numbers of level 16 are added.
+Then come a stack of decoder blocks, one final LayerNorm, and an output layer that gives one score per token.
+Select a block to see its input, its output, and how many parameters it holds.
+The shapes are for one sequence of 8 tokens, the longest input this task has.
+
+<FullModelLab />
+
+<Blank id="logits-shape" />
+
+<Gate requires="logits-shape">
+
+<Predict id="heads-params" />
+
+Most of the parameters are in the blocks, and inside each block most of them are in two places:
+the attention matrices and the FFN. You can count one FFN by hand.
+
+<Blank id="ffn-params" />
+
+<Deeper title="Where the 72,106 parameters are">
+
+At the default size (`d_model` 64, 4 heads, 2 blocks, `d_ff` 128):
+
+| part | parameters |
+|---|---|
+| token table: 42 × 64 | 2,688 |
+| one attention block: `W_Q`, `W_K`, `W_V` (64 × 64 each) + `W_O` (64 × 64 + 64) | 16,448 |
+| one FFN | 16,576 |
+| one block: attention + FFN + 2 LayerNorms (128 each) | 33,280 |
+| final LayerNorm | 128 |
+| output layer: 64 × 42 + 42 | 2,730 |
+| **total: 2 blocks + token table + final LayerNorm + output** | **72,106** |
+
+The position numbers are added, not learned, so they have no parameters.
+The number of heads does not appear anywhere in this table. It only decides how the 64 columns are cut into slices.
+The 42 tokens are `<pad>`, `<eos>`, the ten digits, `=`, and 29 words: zero to nineteen, the eight tens words, and “hundred”.
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="ffn-params">
+
+## 2. Under the microscope
+
+The diagram shows the blocks. Now look inside them. Below, a tiny copy of this model (1 block, 1 head,
+`d_model` = 6, `d_ff` = 12) reads `8 9 =` and writes the next word. Every size is different from every other size,
+so each number shows you which axis it is. Each step shows the tensor’s shape with named axes, its numbers,
+and the shape of the same tensor in the full model on this page.
+
+<MicroscopeLab data="full-model" />
+
+Here is the block of the same tiny model as a picture, with the numbers from the microscope. The line underneath is
+the residual path: each sublayer reads a normalized copy of x and adds its result to x.
+
+<ArchLab which="full" />
+
+<Stuck q="Why is the embedding multiplied by a number before the position is added?">
+
+Look at steps 3 and 4 in the microscope. Every position number is between −1 and 1, so the factor decides how strong
+the token is compared with its position.
+
+This model’s token table starts with numbers of size about 1/√`d_model`. Multiplying by √`d_model` makes them about size 1,
+the same as the position numbers, so that one doesn’t hide the other. In the full model, a token’s row has 64 numbers
+of size 1/8, so its length is about √64 × 1/8 = 1. After × √64 = 8 it is about 8 long, and a position’s row is about 5.7.
+
+It matters. Suppose the table starts at size 1 instead. A token’s row is then about √64 × 1 × 8 = 64 long, 11 times
+longer than its position’s row, and the model can hardly see where a token is. It reads 82 as “eight hundred twenty two”. Over three training runs it
+gets 55% to 79% of the unseen numbers right, while the model on this page gets 99% to 100%.
+In level 21 the position table is learned too, and both tables start at the same size, so that model needs no factor.
+
+</Stuck>
+
+With several heads, attention scores have the shape `(B, h, L_q, L_k)`: batch, heads, then the length of Q and the length
+of K. In a decoder-only model Q and K come from the same sequence.
+
+<Blank id="scores-shape" />
+
+</Gate>
+
+<Gate requires="scores-shape">
+
+## 3. One word at a time
+
+Level 14 called it **inference**: running a trained model to get an answer. It is the whole forward pass, from token ids to
+logits, with every weight fixed. Training runs the same forward pass, then the backward pass, and then changes the weights.
+
+<Predict id="infer-vs-train" />
+
+The model never writes the whole answer at once. It writes **one word, then runs again**:
+
+1. Start with the prompt: the digits and `=`.
+2. Run the model over everything so far. The output has one row per token.
+3. Only the **last row** matters. The output layer turns its 64 numbers into 42 scores, one per token.
+   These raw scores are usually called **logits**.
+4. Pick the highest score (this is called greedy decoding), and add that token to the end.
+5. Repeat until the model picks `<eos>`.
+
+Below is a real model, trained on this page's task. Press **Next step** and watch each stage.
+The bars above the tokens show where the last row’s attention looked while it chose the next word.
+
+<DecodeLab />
+
+<Blank id="step-rows" />
+
+</Gate>
+
+<Gate requires="step-rows">
+
+Step 4 is the only new code. NumPy’s `np.argmax` gives the position of the largest value, not the value itself:
+`np.argmax(np.array([0.2, 1.5, -0.3]))` is `1`.
+
+<CodeBlank id="greedy-pick" />
+
+Now the whole loop from the list above. The model returns one row of scores per token, so `scores[-1]` is the last row.
+`ids.append(nxt)` adds the picked id to the end, and `break` leaves the loop once the model picks `<eos>`.
+A fixed limit on new tokens stops a model that never picks `<eos>`.
+
+<CodeBlank id="greedy-loop" />
+
+One **epoch** is one pass over all 900 training numbers. The lab has the same model saved twice: after 2 epochs and after 60.
+
+<TryIt>
+
+Switch the model to **after 2 epochs** and read 14 aloud. It says “six hundred twenty nine”.
+It has learned the shape of a long answer: a digit, “hundred”, a tens word, a digit.
+It has not learned which digit goes where, or even how long the number is.
+
+Then switch back to **after 60 epochs** and read 896. Watch the bars: for “eight” the last row looks at the 8,
+for “ninety” mostly at the 9, and for “six” at the 6. Nobody told it which digit goes with which word. This model gets
+all 100 unseen numbers right.
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="greedy-loop">
+
+## 4. How it learned
+
+While training, the model does **not** run one word at a time. It gets the whole sequence and makes every guess in one
+pass. The input x is the sequence without its last token, and the target y is the sequence without its first token:
+
+```
+427:    x   4  2  7  =     four     hundred  twenty  seven
+        y   2  7  =  four  hundred  twenty   seven   <eos>
+```
+
+The causal mask stops each position from seeing the token it has to guess. Training on the correct previous tokens
+like this, instead of on the model’s own guesses, is called **teacher forcing**.
+
+<Stuck q="Why are x and y the same tokens, shifted by one?">
+
+Because position t has to guess the next token. Write them one under the other: under `=` the answer is “four”;
+under “four” the answer is “hundred”. y is x moved one step to the left, with `<eos>` at the end.
+
+If you fed the same row as both input and target, position t could copy its own input,
+and the loss would drop to zero while the model learns nothing.
+
+</Stuck>
+
+Not every guess is worth learning. Under the 4 the target is 2, and under the 2 it is 7: the model would be guessing the
+digits of the question, and those are random. Only the targets that are words or `<eos>` are the answer.
+Every target before them, `=` included, is part of the question. The loss counts the answer targets and skips the rest, by setting the skipped targets to PAD.
+
+<Blank id="count-427" />
+
+<Gate requires="count-427">
+
+Training repeats four steps on batches of 64 numbers:
+
+```python
+for x, y in batches:              # 1. a batch; skipped targets are PAD
+    logits = model(x)             # 2. forward: (64, L, 42)
+    # 3. loss, ignore_index=PAD
+    loss = loss_fn(logits.reshape(-1, 42), y.reshape(-1))
+    # 4. backward, then update
+    opt.zero_grad(); loss.backward(); opt.step()
+```
+
+Short numbers have short sequences. In a batch with the numbers 0 to 63, the longest x is 5 tokens (for example
+`2 3 = twenty three`), so the logits are (64, 5, 42) and there are 320 targets. Only 167 of them count: 118 are digits
+or `=`, and 35 are PAD after a short sequence.
+
+<Blank id="reshape-rows" />
+
+<Stuck q="Why reshape to (B × L, V) at all?">
+
+The loss function wants a simple list of guesses: one row of scores per guess, and one correct id per guess.
+It does not care which sequence or which position a guess came from.
+Every position in every sequence is one independent guess, so (64, 5, 42) is stored as 320 rows of 42.
+
+</Stuck>
+
+<Predict id="no-causal" />
+
+<Deeper title="A debugging habit: the copy task">
+
+When a model learns nothing, the problem can be the task, or it can be a bug in the code. What would you check first?
+
+<Predict id="copy-first" />
+
+The **copy task** is `1 2 3 = 1 2 3`. Any correct model learns it in about a minute of training.
+So if yours can’t, the bug is in the mask, the shift by one or the loss.
+
+</Deeper>
+
+Last step. Write the loss that skips the PAD targets. In NumPy, an array of True and False picks entries:
+`np.array([5, 6, 7])[np.array([True, False, True])]` is `array([5, 7])`.
+The browser gives you `softmax(x)`, and it works on each row of x separately.
+
+<CodeBlank id="masked-loss" />
+
+<Gate requires="masked-loss">
+
+**Recommended next: side trip [N7](/learn/encoder-decoder/).** If you want to read the original 2017 Transformer
+design, now is a good time. N7 builds the two-stack encoder–decoder on this same task. Level 18 continues the main line.
+
+</Gate>
+
+</Gate>
+
+</Gate>

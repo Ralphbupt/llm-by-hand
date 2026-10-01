@@ -1,0 +1,264 @@
+param-count:
+  type: number
+  prompt: "model = nn.Sequential(nn.Linear(2, 6), nn.Tanh(), nn.Linear(6, 1)). A Linear layer has one weight for every input-output pair and one bias per output. How many numbers does the model learn in total?"
+  answer: 25
+  tol: 0
+  after: "First layer: 2 × 6 = 12 weights + 6 biases = 18. Second layer: 6 × 1 = 6 weights + 1 bias = 7. Total 25, the same as W1, b1, W2, b2 on the NumPy side. Tanh has no parameters."
+  hints:
+    - when: { equals: 18 }
+      say: "18 is the first layer only. Add the second layer: 6 weights and 1 bias."
+    - when: { equals: 19 }
+      say: "Close. The second layer has 6 × 1 = 6 weights plus 1 bias."
+    - when: { equals: 24 }
+      say: "Did you forget a bias? 12 + 6 for the first layer, 6 + 1 for the second."
+    - when: { any: true }
+      say: ["Count each layer separately: weights (inputs × outputs) plus one bias per output.", "First layer: 2 × 6 weights and 6 biases. Second layer: 6 × 1 weights and 1 bias."]
+
+linear-shape:
+  type: shape
+  prompt: "In NumPy, W1 has shape (2, 6): 2 inputs, 6 outputs. What is the shape of nn.Linear(2, 6).weight?"
+  answer: [6, 2]
+  after: "(6, 2). PyTorch stores one row per output and computes x @ W.T + b. Same numbers, transposed."
+  hints:
+    - when: { shape: [2, 6] }
+      say: "That is the NumPy layout. PyTorch stores the weight in the opposite layout: one row per output."
+    - when: { any: true }
+      say: ["PyTorch stores the weight of a Linear layer with one row per output.", "nn.Linear(2, 6) has 6 outputs and 2 inputs."]
+
+pred-forget:
+  type: predict
+  prompt: "Your training loop has loss.backward() and opt.step(), but you forgot `opt.zero_grad()`. What happens?"
+  options: ["Nothing. PyTorch clears the gradients after each step", "Each step uses the sum of all gradients so far, so training goes wrong", "An error: the gradient was already used"]
+  reveal: "Every step uses the sum of all gradients so far. Nothing crashes, which makes this bug hard to find: the loss only behaves strangely. Usually the steps get too big, and the loss swings up and down or grows very large."
+  answer: 1
+  hints:
+    - when: { equals: 0 }
+      say: "backward() adds to .grad. Nothing clears .grad unless you call `zero_grad()`."
+    - when: { equals: 2 }
+      say: "Nothing complains: adding to .grad is allowed. The problem is what the update then uses."
+
+grad-twice:
+  type: number
+  prompt: "w = 1, x = 2, y = 6, loss = (w·x − y)², so each backward computes the gradient −16. You call loss.backward() twice, with no `zero_grad` in between. What is w.grad now?"
+  answer: -32
+  tol: 0
+  after: "−16 + (−16) = −32. The second backward added to the first. One opt.step() with lr = 0.05 would now move w by 1.6 instead of 0.8."
+  hints:
+    - when: { equals: -16 }
+      say: "That is the gradient of one backward. The second call adds to what is already there."
+    - when: { equals: 32 }
+      say: "Right size, wrong sign. Both gradients are −16."
+    - when: { any: true }
+      say: ["backward() adds its gradient into w.grad; it never replaces it.", "w.grad starts at 0. Two calls each add −16."]
+
+accum-code:
+  type: code
+  prompt: "backward adds to w.grad, like PyTorch. Write `zero_grad` so that train(…, clear=True) reaches w = 3."
+  template: |
+    class Param:
+        def __init__(self, v):
+            self.data = float(v)
+            self.grad = 0.0
+
+    def backward(w, x, y):
+        # like loss.backward() for loss = (w*x - y)**2: it ADDS to w.grad
+        w.grad += 2 * (w.data * x - y) * x
+
+    def zero_grad(w):
+        ____
+
+    def train(steps, lr, clear):
+        w = Param(1.0)
+        for _ in range(steps):
+            if clear:
+                zero_grad(w)
+            backward(w, 2.0, 6.0)
+            w.data -= lr * w.grad
+        return w.data
+
+    print("with zero_grad:   ", round(train(10, 0.05, True), 3))
+    print("without zero_grad:", round(train(10, 0.05, False), 3))
+  solution: "w.grad = 0.0"
+  tests:
+    - expr: "train(1, 0.05, True)"
+      expect: 1.8
+      tol: 0.0001
+      say: "one step: w = 1 − 0.05 × (−16) = 1.8"
+    - expr: "train(2, 0.05, True)"
+      expect: 2.28
+      tol: 0.0001
+      say: "second step uses only its own gradient −9.6: w = 2.28"
+    - expr: "train(50, 0.05, True)"
+      expect: 3.0
+      tol: 0.0001
+      say: "after 50 clean steps w settles at 3"
+  hints:
+    - when: { testFailed: 1 }
+      say: "The first step is right, the second is not: the old gradient is still in w.grad. Set it back to 0."
+    - when: { error: "NameError" }
+      say: ["A name is not defined. Inside `zero_grad` the parameter is called w.", "The number to reset is an attribute of the parameter. Look at the class Param."]
+    - when: { any: true }
+      say: ["`zero_grad` should set the stored gradient back to zero.", "Inside `zero_grad` the parameter is called w. Look at the class Param: which attribute holds the gradient?"]
+  after: "backward only adds to w.grad, so `zero_grad` must set it back to 0.0 before each new backward. Then every step uses only its own gradient. Without it, the old gradients stay and the steps get too big."
+
+broadcast-shape:
+  type: shape
+  prompt: "pred has shape (4, 1) and y has shape (4,). What is the shape of pred − y?"
+  answer: [4, 4]
+  after: "(4, 4). Broadcasting stretches the column across and the row down, so every prediction is compared with every label. No error, wrong loss."
+  hints:
+    - when: { shape: [4, 1] }
+      say: "That is what you wanted. But broadcasting lines shapes up from the right: (4, 1) against (1, 4)."
+    - when: { shape: [4] }
+      say: "Broadcasting never drops a dimension. Compare the shapes from the right: (4, 1) and (4,) → (4, 1) and (1, 4)."
+    - when: { any: true }
+      say: ["Compare the shapes from the right; a missing axis counts as size 1.", "(4,) becomes (1, 4). Each size-1 axis stretches to match the other side."]
+
+dw2-code:
+  type: code
+  prompt: "Write the gradient of the last layer’s weights. It must match PyTorch’s W2 gradient above."
+  template: |
+    def sigmoid(z):
+        return 1 / (1 + np.exp(-z))
+
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+    y = np.array([[0], [1], [1], [0]], dtype=float)
+    W1 = np.array([[0.5, -0.4, 0.3], [0.2, 0.6, -0.5]])
+    b1 = np.array([0.0, 0.1, -0.1])
+    W2 = np.array([[0.7], [-0.3], [0.5]])
+    b2 = np.array([0.05])
+
+    def grad_W2(X, y, W1, b1, W2, b2):
+        a1 = np.tanh(X @ W1 + b1)          # (4, 3)
+        p = sigmoid(a1 @ W2 + b2)          # (4, 1)
+        dz2 = (p - y) / len(X)             # (4, 1): sigmoid + cross-entropy, averaged
+        return ____
+
+    print(grad_W2(X, y, W1, b1, W2, b2))
+  solution: "a1.T @ dz2"
+  tests:
+    - expr: "grad_W2(X, y, W1, b1, W2, b2).shape"
+      expect: [3, 1]
+      say: "one gradient per weight: (3, 1), the shape of W2"
+    - expr: "grad_W2(X, y, W1, b1, W2, b2)"
+      expect: [[0.014675], [-0.005854], [0.004884]]
+      tol: 0.000002
+      say: "PyTorch says [0.014675, −0.005854, 0.004884]"
+  hints:
+    - when: { error: "mismatch|not aligned|shapes" }
+      say: "The shapes don’t match. a1 is (4, 3) and dz2 is (4, 1). One of them must be transposed so the 4s meet in the middle. Which one gives (3, 1)?"
+    - when: { testFailed: 0 }
+      say: ["The gradient must have the same shape as W2, (3, 1).", "a1 is (4, 3) and dz2 is (4, 1). Transpose one of them so the 4s meet in the middle."]
+    - when: { any: true }
+      say: ["The gradient has the shape of W2, (3, 1). Which product of a1 (4, 3) and dz2 (4, 1) gives (3, 1)?", "Each weight sums (input to it) × (dz after it) over the 4 examples. That is a matrix product with one transpose."]
+  after: "Rule 1 from level 6: dW = input.T @ dz. The input of the last layer is a1, so (3, 4) @ (4, 1) → (3, 1), the shape of W2. The 4 examples meet in the middle and are added up."
+
+forward-code:
+  type: code
+  prompt: "Write the hidden layer h inside forward. Use the box's own weights (self.W1, self.b1) and tanh."
+  template: |
+    class TinyMLP:
+        def __init__(self):
+            self.W1 = np.array([[1.0, -1.0], [0.5, 2.0]])   # (2 inputs, 2 hidden)
+            self.b1 = np.array([0.0, 1.0])
+            self.W2 = np.array([[1.0], [-1.0]])             # (2 hidden, 1 output)
+            self.b2 = np.array([0.5])
+
+        def forward(self, x):
+            h = ____
+            return h @ self.W2 + self.b2
+
+        def __call__(self, x):      # model(x) runs forward(x)
+            return self.forward(x)
+
+    model = TinyMLP()
+    print(model(np.array([[1.0, 0.0]])))   # tanh(1) ≈ 0.76, so about 0.76 + 0.5
+  solution: "np.tanh(x @ self.W1 + self.b1)"
+  tests:
+    - expr: "model(np.array([[1.0, 0.0]]))"
+      expect: [[1.261594]]
+      tol: 0.00001
+      say: "x @ W1 + b1 = [1, 0]; tanh gives [0.76, 0]; then 0.76 × 1 + 0 × (−1) + 0.5 ≈ 1.26"
+    - expr: "model(np.array([[0.0, 0.0]]))"
+      expect: [[-0.261594]]
+      tol: 0.00001
+      say: "x @ W1 + b1 = [0, 1]; tanh gives [0, 0.76]; then −0.76 + 0.5 ≈ −0.26"
+  hints:
+    - when: { error: "NameError" }
+      say: ["A name is not defined. Inside the class, the weights are reached through self.", "Write self.W1 and self.b1, not W1 and b1."]
+    - when: { any: true }
+      say: ["Same layer as level 5: input times weights, plus bias, then tanh.", "Inside a class the weights are reached through self, as in `__init__`. Then apply NumPy’s tanh."]
+  after: "It is the same hidden layer as in level 5, tanh(x @ W1 + b1). Inside a class the weights belong to the object, so you reach them through self."
+
+plain-list:
+  type: predict
+  prompt: "Guess before you continue: a model keeps its 3 blocks in a plain Python list, self.blocks = [Block(), Block(), Block()], and calls them in forward. What happens when you train it?"
+  options: ["It trains normally: the blocks are part of the model", "It runs without errors, but the blocks’ weights never change", "PyTorch raises an error when the model is created"]
+  reveal: "It runs, the loss is a real number, and the blocks never learn. model.parameters() does not look inside a plain list, so the optimizer never sees their weights. nn.ModuleList is the fix."
+
+first-run:
+  optional: true
+  type: number
+  prompt: "Run `first_run.py` (section 8 code) on your computer. What loss does it print after 100 steps?"
+  answer: 0.423
+  tol: 0.01
+  after: "Your first PyTorch training run. The seed made your starting weights the same as everyone else's, so you got the same loss."
+  hints:
+    - when: { any: true }
+      say: ["Copy the code exactly, including `torch.manual_seed(0)` and lr=0.5. A different seed or learning rate gives a different loss.", "It prints one number with 3 decimals, after the loop finishes. Enter that number."]
+  warmup: false
+
+loop-code:
+  type: code
+  prompt: "Write the body of the inner loop: the three calls of one training step, in the right order."
+  template: |
+    class Param:
+        def __init__(self, v):
+            self.data = float(v)
+            self.grad = 0.0
+
+    def zero_grad(w, b):              # like opt.zero_grad()
+        w.grad = 0.0
+        b.grad = 0.0
+
+    def backward(w, b, x, y):         # like loss.backward() for (w·x + b − y)²: it ADDS
+        dz = 2 * (w.data * x + b.data - y)
+        w.grad += dz * x
+        b.grad += dz
+
+    def step(w, b, lr):               # like opt.step()
+        w.data -= lr * w.grad
+        b.data -= lr * b.grad
+
+    def train(epochs, lr=0.05):
+        w, b = Param(0.0), Param(0.0)
+        data = [(1.0, 3.0), (2.0, 5.0)]   # y = 2x + 1
+        for _ in range(epochs):
+            for x, y in data:
+                ____
+        return [round(w.data, 6), round(b.data, 6)]
+
+    print(train(500))                  # should reach about [2, 1]
+  solution: "zero_grad(w, b)\n            backward(w, b, x, y)\n            step(w, b, lr)"
+  tests:
+    - expr: "train(1)"
+      expect: [1.12, 0.71]
+      tol: 0.000001
+      say: "after one epoch (two steps): w = 1.12, b = 0.71"
+    - expr: "train(2)"
+      expect: [1.5768, 0.9969]
+      tol: 0.000001
+      say: "after two epochs: w = 1.5768, b = 0.9969"
+    - expr: "train(500)"
+      expect: [2.0, 1.0]
+      tol: 0.001
+      say: "after 500 epochs the line is y = 2x + 1"
+  hints:
+    - when: { error: "IndentationError|unexpected indent|expected an indented" }
+      say: ["Each call goes on a separate line, indented like the line where ____ was.", "Three lines, each starting at the same column under `for x, y in data:`."]
+    - when: { testFailed: 0 }
+      say: ["The loss is already wrong in the first epoch. Check the order of the three calls.", "Clear the old gradients first, then compute the new ones, then update."]
+    - when: { any: true }
+      say: ["One step is: clear the gradients, compute new ones, update the weights.", "Use the three functions defined above train. Each call takes the arguments shown in its definition, and all those names exist inside the loop."]
+  after: "Clear, compute, update: `zero_grad`, then backward, then step. backward adds to .grad, so `zero_grad` must come before it. step must come after backward, or it uses an old gradient."
+

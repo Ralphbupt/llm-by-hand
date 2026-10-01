@@ -1,0 +1,259 @@
+vocab-size:
+  type: number
+  prompt: "With the text “hello”, how many characters are in the vocabulary?"
+  answer: 4
+  tol: 0
+  after: "e, h, l, o. The two l’s count once: the vocabulary lists distinct characters."
+  hints:
+    - when: { equals: 5 }
+      say: "5 is the number of tokens. The vocabulary only keeps distinct characters; l appears twice."
+    - when: { any: true }
+      say: ["The vocabulary lists each different character once, even if it appears twice.", "Write the letters of “hello” and remove the repeated letters."]
+
+id-l:
+  type: number
+  prompt: "In “hello”, what is the id of “l”?"
+  answer: 2
+  tol: 0
+  after: "The vocabulary is sorted: e → 0, h → 1, l → 2, o → 3. So “hello” becomes [1, 0, 2, 2, 3]."
+  hints:
+    - when: { equals: 3 }
+      say: "That is l’s position in the word, counting from 1. The id comes from the sorted vocabulary."
+    - when: { equals: 1 }
+      say: "1 is h. Sort the vocabulary alphabetically: e, h, l, o, and count from 0."
+    - when: { any: true }
+      say: ["Sort the distinct characters alphabetically, then number them starting from 0.", "The sorted vocabulary starts with e. Where does l land?"]
+
+stoi-code:
+  type: code
+  prompt: "Build stoi: a dictionary from each character to its id (its position in chars)."
+  template: |
+    chars = sorted(set("hello"))     # ['e', 'h', 'l', 'o']
+    stoi = ____
+    print(stoi)
+  solution: "{c: i for i, c in enumerate(chars)}"
+  tests:
+    - expr: "sorted(stoi.items())"
+      expect: [["e", 0], ["h", 1], ["l", 2], ["o", 3]]
+      say: "e→0, h→1, l→2, o→3"
+  hints:
+    - when: { testFailed: 0 }
+      say: ["Check the direction: the keys are characters and the values are ids. {i: c …} would be itos.", "enumerate gives (position, character) pairs, in that order."]
+    - when: { any: true }
+      say: ["enumerate(chars) gives each character with its position.", "A dictionary comprehension: {key: value for … in enumerate(chars)}."]
+  after: "enumerate gives (position, character) pairs, so the loop names are i, c. The dictionary turns them around: the character is the key and the id is the value. Swapping key and value gives itos, the way back."
+
+encode:
+  type: code
+  prompt: "Write encode: turn a string into a list of ids."
+  template: |
+    text = "hello"
+    chars = sorted(set(text))
+    stoi = {c: i for i, c in enumerate(chars)}
+    itos = {i: c for c, i in stoi.items()}
+
+    def encode(s):
+        return ____
+
+    def decode(ids):
+        return "".join(itos[i] for i in ids)
+
+    print(stoi)
+    print(encode("hello"), decode(encode("hello")))
+  solution: "[stoi[c] for c in s]"
+  tests:
+    - expr: "encode('hello')"
+      expect: [1, 0, 2, 2, 3]
+      say: "h e l l o → 1 0 2 2 3"
+    - expr: "encode('hole')"
+      expect: [1, 3, 2, 0]
+      say: "any string made of these characters works"
+    - expr: "decode(encode('olleh'))"
+      expect: "olleh"
+      say: "decode undoes encode"
+  hints:
+    - when: { error: "KeyError" }
+      say: "You looked up something that is not a single character. Look up each character c in stoi."
+    - when: { error: "TypeError" }
+      say: ["encode must return a list of ids, not a single value.", "One id per character: look each character up in stoi."]
+    - when: { any: true }
+      say: ["Encoding looks up every character of s in stoi and collects the ids in a list.", "A list comprehension does it in one line, with one stoi lookup for each character.", "Write it as a list comprehension and call each character c."]
+  after: "One lookup per character, in order, so the list has as many ids as the string has characters. A character that is not in stoi gives a KeyError: a character tokenizer can only read the characters it saw."
+
+unk-word:
+  type: predict
+  prompt: "A word-level tokenizer knows only: the, a, cat, dog, sat, ran, on, mat, rug, “.”. How does it encode “the cats sat .”?"
+  options: ["4 tokens, but “cats” becomes an unknown token", "It finds that cats = cat + s", "5 tokens"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "A word-level tokenizer only looks words up in its list. It has no rule for splitting a word."
+    - when: { equals: 2 }
+      say: "Count the words in “the cats sat .”: each word is at most one token. What happens to a word that isn’t in the list?"
+  reveal: "“cats” is not in the list, so it becomes a special <unk> token: [the, <unk>, sat, .]. The model can’t distinguish it from any other unknown word. Everything it knows about “cat” is lost."
+
+pair-at:
+  type: number
+  prompt: "Words: cat ×4, cats ×2, hat ×3, hats ×1. Cut into characters, how many times does the pair a + t appear in total (counting each word as often as it appears)?"
+  answer: 10
+  tol: 0
+  after: "a + t is in all four words: 4 + 2 + 3 + 1 = 10. The next most frequent pair, c + a, appears 4 + 2 = 6 times."
+  hints:
+    - when: { equals: 4 }
+      say: "4 is the number of different words. Each word counts as often as it appears: cat 4 times, cats 2, and so on."
+    - when: { equals: 6 }
+      say: "6 is c + a (cat and cats). a + t is also in hat and hats."
+    - when: { any: true }
+      say: ["Look for the pair a + t inside each word.", "cat contains “at” and appears 4 times. Check the other three words."]
+
+merge2-count:
+  type: number
+  prompt: "After merging a + t, the words are c·at ×4, c·at·s ×2, h·at ×3, h·at·s ×1. How many times does the pair c + at appear now?"
+  answer: 6
+  tol: 0
+  after: "c·at is in cat (4) and cats (2): 6. The other pairs are h + at (4) and at + s (3), so c + at wins."
+  hints:
+    - when: { equals: 4 }
+      say: "4 counts only “cat”. “cats” starts with c·at too."
+    - when: { equals: 10 }
+      say: "10 counted “at” itself. Now count “c” directly followed by “at”."
+    - when: { any: true }
+      say: ["After the first merge the words are c·at, c·at·s, h·at, h·at·s. Which pair is the most common now?", "Which words start with c·at? Add their counts."]
+
+tokens-cats:
+  type: number
+  prompt: "The merges, in order, are: 1) a + t → at, 2) c + at → cat, 3) h + at → hat. How many tokens is “cats”?"
+  answer: 2
+  tol: 0
+  after: "c a t s → c at s (merge 1) → cat s (merge 2). Merge 3 doesn’t apply. Two tokens: “cat” and “s”."
+  hints:
+    - when: { equals: 1 }
+      say: "There is no merge cat + s among the three, so “s” stays alone."
+    - when: { equals: 4 }
+      say: "That is before any merge. Apply merge 1, then merge 2, then merge 3."
+    - when: { any: true }
+      say: ["Start with the characters c a t s.", "Apply the merges in the order they were learned, one at a time."]
+
+tokens-that:
+  type: number
+  prompt: "Same three merges (a + t → at, c + at → cat, h + at → hat). “that” was never in the word list. How many tokens is it?"
+  answer: 2
+  tol: 0
+  after: "t h a t → t h at (merge 1) → no c before “at” (merge 2 skips) → t hat (merge 3). Two tokens: “t” and “hat”. A new word is a new combination of known pieces."
+  hints:
+    - when: { equals: 3 }
+      say: "After merge 1 you have t h at. Merge 3 is h + at. Does it apply?"
+    - when: { equals: 4 }
+      say: "That’s the characters. Apply merge 1 (a + t), then merges 2 and 3."
+    - when: { any: true }
+      say: ["Start with the characters t h a t.", "Apply the merges in order: a+t, then c+at, then h+at. Which ones can apply?"]
+
+merge-fn:
+  type: code
+  prompt: "Complete merge: replace every neighboring (a, b) in seg with the single token a + b."
+  template: |
+    def merge(seg, a, b):
+        out, i = [], 0
+        while i < len(seg):
+            if i + 1 < len(seg) and ____:
+                out.append(a + b)
+                i += 2
+            else:
+                out.append(seg[i])
+                i += 1
+        return out
+
+    print(merge(list("cats"), "a", "t"))
+  solution: "seg[i] == a and seg[i + 1] == b"
+  tests:
+    - expr: "merge(list('cats'), 'a', 't')"
+      expect: ["c", "at", "s"]
+      say: "c a t s → c at s"
+    - expr: "merge(['c', 'at', 's'], 'c', 'at')"
+      expect: ["cat", "s"]
+      say: "tokens can be longer than one character"
+    - expr: "merge(list('aaa'), 'a', 'a')"
+      expect: ["aa", "a"]
+      say: "after a merge, skip both tokens: a a a → aa a"
+    - expr: "merge(list('cabt'), 'a', 't')"
+      expect: ["c", "a", "b", "t"]
+      say: "a and t are both here, but never side by side → unchanged"
+  hints:
+    - when: { error: "IndexError" }
+      say: "Keep the i + 1 < len(seg) check first, so seg[i + 1] is only read when it exists."
+    - when: { testFailed: 3 }
+      wrong: ["seg[i] == a", "seg[i + 1] == b"]
+      say: ["Merge only when both tokens match, not just one of them.", "Check the second token too: the one right after position i."]
+    - when: { any: true }
+      say: ["You are looking for the pair (a, b) starting at position i.", "Two checks: the token at i, and the token right after it."]
+  after: "Both tokens must match. The check i + 1 < len(seg) comes first, so seg[i + 1] always exists. After a merge, i moves by 2, so one token is never used in two merges: a a a → aa a."
+
+more-merges:
+  type: predict
+  prompt: "BPE runs on a list of 40 words, and you keep merging. Each merge adds one token to the vocabulary. What happens to the total number of tokens across all the words?"
+  options: ["It keeps shrinking", "It stays the same", "It grows with the vocabulary"]
+  answer: 0
+  hints:
+    - when: { equals: 1 }
+      say: "A merge replaces two neighboring tokens with one. What does that do to the length of a word?"
+    - when: { equals: 2 }
+      say: "The vocabulary grows, but each word is cut into fewer, longer pieces. Count the pieces of “cats” before and after merges."
+  reveal: "It keeps shrinking: 1,068 tokens at the start, 826 after 5 merges, 450 after 20, 263 after 40. Every merge joins pairs together, so sequences get shorter while the vocabulary gets bigger. That is the trade-off you tune."
+
+emb-params:
+  type: number
+  prompt: "A vocabulary of 50,000 tokens, with 512 numbers per token in the embedding table. How many numbers does the table hold, in millions?"
+  answer: 25.6
+  tol: 0.01
+  unit: million
+  after: "50,000 × 512 = 25,600,000 numbers, just for the lookup table. The final layer that scores the next token needs the same number again, unless the model reuses the embedding table there; many models do, to save these parameters."
+  hints:
+    - when: { equals: 25600000 }
+      say: "Right number, but the answer is in millions: 25,600,000 is 25.6 million."
+    - when: { equals: 50512 }
+      say: "Rows times columns, not plus: one row of 512 numbers for each of 50,000 tokens."
+    - when: { any: true }
+      say: ["The table has one row per token and 512 numbers in each row.", "Rows × numbers per row gives the total. The answer is asked in millions."]
+
+pair-counts:
+  type: code
+  prompt: "Write the inside of the loop: for one word seg that appears n times, add n to the count of each of its neighboring pairs. The words are cat ×4, cats ×2, hat ×3, hats ×1. Two lines."
+  template: |
+    segs = [list("cat"), list("cats"), list("hat"), list("hats")]
+    counts = [4, 2, 3, 1]
+
+    def pairs(segs, counts):
+        pc = {}
+        for seg, n in zip(segs, counts):
+            ____
+        return pc
+
+    pc = pairs(segs, counts)
+    print(pc)
+  solution: "for a, b in zip(seg, seg[1:]):\n            pc[(a, b)] = pc.get((a, b), 0) + n"
+  tests:
+    - expr: "sorted(pairs(segs, counts))"
+      expect: [["a", "t"], ["c", "a"], ["h", "a"], ["t", "s"]]
+      say: "4 different pairs, each a (left, right) key: a t, c a, h a, t s"
+    - expr: "pairs(segs, counts)[('a', 't')]"
+      expect: 10
+      say: "a + t: 4 + 2 + 3 + 1 = 10"
+    - expr: "pairs(segs, counts)[('t', 's')]"
+      expect: 3
+      say: "t + s: only in cats ×2 and hats ×1"
+    - expr: "pairs([['c', 'at'], ['c', 'at', 's'], ['h', 'at'], ['h', 'at', 's']], counts)[('c', 'at')]"
+      expect: 6
+      say: "after merge 1, c + at appears 4 + 2 = 6 times"
+  hints:
+    - when: { error: "KeyError" }
+      say: ["The first time a pair appears, it is not in pc yet, so adding to it fails.", "A dictionary’s get(key, 0) gives 0 for a key that is not there yet."]
+    - when: { error: "not enough values|too many values" }
+      say: "zip(seg, seg[1:]) gives pairs, so unpack two names: a, b."
+    - when: { testFailed: 1 }
+      say: ["a + t should count 10, once per time a word appears. Are you adding 1 instead of n?", "Each word appears n times, so each of its pairs counts n times."]
+    - when: { testFailed: 0 }
+      wrong: "for a, b in zip(seg, seg[1:]):\n            pc[a] = pc.get(a, 0) + n"
+      say: "There are only 4 different pairs. Use each pair as the key, not each single token."
+    - when: { any: true }
+      say: ["First a loop over the neighboring pairs of seg, then one line that adds n to that pair’s count.", "zip(seg, seg[1:]) gives every neighboring pair. Unpack each one into two names.", "Inside the loop, the new count is the old count (0 if the pair is new) plus n. Use get."]
+  after: "zip(seg, seg[1:]) pairs each token with the next one. A word that appears n times adds n to each of its pairs, so the counts follow how often words appear. get(…, 0) handles the first time a pair is seen."

@@ -1,0 +1,6 @@
+---
+import Lab from './MicroscopeLab.svelte'
+interface Props { data: string }
+const { data } = Astro.props
+---
+<Lab client:visible data={data} />

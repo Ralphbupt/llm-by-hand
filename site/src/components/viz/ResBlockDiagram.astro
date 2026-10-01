@@ -1,0 +1,93 @@
+---
+/** A ResNet block drawn as a diagram: two 3×3 convolutions on the branch, the input added back at the end. */
+const GAP = 24
+const parts = [
+  { t: 'conv 3×3', w: 86 }, { t: 'BatchNorm', w: 96 }, { t: 'ReLU', w: 58 }, { t: 'conv 3×3', w: 86 }, { t: 'BatchNorm', w: 96 },
+]
+let x = 52
+const boxes = parts.map((p) => { const b = { ...p, x }; x += p.w + GAP; return b })
+const plusX = x + 12          // center of the + circle
+const reluX = plusX + 14 + GAP // final ReLU box
+const W = reluX + 58 + 12
+const mainY = 120
+// phones: the same block, top to bottom
+const VX = 170, BW = 140, BH = 32, VGAP = 22
+let vy = 50
+const vboxes = [...parts.map((p) => p.t)].map((t) => { const b = { t, y: vy }; vy += BH + VGAP; return b })
+const vPlusY = vy + 6
+const vReluY = vPlusY + 14 + VGAP
+const VH = vReluY + BH + 14
+---
+<figure class="rb">
+  <svg class="wide" viewBox={`0 0 ${W} 190`} role="img" aria-label="A residual block: x passes through conv, BatchNorm, ReLU, conv, BatchNorm; then x is added back and a ReLU follows. The residual path carries x around the two convolutions unchanged.">
+    <defs>
+      <marker id="rb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" class="head" />
+      </marker>
+    </defs>
+    <path d={`M 36 ${mainY} L 36 40 L ${plusX} 40 L ${plusX} ${mainY - 17}`} class="skip" marker-end="url(#rb-arrow)" />
+    <text x={(36 + plusX) / 2} y="30" class="lbl skipt">residual path: x, unchanged</text>
+    <text x="10" y={mainY + 5} class="lbl x">x</text>
+    <line x1="22" y1={mainY} x2={boxes[0].x - 3} y2={mainY} class="main" marker-end="url(#rb-arrow)" />
+    {boxes.map((b, i) => (
+      <>
+        <rect x={b.x} y={mainY - 16} width={b.w} height="32" rx="6" class="box" />
+        <text x={b.x + b.w / 2} y={mainY + 5} class="lbl mid">{b.t}</text>
+        <line x1={b.x + b.w} y1={mainY} x2={(i < boxes.length - 1 ? boxes[i + 1].x : plusX - 14) - 3} y2={mainY} class="main" marker-end="url(#rb-arrow)" />
+      </>
+    ))}
+    <circle cx={plusX} cy={mainY} r="14" class="plus" />
+    <text x={plusX} y={mainY + 6} class="lbl mid plust">+</text>
+    <line x1={plusX + 14} y1={mainY} x2={reluX - 3} y2={mainY} class="main" marker-end="url(#rb-arrow)" />
+    <rect x={reluX} y={mainY - 16} width="58" height="32" rx="6" class="box" />
+    <text x={reluX + 29} y={mainY + 5} class="lbl mid">ReLU</text>
+    <path d={`M ${boxes[0].x} 150 L ${boxes[0].x} 156 L ${plusX - 20} 156 L ${plusX - 20} 150`} class="brace" />
+    <text x={(boxes[0].x + plusX - 20) / 2} y="174" class="lbl dim">F(x): the part the block learns</text>
+  </svg>
+  <svg class="tall" viewBox={`0 0 300 ${VH}`} role="img" aria-label="A residual block, top to bottom: x passes through conv, BatchNorm, ReLU, conv, BatchNorm; then x is added back and a ReLU follows. The residual path carries x around the two convolutions unchanged.">
+    <defs>
+      <marker id="rb-arrow-v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" class="head" />
+      </marker>
+    </defs>
+    <path d={`M ${VX} 30 L 40 30 L 40 ${vPlusY} L ${VX - 17} ${vPlusY}`} class="skip" marker-end="url(#rb-arrow-v)" />
+    <text x="30" y={(30 + vPlusY) / 2} class="lbl skipt" transform={`rotate(-90 30 ${(30 + vPlusY) / 2})`}>residual path: x, unchanged</text>
+    <text x={VX} y="20" class="lbl x mid">x</text>
+    <line x1={VX} y1="26" x2={VX} y2={vboxes[0].y - 3} class="main" marker-end="url(#rb-arrow-v)" />
+    {vboxes.map((b, i) => (
+      <>
+        <rect x={VX - BW / 2} y={b.y} width={BW} height={BH} rx="6" class="box" />
+        <text x={VX} y={b.y + 21} class="lbl mid">{b.t}</text>
+        <line x1={VX} y1={b.y + BH} x2={VX} y2={(i < vboxes.length - 1 ? vboxes[i + 1].y : vPlusY - 14) - 3} class="main" marker-end="url(#rb-arrow-v)" />
+      </>
+    ))}
+    <circle cx={VX} cy={vPlusY} r="14" class="plus" />
+    <text x={VX} y={vPlusY + 6} class="lbl mid plust">+</text>
+    <line x1={VX} y1={vPlusY + 14} x2={VX} y2={vReluY - 3} class="main" marker-end="url(#rb-arrow-v)" />
+    <rect x={VX - 50} y={vReluY} width="100" height={BH} rx="6" class="box" />
+    <text x={VX} y={vReluY + 21} class="lbl mid">ReLU</text>
+    <path d={`M ${VX + BW / 2 + 8} ${vboxes[0].y} L ${VX + BW / 2 + 14} ${vboxes[0].y} L ${VX + BW / 2 + 14} ${vPlusY - 20} L ${VX + BW / 2 + 8} ${vPlusY - 20}`} class="brace" />
+    <text x="284" y={(vboxes[0].y + vPlusY - 20) / 2} class="lbl dim" transform={`rotate(90 284 ${(vboxes[0].y + vPlusY - 20) / 2})`}>F(x): the part the block learns</text>
+  </svg>
+  <figcaption>One residual block. The output is ReLU(x + F(x)). If F learns nothing useful, the block still passes x through.</figcaption>
+</figure>
+
+<style>
+  .rb { margin: 1.2rem 0; }
+  svg { width: 100%; height: auto; display: block; max-width: 720px; }
+  svg.tall { display: none; max-width: 22rem; margin: 0 auto; }
+  @media (max-width: 640px) { svg.wide { display: none; } svg.tall { display: block; } }
+  .box { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+  .main { stroke: var(--fg); stroke-width: 1.6; }
+  .skip { fill: none; stroke: var(--cat-1); stroke-width: 2.2; }
+  .head { fill: var(--fg); }
+  .plus { fill: var(--bg); stroke: var(--cat-1); stroke-width: 2; }
+  .plust { fill: var(--cat-1); font-size: 18px; font-weight: 700; }
+  .lbl { font-family: var(--mono); font-size: 12px; fill: var(--fg); }
+  .mid { text-anchor: middle; }
+  .x { font-size: 15px; font-weight: 700; }
+  .skipt { fill: var(--cat-1); text-anchor: middle; }
+  .dim { fill: var(--dim); text-anchor: middle; }
+  .brace { fill: none; stroke: var(--dim); stroke-width: 1; }
+  figcaption { color: var(--dim); font-size: 0.85rem; margin-top: 0.3rem; }
+</style>

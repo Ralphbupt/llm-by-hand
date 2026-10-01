@@ -1,0 +1,181 @@
+---
+title: Build your own autograd
+level: "U3"
+order: 6.3
+part: foundations
+branch: internals
+question: How can a computer find every gradient automatically?
+run: browser
+checkpoint: code-backward
+testOut: [grad-a, x-times-x, code-sub, code-backward]
+recap:
+  can:
+    - "Find every gradient of a small graph by hand, visiting the nodes from the end."
+    - "Write the backward rule of a new operation as a `_backward` function that adds into `.grad`."
+    - "Put the nodes in topological order and walk it backwards to run the whole backward pass."
+  keys:
+    - "Start with $\\partial L / \\partial L = 1$; each node sends its grad × the local factor to its inputs"
+    - "Sum: both inputs get `out.grad`. Product: each input gets the other input’s data × `out.grad`"
+    - "Always `+=` into `.grad`: a value used in several places gets the sum of all its parts"
+    - "Give the output a gradient of 1, then call every node’s `_backward`, from the output back to the inputs"
+  mistakes:
+    - "Writing `=` instead of `+=`, so a value used twice keeps only the last of its parts."
+    - "Visiting the nodes in forward order, before their gradients are complete."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import AutogradLab from '@viz/AutogradLab.astro'
+
+In level 6 you wrote the backward pass by hand. In PyTorch (level 9) one line, `loss.backward()`, does all of it.
+This level shows what that one line does inside. By the end you will have written the same thing yourself, in about 50 lines of Python.
+
+It uses two ideas:
+
+1. **Record the work.** While computing, remember every result, which operation made it, and from which inputs.
+   That record is a **computation graph**.
+2. **Each operation knows only its own rule.** Multiplication knows how its output moves when an input moves.
+   So does addition. Nothing knows the whole network. The chain rule from level 6 combines the pieces:
+   walk the graph backwards and multiply.
+
+## 1. A graph you can step through
+
+Take $L = (a \cdot b + c) \cdot d$ with $a = 2$, $b = 3$, $c = 1$, $d = -2$. Name the in-between results:
+$e = a \cdot b$ and $f = e + c$. Press the main button (it starts as **Compute e = a·b**) to compute one node at a time. After $L$, the same button
+runs the backward pass.
+
+Backward starts by setting $\partial L / \partial L = 1$. That only says “if L grows by a little bit, L grows by
+that same little bit”. It is the starting number; every other gradient is a product that starts from it.
+Then backward **visits** nodes from the end to the start.
+Visiting a node means one thing: push the node’s gradient into its inputs, using that node’s own rule.
+
+- the product $L = f \cdot d$ sends $d \times$ (L’s grad) to $f$, and $f \times$ (L’s grad) to $d$:
+  each input gets **the other input** times the product’s grad
+- the sum $f = e + c$ sends f’s grad unchanged to both $e$ and $c$
+
+<AutogradLab hide={{ d: "grad-d", a: "grad-a" }} />
+
+<Blank id="grad-d" />
+
+<Gate requires="grad-d">
+
+$a$ is farther away. Its gradient travels $L \to f \to e \to a$, multiplying by one local factor at each node:
+1 at the sum, and $b$ at the product $e = a \cdot b$.
+
+<Blank id="grad-a" />
+
+<TryIt>
+
+Change $c$ to 10 and press **Run all**. $L$ changes, but every gradient stays the same, because $c$ is only ever **added**.
+Now change $b$. Which gradients move, and why does $\partial L / \partial b$ not depend on $b$ itself?
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="grad-a">
+
+## 2. Each value remembers where it came from
+
+Here is the core of an autograd engine. A `Value` holds a number (`data`), its gradient (`grad`),
+the values it was made from (`_children`), and a small function `_backward` that knows the local rule.
+Addition is done. Multiplication is your turn: the rule is the one from the lab.
+
+Three pieces of Python that may be new to you:
+
+- `def __add__(self, other)` runs when you write `a + b` with two `Value`s; `__mul__` runs for `a * b`.
+  `self` is the left one, `other` the right one.
+- `lambda: None` is a tiny function that does nothing. It is the `_backward` of a value that was not made by an operation.
+- `_backward` is defined **inside** `__mul__`, so it can still use `self`, `other` and `out` later, when backward calls it.
+  The line `out._backward = _backward` stores that function on the result, for later.
+
+<CodeBlank id="code-mul" />
+
+<Stuck q="Why does _backward use out.grad? Where does that come from?">
+
+When `_backward` runs, `out` has already received its own gradient from the nodes after it.
+That is what visiting from the end guarantees. `out.grad` is "how much L moves per unit of `out`".
+The local rule turns it into "how much L moves per unit of `self`". That one multiplication is the chain rule.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="code-mul">
+
+## 3. When a value is used twice
+
+In a real network one weight feeds many places. The simplest case: $y = x \cdot x$. Here $x$ is **both**
+inputs of the same multiplication. Calculus says $dy/dx = 2x$.
+
+<Blank id="x-times-x" />
+
+In `x * x`, `self` and `other` are the same object: both names point to `x`.
+
+<Predict id="pred-equals" />
+
+So each of the two lines in `_backward` sends a part of the gradient to the same `x`: `self.grad` gets $x \times 1$,
+and `other.grad` gets another $x \times 1$. Only adding both parts gives $2x$.
+
+<Stuck q="So why += instead of =?">
+
+A value that feeds several places changes $L$ through **all** of them. Its total gradient is the sum of
+what each path sends back. `+=` collects them. With `=`, every path overwrites the one before, and only the
+last path counts.
+
+This is also why `loss.backward()` in PyTorch adds into `.grad`, and why you call `opt.zero_grad()`
+before every step (level 9). Adding is right inside one backward pass. Across steps, old sums must be cleared.
+
+</Stuck>
+
+Now give `Value` a new operation yourself: subtraction, `out = self - other`. Its forward part is done. For the backward rule:
+
+- If `self` grows by a little, `out` grows by the same amount. The local factor is 1, as in a sum.
+- If `other` grows by a little, `out` shrinks by that amount. The local factor is −1.
+
+So `self` gets `1 × out.grad` and `other` gets `−1 × out.grad`. Write both lines, and keep adding into `.grad`:
+`other.grad -= out.grad` is short for `other.grad = other.grad - out.grad`, the same as adding −1 × `out.grad`.
+
+<CodeBlank id="code-sub" />
+
+</Gate>
+
+<Gate requires="code-sub">
+
+## 4. The order of visits
+
+A node may only be visited after **every** node that uses it has been visited. Otherwise its gradient
+is not complete yet. Listing the nodes so that each comes after its inputs is called a **topological order**.
+For the lab’s graph one such list is `[a, b, e, c, f, d, L]`: every node appears after the nodes it was made from.
+
+The code builds that list with a small recursive function, `build`: before adding a node, it first builds each of its
+children (a **depth-first walk**), so the children always land earlier in the list. Then backward visits the list
+**from the end**, starting at L.
+
+One more piece of Python: `reversed(xs)` walks a list from its last item to its first.
+For example, `list(reversed([1, 2, 3]))` is `[3, 2, 1]`.
+
+Write the end of `backward`, after `build(self)`: give L its starting gradient (section 1), then visit every node in the
+right order and call its `_backward`. The `tanh` method is done too, so the last test is a real neuron.
+
+<CodeBlank id="code-backward" />
+
+<Deeper title="This is what loss.backward() does">
+
+PyTorch works the same way, with three differences, all only in size:
+
+- it works on whole tensors, so one node is a matrix multiplication instead of one product of two numbers;
+- it knows the local rule for hundreds of operations: `@`, `exp`, `softmax`, `layer_norm`, …;
+- the rules are written in fast compiled code, and can run on a GPU.
+
+The order of visits, the `+=`, the starting gradient $\partial L / \partial L = 1$: all the same.
+`tanh` shows the pattern for any new operation. Forward computes $t = \tanh(x)$, backward adds $(1 - t^2) \times$ `out.grad`.
+Once an operation has those two pieces, the engine can use it anywhere.
+
+</Deeper>
+
+</Gate>

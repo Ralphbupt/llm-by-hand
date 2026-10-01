@@ -1,0 +1,176 @@
+k-coef:
+  type: number
+  prompt: "β = 0.5 and alpha-bar = 0.36. What is β / √(1 − alpha-bar)?"
+  answer: 0.625
+  tol: 0.001
+  after: "0.5 / √0.64 = 0.5 / 0.8 = 0.625."
+  hints:
+    - when: { equals: 0.781 }
+      say: "That divides by 0.64. Take its square root first: √0.64 = 0.8."
+    - when: { equals: 0.833 }
+      say: "That uses √0.36 = 0.6. The formula has √(1 − alpha-bar) = √0.64."
+    - when: { any: true }
+      say: ["Start with the innermost part: 1 − alpha-bar.", "1 − 0.36 = 0.64. Take its square root, then divide β = 0.5 by that."]
+
+mean-first:
+  type: number
+  prompt: "One reverse step: mean = (xₜ − 0.625 × ε̂) / √α. Here x₃ = [1.0, 0.4], the noise guess ε̂ = [0.5, −1] and α = 0.5. Use 1 / √0.5 ≈ 1.41. What is the first number of the mean? (2 decimals)"
+  answer: 0.97
+  tol: 0.01
+  after: "(1.0 − 0.625 × 0.5) × 1.41 = 0.6875 × 1.41 ≈ 0.97. The second number is (0.4 + 0.625) × 1.41 ≈ 1.45."
+  hints:
+    - when: { equals: 0.6875 }
+      say: "Right so far. Now divide by √α, which is the same as multiplying by 1.41."
+    - when: { equals: 1.375 }
+      say: "That divides by 0.5. Divide by √0.5 instead: multiply by 1.41."
+    - when: { equals: 1.146 }
+      say: "You divided by √0.36 = 0.6, the alpha-bar. The bottom of the formula is √α, this step’s α = 0.5: multiply by 1.41."
+    - when: { equals: 1.15 }
+      say: "You divided by √0.36 = 0.6, the alpha-bar. The bottom of the formula is √α, this step’s α = 0.5: multiply by 1.41."
+    - when: { any: true }
+      say: ["Two steps: the top of the fraction first, using the first numbers only.", "Top: 1.0 − 0.625 × 0.5. Then divide by √α, where α is this step’s 0.5, not alpha-bar."]
+
+last-step:
+  type: predict
+  prompt: "At the very last step, from t = 1 to t = 0, do we add fresh noise z?"
+  options: ["Yes, like all the earlier steps", "No, the last step adds none", "Yes, and extra noise to finish"]
+  answer: 1
+  hints:
+    - when: { any: true }
+      say: "After the last step there are no more steps. Who would remove noise added there?"
+  reveal: "No. The last step's output is the final sample. Any noise added there would just stay in the picture, so the last step returns the mean."
+
+reverse-step:
+  type: code
+  prompt: "Write one reverse step. z is the fresh noise."
+  template: |
+    def reverse_step(x, eps, beta, alpha, ab, z):
+        mean = (x - beta / np.sqrt(1 - ab) * eps) / np.sqrt(alpha)
+        return ____
+
+    x3 = np.array([1.0, 0.4])
+    eps = np.array([0.5, -1.0])
+    print(reverse_step(x3, eps, 0.5, 0.5, 0.36, np.array([0.2, -0.4])))
+  solution: "mean + np.sqrt(beta) * z"
+  tests:
+    - expr: "reverse_step(np.array([1.0, 0.4]), np.array([0.5, -1.0]), 0.5, 0.5, 0.36, np.zeros(2))"
+      expect: [0.97227, 1.44957]
+      tol: 0.0001
+      say: "with z = 0 you get the mean"
+    - expr: "reverse_step(np.array([1.0, 0.4]), np.array([0.5, -1.0]), 0.5, 0.5, 0.36, np.array([0.2, -0.4]))"
+      expect: [1.11369, 1.16673]
+      tol: 0.0001
+      say: "the page’s example: [1.114, 1.167]"
+  hints:
+    - when: { testFailed: 0 }
+      wrong: "mean + np.sqrt(beta)"
+      say: "With z = 0 the answer should be just the mean. Is something added that doesn’t depend on z?"
+    - when: { testFailed: 1 }
+      wrong: "mean + beta * z"
+      say: "The fresh noise is scaled by √β, not by β."
+    - when: { any: true }
+      say: ["Look at the second formula on the page: xₜ₋₁ = mean + …", "The mean is already computed. What is added to it, and what is that multiplied by?", "The fresh noise z is scaled by a square root. NumPy’s square root is np.sqrt."]
+  after: "The mean removes a little of the guessed noise. Then √β × z puts a smaller amount of fresh noise back, so each step picks one of the places the point could have come from. With z = 0, as on the last step, the result is just the mean."
+
+cfg-first:
+  type: number
+  prompt: "Guidance mixes two noise guesses: ε̂ = `ε_free` + w (`ε_shape` − `ε_free`). `ε_free` = [0.2, 0.0], `ε_shape` = [0.6, −0.4], w = 3. What is the first number of the guided guess ε̂?"
+  answer: 1.4
+  tol: 0.001
+  after: "0.2 + 3 × (0.6 − 0.2) = 1.4. The full guess is [1.4, −1.2]. It goes past `ε_shape`, three times as far from `ε_free`."
+  hints:
+    - when: { equals: 0.6 }
+      say: "That is w = 1. With w = 3 you go three times as far: 0.2 + 3 × 0.4."
+    - when: { equals: 1.2 }
+      say: "That is 3 × (0.6 − 0.2). Start from `ε_free`: add 0.2."
+    - when: { equals: 1.8 }
+      say: "You multiplied `ε_shape` by 3. Multiply the difference (0.6 − 0.2) by 3, then add `ε_free`."
+    - when: { any: true }
+      say: ["Use the guidance formula with first numbers only: `ε_free` = 0.2, `ε_shape` = 0.6.", "The difference is 0.6 − 0.2 = 0.4. Now use w and `ε_free`."]
+
+big-w:
+  type: predict
+  prompt: "Guess before you try it: what happens to the samples when w is very large, like 10?"
+  options: ["Every sample ends exactly on the shape, spread evenly along it", "They gather on a few parts of the shape, and some land outside it", "They spread evenly over the shape, just less sharp than at w = 1"]
+  reveal: "They gather on a few parts. A large w keeps pushing every point toward the places where the network is most sure “this is the shape”. Many points arrive there, the rest of the shape stays empty, and the push goes too far, so some points land outside the shape. Try it in the lab below: “shape covered” drops sharply."
+
+calls:
+  type: number
+  prompt: "Sampling with guidance, ε̂ = `ε_free` + w (`ε_shape` − `ε_free`), takes 50 steps. How many times do we run the network in total? (One run handles all 300 points at once.)"
+  answer: 100
+  tol: 0
+  after: "Two guesses per step, `ε_free` and `ε_shape`, so 2 × 50 = 100. Guidance doubles the cost of sampling."
+  hints:
+    - when: { equals: 50 }
+      say: "One run per step gives `ε_shape`. Guidance also needs `ε_free`."
+    - when: { equals: 30000 }
+      say: "One run covers all 300 points as a batch, so don't multiply by 300."
+    - when: { any: true }
+      say: ["How many noise guesses does the guidance formula need at each step?", "Each step needs `ε_free` and `ε_shape`. Each one is a separate run of the network."]
+
+cfg:
+  type: code
+  prompt: "Write the guidance mix."
+  template: |
+    def guide(eps_free, eps_shape, w):
+        return ____
+
+    print(guide(np.array([0.2, 0.0]), np.array([0.6, -0.4]), 3))
+  solution: "eps_free + w * (eps_shape - eps_free)"
+  tests:
+    - expr: "guide(np.array([0.2, 0.0]), np.array([0.6, -0.4]), 0)"
+      expect: [0.2, 0.0]
+      say: "w = 0 ignores the shape"
+    - expr: "guide(np.array([0.2, 0.0]), np.array([0.6, -0.4]), 3)"
+      expect: [1.4, -1.2]
+      say: "the page’s example"
+    - expr: "guide(np.array([0.2, 0.0]), np.array([0.6, -0.4]), 1)"
+      expect: [0.6, -0.4]
+      say: "w = 1 is the plain shape guess"
+  hints:
+    - when: { testFailed: 0 }
+      wrong: "w * (eps_shape - eps_free)"
+      say: "With w = 0 you should get `ε_free` back unchanged."
+    - when: { any: true }
+      say: ["Copy the guidance formula from the page into code.", "Check the two ends: w = 0 must give `eps_free`, and w = 1 must give `eps_shape`.", "w multiplies the difference of the two guesses, not one guess alone."]
+  after: "w = 0 gives `eps_free` and w = 1 gives `eps_shape`. A w above 1 goes past `eps_shape`, further in the direction from `eps_free` to `eps_shape`. That pushes each point to look more like the shape."
+
+guided-step:
+  type: code
+  prompt: "Write one guided step back, from x to the next x, with guidance weight w. z is the fresh noise (zeros on the last step)."
+  template: |
+    def guided_step(x, eps_free, eps_shape, w, beta, alpha, ab, z):
+        ____
+
+    x = np.array([1.0, 0.4])
+    eps_free, eps_shape = np.array([0.3, -0.5]), np.array([0.5, -1.0])
+    print(guided_step(x, eps_free, eps_shape, 2, 0.5, 0.5, 0.36, np.zeros(2)))
+  solution: "e = eps_free + w * (eps_shape - eps_free)\n    mean = (x - beta / np.sqrt(1 - ab) * e) / np.sqrt(alpha)\n    return mean + np.sqrt(beta) * z"
+  tests:
+    - setup: "x = np.array([1.0, 0.4]); ef = np.array([0.3, -0.5]); es = np.array([0.5, -1.0])"
+      expr: "guided_step(x, ef, es, 0, 0.5, 0.5, 0.36, np.zeros(2))"
+      expect: [1.149, 1.0076]
+      tol: 0.001
+      say: "w = 0 ignores the label"
+    - setup: "x = np.array([1.0, 0.4]); ef = np.array([0.3, -0.5]); es = np.array([0.5, -1.0])"
+      expr: "guided_step(x, ef, es, 2, 0.5, 0.5, 0.36, np.zeros(2))"
+      expect: [0.7955, 1.8915]
+      tol: 0.001
+      say: "w = 2, no fresh noise"
+    - setup: "x = np.array([1.0, 0.4]); ef = np.array([0.3, -0.5]); es = np.array([0.5, -1.0])"
+      expr: "guided_step(x, ef, es, 2, 0.5, 0.5, 0.36, np.array([0.2, -0.4]))"
+      expect: [0.9369, 1.6087]
+      tol: 0.001
+      say: "w = 2, with fresh noise z"
+  hints:
+    - when: { error: "is not defined" }
+      say: "Use only the names in the function’s first line: x, `eps_free`, `eps_shape`, w, beta, alpha, ab, z. Define the mixed guess yourself before you use it."
+    - when: { testFailed: 0 }
+      say: ["With w = 0 the mixed guess must be `eps_free`. Check your mix.", "The mix starts at `eps_free` and moves w times the difference toward `eps_shape`.", "If the mix is right, check the mean: it is the first formula in section 1, with the mixed guess in place of ε̂."]
+    - when: { testFailed: 2 }
+      wrong: "e = eps_free + w * (eps_shape - eps_free)\n    mean = (x - beta / np.sqrt(1 - ab) * e) / np.sqrt(alpha)\n    return mean + beta * z"
+      say: ["The first two tests passed, so only the fresh noise is wrong. How is z scaled?", "Look at the second formula in section 1: z is multiplied by a square root."]
+    - when: { any: true }
+      say: ["Three lines: mix the two noise guesses with weight w, take the mean of the reverse step with the mixed guess, then return the mean plus the scaled noise.", "The mixed guess is your cfg function from above. The mean is the first formula in section 1, with the mixed guess in place of ε̂.", "Return the mean plus the fresh noise z, scaled as in section 1."]
+  after: "Guidance only changes the noise guess. The reverse step is the same as before, with the mixed guess in place of ε̂. With w = 0 it is the plain step without the label."
+

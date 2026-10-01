@@ -1,0 +1,314 @@
+---
+title: Optimization
+level: "7"
+order: 7
+part: foundations
+question: How do you make training fast and stable on real data?
+run: browser
+checkpoint: lr-code
+testOut: [epoch-steps, adam-move, momentum-code, deep-std, lr-code]
+recap:
+  can:
+    - "Compute one step of SGD, momentum or Adam by hand on a two-weight loss."
+    - "Pick a weight std for a layer from its fan-in, and say what 10 layers do to the wrong one."
+    - "Compute a warmup-then-decay learning rate at any step."
+  keys:
+    - "One epoch = (examples / batch size) steps"
+    - "Momentum: $u \\leftarrow \\beta u + g$, then $w \\leftarrow w - \\text{lr}\\, u$"
+    - "Adam steps by $\\text{lr} \\cdot \\hat m / \\sqrt{\\hat v}$: each weight moves about lr"
+    - "Initialization: $s = 1/\\sqrt{n}$, $n$ = fan-in (ReLU: $\\sqrt{2/n}$)"
+    - "Every layer multiplies the std by $\\sqrt{n} \\cdot s$, so 10 layers multiply it by $(\\sqrt{n}\\, s)^{10}$"
+  mistakes:
+    - "Using SGD’s move lr · g for Adam: Adam divides by $\\sqrt{\\hat v}$, so the move is about lr."
+    - "Adding the per-layer factors instead of multiplying them: 3 layers that each double the std give $2^3 = 8$, not 6."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import BatchLab from '@viz/BatchLab.astro'
+import OptimizerLab from '@viz/OptimizerLab.astro'
+import InitLab from '@viz/InitLab.astro'
+
+You can already train a network: compute the loss, compute the gradient, step downhill.
+Real training adds four habits that make it faster and more stable. Each one fixes a problem you can see with a few numbers:
+
+1. **Mini-batches**: don't look at all the data before every step.
+2. **Better optimizers**: don't let one steep direction set the speed for everything.
+3. **Initialization**: start with weights that keep the numbers a sensible size.
+4. **A learning-rate schedule**: take small steps at the start and at the end.
+
+Level 8 is about the other half of training well: a model that also works on data it has never seen.
+
+## 1. Mini-batches
+
+Fit a line, $\hat y = w x + b$, to four points: (1, 3), (2, 3), (3, 7), (4, 7). They lie roughly on y = 2x, with some noise.
+Start from w = 0.5, b = 0.
+
+The errors (prediction − truth) are −2.5, −2, −5.5, −5. The gradient for w is the mean of 2 · error · x over the points.
+
+<Blank id="full-grad" />
+
+<Gate requires="full-grad">
+
+That used all four points. A **mini-batch** uses only some of them. Take a batch of just one point, (3, 7):
+
+<Blank id="one-grad" />
+
+</Gate>
+
+<Gate requires="one-grad">
+
+One point pulls harder than the average: −33 instead of −21.5. Point (1, 3) alone gives only −5.
+Each batch has its own opinion of which way is downhill. On average the opinions agree with the full gradient,
+but any single step follows just one of them.
+
+<Predict id="noisy-steps" />
+
+</Gate>
+
+<Gate requires="noisy-steps">
+
+Try it. Batch size 4 is the full data. Batch size 1 uses one point per step.
+
+<BatchLab />
+
+With batch size 4 the path is smooth. With batch size 1 it goes back and forth, and near the bottom it never settles.
+Even at the best line, w = 1.6 and b = 1, each point alone still pulls in its own direction.
+
+<Stuck q="If the full batch is smoother, why not always use all the data?">
+
+Because real datasets have millions of examples. One full-batch step would read all of them, just to move once.
+A batch of 32 gives a noisy but useful direction, for a tiny fraction of the cost, so you can take thousands of steps
+in the time of one full step.
+
+The noise is not only a cost. It can move the weights away from flat places and small dips, which often helps.
+A common fix for the small back-and-forth moves at the end is to lower the learning rate as training goes on.
+
+</Stuck>
+
+One pass through all the training data, batch after batch, is called an **epoch**. With 4 points and batches of 1,
+an epoch is 4 steps. Training usually runs for many epochs, shuffling the order each time.
+
+<Blank id="epoch-steps" />
+
+<Stuck q="Why shuffle the data again at the start of every epoch?">
+
+Without shuffling, every epoch has the same batches in the same order. The weights then follow the same chain of
+directions each time, and if the data is sorted (all 3s first, then all 4s), each part of the epoch sees only one kind
+of example. The last, smaller batch is also always the same few examples. A new random order each epoch gives a new set
+of batches, so the noise is different every time, and it helps the weights get out of flat places.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="epoch-steps">
+
+## 2. Optimizers
+
+Here is a loss shaped like a narrow valley:
+
+$$
+f(w_1, w_2) = 0.5\,(w_1^2 + 25\,w_2^2)
+$$
+
+Its gradient is $(w_1,\ 25 w_2)$. The valley is 25 times steeper across it ($w_2$) than along it ($w_1$).
+Start at (−4, 1). The gradient there is (−4, 25).
+
+Plain gradient descent (SGD) does $w \leftarrow w - \text{lr} \cdot g$ with lr = 0.03.
+
+<Blank id="sgd-w2" />
+
+</Gate>
+
+<Gate requires="sgd-w2">
+
+w2 jumped from 1 to 0.25, a move of 0.75. w1 moved only 0.12, from −4 to −3.88.
+The steep direction moves fast and the gentle one moves very slowly. You want a bigger learning rate for w1, so raise it:
+
+<Predict id="sgd-big-lr" />
+
+</Gate>
+
+<Gate requires="sgd-big-lr">
+
+So with plain SGD the steepest direction sets the speed limit for every direction. Two fixes:
+
+- **Momentum** keeps a velocity $u$ that remembers past steps: $u \leftarrow \beta u + g$, then $w \leftarrow w - \text{lr} \cdot u$.
+  β (beta) is usually 0.9: each step keeps 90% of the old velocity and adds the new gradient.
+  Steps that agree (along the valley) add up. Steps that flip sign (across the valley) cancel each other.
+- **Adam** gives every weight its own step size. It keeps two **running averages**, each one mixing the newest value
+  into the old average, for example $m \leftarrow 0.9\,m + 0.1\,g$:
+  - $m$, the average gradient (with beta1 = 0.9),
+  - $v$, the average **squared** gradient (with beta2 = 0.999).
+
+  It steps by $\text{lr} \cdot \hat m / \sqrt{\hat v}$. Dividing by $\sqrt{\hat v}$ cancels the size of the gradient,
+  so each weight moves about lr, whether its gradient is 4 or 25.
+
+Here is Adam’s first step with lr = 0.3. The question asks how far w1 **moves**, not where it lands. $\hat m$ and $\hat v$ are m and v with a small correction for the first few steps. On step 1 they are simply $\hat m = g$ and $\hat v = g^2$.
+The square root √ always means the positive root, so $\sqrt{(-4)^2} = \sqrt{16} = 4$.
+
+<Blank id="adam-move" />
+
+</Gate>
+
+<Gate requires="adam-move">
+
+Now run all three from (−4, 1) and compare them.
+
+<OptimizerLab />
+
+<TryIt>
+
+Set momentum β to 0 and press Play. Which path does momentum follow now? Then try β = 0.99. When does a velocity
+that remembers more steps help, and when does it carry the weights past the bottom?
+
+</TryIt>
+
+<Deeper title="Why Adam divides by 1 − β^t">
+
+m and v start at 0. After one step, m = 0.1·g: only a tenth of the gradient, just because it started at zero.
+Dividing by 1 − 0.9¹ = 0.1 undoes that, so $\hat m = g$. After many steps, $0.9^t$ is almost 0 and the correction becomes too small to matter.
+The same goes for v with beta2 = 0.999.
+
+The ratio $\hat m / \sqrt{\hat v}$ is the key. If a weight's gradient keeps the same sign, the ratio is near ±1 and the weight moves about lr per step.
+If the sign keeps flipping, $\hat m$ averages toward 0 while $\sqrt{\hat v}$ stays large, so the step shrinks. That is what stops the back-and-forth steps across the valley.
+
+</Deeper>
+
+Write momentum's step yourself, as two lines: first the new velocity, then the move.
+
+<CodeBlank id="momentum-code" />
+
+</Gate>
+
+<Gate requires="momentum-code">
+
+Now write Adam's update. In NumPy the square root is `np.sqrt`, for example `np.sqrt(16.0)` is `4.0`.
+Real code adds a tiny number `eps` (1e-8) to the bottom of the fraction (the denominator), $\sqrt{\hat v} + \text{eps}$, so it never
+divides by 0. The function receives it as the argument `eps`.
+
+<CodeBlank id="adam-code" />
+
+</Gate>
+
+<Gate requires="adam-code">
+
+## 3. Initialization
+
+Before training starts, every weight needs a value. Random is the usual answer. But how big?
+
+To talk about "how big", we need one word. The **standard deviation (std)** says how far numbers typically sit from
+their mean. [1, −1, 1, −1] has std 1. [10, −10, 10, −10] has std 10. (Level 10 gives the exact formula. The
+[math page](/math/#mean-std) has a short example too.)
+
+Each output of a layer is a sum over its inputs: $z = x_1 w_1 + x_2 w_2 + \dots + x_n w_n$. If the inputs have standard deviation 1
+and the weights have standard deviation s, the sum has standard deviation about √n · s. To keep it at 1, pick
+**s = 1/√n**, where n is the number of inputs to the layer (its "fan-in").
+
+<Stuck q="Why does the std of a sum grow like √n, not n?">
+
+Because the ups and downs partly cancel. What adds up exactly is the **variance** (std squared): the sum of n independent
+terms, each with variance s², has variance n·s². Take the square root to get back to std: √n · s.
+Example: 100 terms with std 0.1 each have variance 100 × 0.01 = 1, so std 1.
+
+</Stuck>
+
+<Blank id="init-std" />
+
+</Gate>
+
+<Gate requires="init-std">
+
+Now stack 10 layers and get the size wrong. Each layer multiplies the standard deviation by √n · s:
+
+<Blank id="deep-std" />
+
+</Gate>
+
+<Gate requires="deep-std">
+
+An activation function does not fix this. Try tanh:
+
+<Predict id="tanh-small" />
+
+</Gate>
+
+<Gate requires="tanh-small">
+
+Pass 40 random inputs through 10 layers of width 100. Change the weight size and the activation.
+
+<InitLab />
+
+<Deeper title="Why ReLU wants √(2/n) instead of 1/√n">
+
+ReLU sets every negative number to 0. About half of the values are negative, so ReLU removes about half the variance
+at each layer. To correct for this, double the variance of the weights: s² = 2/n, so s = √(2/n). With n = 100 that is about 0.14.
+Try it in the lab with ReLU. With 0.1 the values get smaller and smaller, to about 0.02 after 10 layers. With 0.14 they stay near 0.5.
+
+tanh is close to a straight line near 0, so it behaves like the linear case: 1/√n keeps the values from vanishing,
+although they still shrink, to about 0.2 after 10 layers.
+
+</Deeper>
+
+## 4. Learning-rate schedules
+
+Big models rarely keep one learning rate for the whole run. Two habits are common:
+
+1. **Warmup**: start with a tiny lr and raise it over the first few hundred steps.
+2. **Decay**: lower lr as training goes on.
+
+<Deeper title="Why use warmup, and why decay?">
+
+At the start, $\hat m$ and $\hat v$ are averages of very few gradients, and the weights are random, so big early
+steps can push the weights far in a bad direction. Warmup keeps those first steps small.
+
+Near the end, the noisy mini-batch steps go back and forth around the bottom (the small back-and-forth moves you saw
+in section 1). A smaller lr makes those moves smaller, so the weights end closer to the bottom.
+
+</Deeper>
+
+The simplest schedule is two straight lines. Pick a highest learning rate `peak`, a number of warmup steps `warmup`,
+and the number of steps in the whole run, `total`. At step $t$ (counting from 0):
+
+$$
+\text{lr}(t) =
+\begin{cases}
+\text{peak} \cdot t \,/\, \text{warmup} & \text{if } t < \text{warmup} \\
+\text{peak} \cdot (\text{total} - t) \,/\, (\text{total} - \text{warmup}) & \text{otherwise}
+\end{cases}
+$$
+
+The big bracket means "use one of these two lines". Read it as two rules: the top line while $t$ is less than
+`warmup`, the bottom line after that. The rate rises from 0 to `peak` during warmup, then falls in a straight line to 0 at the last step.
+
+<Blank id="lr-warm" />
+
+</Gate>
+
+<Gate requires="lr-warm">
+
+After warmup, use the second line.
+
+<Blank id="lr-decay" />
+
+Many models replace the falling straight line with a smooth curve (half a cosine wave), but the pattern is the same:
+up quickly, then slowly down.
+
+The GPT you write in level 21 uses these habits: it trains with Adam on mini-batches of 64.
+
+<Gate requires="lr-decay">
+
+Now put the pieces of this level together in one small training run. The loss is $(w - 3)^2$, lowest at $w = 3$, and the
+schedule is given as `lr_at`. Write the body of the loop: each step takes the gradient, gets its learning rate from
+the schedule, and moves w with momentum (section 2).
+
+<CodeBlank id="lr-code" />
+
+</Gate>
+
+</Gate>

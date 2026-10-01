@@ -1,0 +1,391 @@
+---
+title: Probability and sampling
+level: "10"
+order: 10
+part: foundations
+question: How does a model “roll the dice” to pick the next word?
+run: browser
+checkpoint: ce-from-scores
+testOut: [temp-2, ce-01, grad-code, ppl-uniform, ce-from-scores]
+recap:
+  can:
+    - "Turn scores into probabilities with softmax, at any temperature."
+    - "Compute the cross-entropy loss and its gradient $p - y$ for one word."
+    - "Read perplexity as “choosing evenly among this many words”, and compute it from the p of each right word."
+  keys:
+    - "$p_i = \\frac{e^{s_i}}{\\sum_j e^{s_j}}$; with temperature, softmax of $s / T$"
+    - "$\\text{loss} = -\\ln p_{\\text{correct}}$"
+    - "$\\partial L / \\partial s_i = p_i - y_i$, with $y$ one-hot"
+    - "$\\text{perplexity} = e^{\\text{average of } (-\\ln p)}$"
+    - "Optional (section 8, for the Diffusion branch): Gaussian noise, $x = \\text{mean} + \\text{std} \\times z$"
+  mistakes:
+    - "Dividing a score by the sum of the scores: take $e$ to the power of each score first."
+    - "Applying softmax before `F.cross_entropy`: it wants the raw scores and applies softmax itself."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import SamplingLab from '@viz/SamplingLab.astro'
+import CrossEntropyLab from '@viz/CrossEntropyLab.astro'
+import GaussianLab from '@viz/GaussianLab.astro'
+import EntropyLab from '@viz/EntropyLab.astro'
+
+A language model never writes a word directly. Its last step gives **one score for each possible next word**.
+A higher score means "more likely". (These raw scores are also called **logits**. Later levels use both words for the same thing.)
+Then two things happen:
+
+1. **softmax** turns the scores into probabilities that add up to 1.
+2. The model picks one word at random, like rolling uneven dice: a word with a higher probability is picked more often.
+
+## 1. Picking a word at random
+
+Here are four possible next words. Sample a few times and watch the counts.
+Leave the temperature slider at 1 for now. Section 3 explains it.
+
+<SamplingLab hide={{ prob: "p-mat" }} />
+
+Each word's probability is its **part of the total**: its $e^{\text{score}}$ divided by the sum over all four words.
+(Section 2 explains why we use $e^{\text{score}}$. If $e$ is new to you, the [math page](/math/#exp-ln) has a short table.)
+
+<Blank id="p-mat" />
+
+<Gate requires="p-mat">
+
+## 2. How softmax works
+
+Two steps. First, take $e^{\text{score}}$ of every score. This makes every number positive,
+and it makes big scores much bigger. Then divide each one by the total, so they add up to 1.
+
+$$
+p_i = \frac{e^{s_i}}{\sum_j e^{s_j}}
+$$
+
+Read $\sum_j$ as "add up over every word $j$". So the bottom is $e^{s_0} + e^{s_1} + \dots$, the total (words count from 0).
+
+Try it with just two words, scores `[2, 0]`. You need $e^2 \approx 7.39$ and $e^0 = 1$.
+
+<Blank id="softmax-2-0" />
+
+<Predict id="add-ten" />
+
+<Stuck q="Why not just divide each score by the sum of the scores?">
+
+Because scores can be negative or zero. Scores `[2, -2]` add up to 0, and you can't divide by 0.
+Scores `[1, -3]` would give a probability of −0.5 for one word, which makes no sense.
+
+$e^x$ is positive for every $x$, so after taking $e$ to the power of each score, every number is a valid weight.
+It also only cares about **differences**: $e^{s+10} = e^{s} \cdot e^{10}$, and the $e^{10}$ is in the top and in the
+bottom of the fraction, so it divides away. That is why adding 10 to every score changed nothing.
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="softmax-2-0">
+
+## 3. Temperature
+
+Before softmax, the model can divide every score by a number $T$, the **temperature**.
+
+- $T < 1$ makes the differences bigger. The top word wins almost every time.
+- $T > 1$ makes the differences smaller. Rare words get picked more often.
+
+<Predict id="t-small" />
+
+Now go back to the lab and drag the temperature from 0.1 to 3.
+
+<Blank id="temp-2" />
+
+Now write it. Divide the scores by `T`, then do softmax.
+
+<CodeBlank id="probs-T" />
+
+The template subtracts the largest score before `np.exp`, so `exp` never overflows; softmax gives the same result.
+Optional side trip: [level U2](/learn/numbers-in-a-computer/) shows why this matters, by looking at how a float is stored.
+
+<Deeper title="Greedy decoding, and why chat models are not greedy">
+
+At $T \to 0$ the biggest score gets probability 1. Always picking the top word is called **greedy decoding**.
+It is predictable, but it tends to repeat itself, because the same context always leads to the same word.
+
+Sampling with $T$ around 0.7–1 keeps some variety. A common extra trick is **top-k**: keep only the
+k highest scores, set the rest to $-\infty$ (so $e^{-\infty} = 0$), then sample. The rare, nonsense words
+can never be picked, but there is still some choice among the good ones.
+
+In level 17 you will run a real model step by step and see these scores for every word it writes.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="probs-T">
+
+## 4. Scoring a guess: cross-entropy
+
+During training we know the correct next word. We need one number that says how wrong the model was.
+Look at the probability the model gave the **correct** word, and take $-\ln$ of it.
+
+$$
+\text{loss} = -\ln p_{\text{correct}}
+$$
+
+This is the loss you met in level 3, where there were only two answers (yes or no). There you took $-\ln p$ when the
+answer was yes and $-\ln(1 - p)$ when it was no; both are “−ln of the probability given to the right answer”.
+Now there can be any number of answers, and softmax supplies their probabilities.
+
+In this course **log always means the natural log, ln** (base $e \approx 2.718$), never base 10. `np.log` in code is ln too.
+Here is $-\ln p$ for a few values of $p$:
+
+| $p$ | 1 | 0.5 | 0.25 | 0.1 | 0.01 |
+|---|---|---|---|---|---|
+| $-\ln p$ | 0 | 0.69 | 1.39 | 2.30 | 4.61 |
+
+Two rules make these easy. $-\ln(1/x) = \ln x$: for example $-\ln 0.1 = -\ln(1/10) = \ln 10 \approx 2.30$.
+And a smaller $p$ always gives a bigger loss. If ln is new to you or you have forgotten it, the [math page](/math/#exp-ln) has the rules with examples.
+
+Choose the correct word with the round button, then drag the scores.
+
+<CrossEntropyLab hide={{ loss: "ce-09" }} />
+
+<Blank id="ce-01" />
+
+<Blank id="ce-09" />
+
+<Stuck q="Why the log? Why not just use 1 − p?">
+
+Look at the curve. With $1 - p$, a model that gives the right word $p = 0.01$ gets a loss of 0.99,
+and one that gives it $p = 0.0001$ also gets about 0.99. They look equally bad.
+
+With $-\ln p$, the first gets 4.6 and the second gets 9.2. The closer the model comes to giving the right word
+zero probability, the larger the loss grows, without limit. So training strongly pushes the model to give every
+possible right word at least some probability.
+
+There is a second reason. The probability of a whole sentence is the product of the probabilities of
+its words. The log of a product is the sum of the logs. So the total loss is just the sum of the
+per-word losses.
+
+</Stuck>
+
+Write the loss for one example: softmax the scores, pick the correct one, take $-\ln$.
+
+<CodeBlank id="ce-code" />
+
+<Stuck q="In PyTorch, should I apply softmax before `F.cross_entropy`?">
+
+No. `F.cross_entropy(logits, target)` does the softmax **and** the $-\ln$ in one step, so you give it the raw scores.
+If you apply softmax first, it is applied twice.
+
+<Predict id="softmax-twice" />
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="ce-code">
+
+## 5. Which way to push: the gradient
+
+Training needs to know how to change each **score** to lower the loss. For softmax followed by cross-entropy,
+the answer is short enough to remember:
+
+$$
+\frac{\partial L}{\partial s_i} = p_i - y_i
+$$
+
+Here $y$ is the **one-hot** target: 1 for the correct word, 0 for the others. Take three words with
+probabilities $p = [0.7, 0.2, 0.1]$ for cat, dog and car, and say the right answer is **dog**, so $y = [0, 1, 0]$:
+
+| | cat | dog (correct) | car |
+|---|---|---|---|
+| $p$ | 0.7 | 0.2 | 0.1 |
+| $y$ | 0 | 1 | 0 |
+| $p - y$ | 0.7 | ? | 0.1 |
+
+<Blank id="grad-dog" />
+
+<Gate requires="grad-dog">
+
+The correct word is the only one with a negative entry: it is the only score that should go up.
+
+<Predict id="grad-step" />
+
+<Deeper title="Where p − y comes from">
+
+The loss is $L = -\ln p_c$ for the correct word $c$, and $p_c = e^{s_c} / \sum_j e^{s_j}$. Take the ln of that fraction:
+
+$$
+L = -s_c + \ln \sum_j e^{s_j}
+$$
+
+Now change one score $s_i$ a little. The first term only depends on $s_c$: it gives $-1$ when $i = c$ and $0$ otherwise,
+which is $-y_i$. The second term changes by $e^{s_i} / \sum_j e^{s_j}$, which is exactly $p_i$. Add them: $p_i - y_i$.
+
+With two answers this is the $p - y$ that level 6 uses for the yes/no neuron (sigmoid + its cross-entropy). Same rule, more answers.
+
+</Deeper>
+
+Write it in one line: subtract 1 from the probability of the correct word.
+
+<CodeBlank id="grad-code" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="grad-code">
+
+## 6. How surprised is the model? Perplexity
+
+Cross-entropy scores one guess. To judge a model on a whole text, take the **average** loss over every word.
+Each $-\ln p$ is the model's **surprise** at the word that actually came, so the average is its
+average surprise.
+
+That number is hard to picture. So we turn it back with $e^x$, which undoes the ln:
+
+$$
+\text{perplexity} = e^{\text{average of } (-\ln p)}
+$$
+
+Perplexity reads like a count: **the model is as unsure as if it were choosing evenly among this many words.**
+
+<Blank id="ppl-uniform" />
+
+</Gate>
+
+<Gate requires="ppl-uniform">
+
+Now drag the bars. Each one is how much the model believes in that word. The lab shows the perplexity you would
+get if the words really came with these probabilities: "as unsure as choosing evenly among this many words".
+
+<EntropyLab />
+
+<Deeper title="Entropy: the lab’s other number">
+
+The lab averages the surprise over the four words, weighted by how likely each one is. That weighted average is
+the **entropy**: how uncertain the model is before it sees the answer. The perplexity in the lab is $e^{\text{entropy}}$.
+
+On real text the two can differ. Perplexity uses the surprise at the words that actually came. Entropy weights by
+the model's own probabilities. They are equal only when the words really come with the model's probabilities.
+You don't need entropy for the rest of the course.
+
+</Deeper>
+
+<TryIt>
+
+Press "even" and you get perplexity 4: four equally likely words. Press "sure" and you get 1: no doubt at all.
+Now make two words equal and the others zero. Perplexity is 2. The count is the number of words
+the model is really choosing between.
+
+</TryIt>
+
+<Predict id="two-models" />
+
+<Stuck q="Why is perplexity like a number of words?">
+
+If a model splits its guess evenly over $k$ words, every right word gets $p = 1/k$. The surprise is
+$-\ln(1/k) = \ln k$ every time, so the average is $\ln k$, and $e^{\ln k} = k$.
+
+A real model is never exactly even. Perplexity says which even split would be **just as surprised on average**.
+A perplexity of 2.3 means "about as unsure as a choice between two or three words".
+
+</Stuck>
+
+Here is a model reading the sentence "the cat sat on the mat". After each word it guesses the next one.
+
+| next word | cat | sat | on | the | mat |
+|---|---|---|---|---|---|
+| p the model gave it | 0.5 | 0.25 | 0.125 | 0.25 | 0.25 |
+| surprise $-\ln p$ | 0.693 | 1.386 | 2.079 | 1.386 | 1.386 |
+
+<Blank id="ppl-sentence" />
+
+Write it for any list of probabilities.
+
+<CodeBlank id="ppl-code" />
+
+<Deeper title="Nats, bits, and why perplexity doesn’t care">
+
+With the natural log, surprise is measured in **nats**. With $\log_2$ it is in **bits**: a surprise of 1 bit
+means "as surprising as one coin flip". Both are fine, as long as you undo the log with the matching base:
+$e^x$ for nats, $2^x$ for bits. The perplexity is the same either way.
+
+Perplexity is also the **geometric mean** of $1/p$. For the sentence above: the $1/p$ values are 2, 4, 8, 4, 4,
+their product is 1024 = 4⁵, and the fifth root of 1024 is 4.
+
+When you compare language models in level 11, this is the number you will use. Lower is better.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="ppl-code">
+
+## 7. Put it together
+
+The core of this level in one function: turn scores into probabilities with a temperature, safely, and score the
+right word. "Safely" means the trick from the `probs` code in section 3: subtract the largest score before `np.exp`,
+so a score like 1000 does not overflow. Training never scores one example at a time. It takes a **batch** of B
+examples, each with its own row of scores and its own right word. The loss of the batch is the **mean** of the
+B losses. Write the whole function; a `for` loop over the rows is fine.
+
+To loop over two lists side by side, Python has `zip`: `list(zip([1, 2], "ab"))` is `[(1, 'a'), (2, 'b')]`.
+So `for scores, c in zip(rows, correct):` gives you each row together with its right word.
+
+<CodeBlank id="ce-from-scores" />
+
+Optional side trip: the Classic networks branch starts here. It builds convolutions, recurrent networks, LSTMs
+and the first attention ([level N1](/learn/convolutions/) to [N6](/learn/autoencoders/)). [Level 11](/learn/language-models/) continues the main line: the rest of this page (section 8) is optional.
+
+</Gate>
+
+## 8. Optional: Gaussian noise (for the Diffusion branch)
+
+This section is not needed for the main line: level 11 does not use it, and the level counts as cleared without it.
+The Diffusion branch (level D1) uses it, so read it before you go there.
+
+Sampling a word picks from a short list. Sometimes we need random **numbers** instead, like a little noise
+added to a point. The usual choice is the Gaussian (normal) distribution.
+
+First, one word you need: the **standard deviation (std)** says how far numbers typically sit from their mean.
+[1, −1, 1, −1] has mean 0 and std 1. [10, −10, 10, −10] has mean 0 and std 10. (Exactly: the **variance** is the
+average squared distance from the mean, and the std is its square root. Level 7 already used std for starting weights.)
+
+To make one noisy number:
+
+$$
+x = \text{mean} + \text{std} \times z
+$$
+
+Here $z$ comes from a **standard** normal: mean 0, std 1. Most $z$ values are between −1 and 1, and values
+beyond ±3 are rare. The diffusion branch of this course is built entirely on this one line.
+
+<GaussianLab />
+
+<Blank id="gauss-x" />
+
+<TryIt>
+
+Set std to 0. Every point lands on the mean. Now set std to 2. The cloud is wider, but the fraction of points
+within one std of the mean stays near 68%. The highlighted point keeps the same $z$, so it slides
+outward along the same direction.
+
+</TryIt>
+
+<Deeper title="Why the Gaussian appears everywhere">
+
+Add up many small, independent random effects and the total is close to a Gaussian, whatever the small
+effects looked like. That is why measurement errors, heights, and the starting weights of a network
+are all modeled this way.
+
+</Deeper>
+
+In NumPy, `rng.standard_normal((n, d))` (or `np.random.randn(n, d)`) gives an `(n, d)` array of standard
+normal $z$ values: the shape you pass in is the shape you get. Multiply by std and add the mean, and you get any
+Gaussian you like.
+
+<Blank id="noise-shape" />
+

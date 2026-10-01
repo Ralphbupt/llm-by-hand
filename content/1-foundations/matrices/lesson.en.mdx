@@ -1,0 +1,265 @@
+---
+title: Matrices and shapes
+level: "1"
+order: 1
+part: foundations
+question: How do you multiply two tables of numbers, and what shape is the result?
+run: browser
+checkpoint: center-code
+testOut: [c-0-1, batch-shape, matmul-loop, bc-value, center-code]
+recap:
+  can:
+    - "Compute any cell of `A @ B` by hand: row i of A times column j of B, summed."
+    - "Say the output shape of a matrix product, or that it fails, before running it."
+    - "Predict the shape NumPy broadcasts two arrays to, and reduce along one axis."
+  keys:
+    - "`C[i][j]` = row i of A times column j of B, multiplied number by number and added up"
+    - "`(n, k) @ (k, m)` → `(n, m)`: the inner sizes must match"
+    - "`(batch, length, d_in) @ (d_in, d_out)` → `(batch, length, d_out)`: the same matrix multiplies every word’s row"
+    - "Broadcasting compares sizes from the right; a size of 1 is repeated to match"
+    - "`X.sum(axis=0)` on `(4, 3)` → `(3,)`: the axis you name disappears"
+  mistakes:
+    - "Multiplying cell by cell (`A * B`) when you mean `A @ B`."
+    - "Checking the outer sizes instead of the inner ones: `(3, 2) @ (3, 2)` fails."
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import MatmulLab from '@viz/MatmulLab.astro'
+import BroadcastLab from '@viz/BroadcastLab.astro'
+import BatchTensors from '@viz/BatchTensors.astro'
+import MaskTensors from '@viz/MaskTensors.astro'
+
+Look inside a Transformer and almost every piece is a matrix multiplication. Practice this one operation
+until it feels easy. After that, the rest of the course is much easier.
+
+A **matrix** is a table of numbers. Its **shape** says how big the table is: shape (2, 3) means 2 rows and 3 columns.
+`C[0][1]` means the number in row 0, column 1 of the matrix `C`.
+
+## 1. One cell at a time
+
+There is one rule: **the cell in row i, column j of the result is row i of the left matrix · column j of the right matrix.**
+The “·” (the **dot product**) means: multiply the two lists number by number, then add everything up. Rows and columns count from 0,
+so "row 0" is the top row and "column 1" is the second column, read top to bottom. Point at a cell of C (or tap it on a phone) to see it.
+
+<MatmulLab hide={{ id: "c-0-1", i: 0, j: 1 }} />
+
+<Blank id="c-0-1" />
+
+<Gate requires="c-0-1">
+
+## 2. The shape rule
+
+The shape rule comes from that one rule. To multiply a row of A with a column of B number by number,
+the row and the column must have the same length. In NumPy, and everywhere in this course, `@` means matrix multiplication. So:
+
+$$
+(n, k) \; @ \; (k, m) \;\to\; (n, m)
+$$
+
+The two inner numbers must match, and they disappear. The two outer numbers are what is left. When the inner numbers match, we say the shapes **line up**.
+
+<Blank id="shape-3x4" />
+
+<Predict id="same-shape" />
+
+The flip in that answer has a name: the **transpose**, written `B.T`. Row i of `B` becomes column i of `B.T`,
+so a (3, 2) matrix turns into (2, 3). You will use it in level 6 and again in attention.
+
+<Stuck q="Why not just multiply cell by cell, like adding two matrices?">
+
+That operation exists too. In NumPy it is `A * B`. It needs both matrices to have the same shape,
+and it is used in places like masks. But it never mixes information between positions:
+cell (0,0) only ever sees cell (0,0).
+
+Matrix multiplication does mix. Every output cell combines a whole row with a whole column.
+That mixing is exactly what a neural network layer needs. Each output is a weighted sum of all the inputs.
+
+</Stuck>
+
+## 3. Write it yourself
+
+Write the multiplication with three loops, without `@` or `np.dot`. The innermost loop runs over the inner size,
+which is the dimension that disappears.
+
+<CodeBlank id="matmul-loop" />
+
+</Gate>
+
+<Gate requires="matmul-loop">
+
+## 4. Shapes you will see a hundred times
+
+A real model does not multiply one sentence at a time. It stacks several sentences into a **batch**, so the input
+has three dimensions: (batch, length, features). Multiplying by a weight matrix only touches the last dimension.
+The rule is the same: the inner numbers must match and disappear.
+
+<Blank id="batch-shape" />
+
+<Gate requires="batch-shape">
+
+Here is that multiply as blocks. Drag to turn it: the batch axis points away from you.
+
+<BatchTensors />
+
+</Gate>
+
+<Deeper title="Why a layer is (batch, length, `d_in`) @ (`d_in`, `d_out`)">
+
+Think of the left matrix as "one row per word". Each word is a list of `d_in` numbers.
+Think of the right matrix as "one column per new feature". Each column says how much of each input number
+goes into that new feature.
+
+So `X @ W` turns every word's `d_in` numbers into `d_out` new numbers, and every word uses the same `W`.
+Nothing about the batch or the sentence length is in `W`. That is why the same layer works for
+a batch of 2 or 2000, and for a sentence of 5 words or 500.
+
+In level 14 you will see `X @ W_Q`, `X @ W_K`, `X @ W_V`: three of these, one after the other.
+
+</Deeper>
+
+<TryIt>
+
+In the lab, add a column to A. The result disappears, because the shapes no longer match.
+Now add a row to B. It comes back. Which number did you have to change, and why?
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="batch-shape">
+
+## 5. Broadcasting: adding arrays of different shapes
+
+Adding two matrices of the same shape is easy: add cell by cell. But models constantly add things that are
+*smaller*: one bias row to every example, one mask row to every word. NumPy has a rule for that, called
+**broadcasting**: a dimension of size 1 is stretched (copied) until it matches the other array.
+
+A column (4, 1) plus a row (1, 5): the column is copied across 5 times, the row is copied down 4 times,
+and then they are added cell by cell.
+
+<Blank id="bc-shape" />
+
+</Gate>
+
+<Gate requires="bc-shape">
+
+That case had a 1 in each array. What if one array has no 1 at all?
+
+<Predict id="bc-trailing" />
+
+</Gate>
+
+<Gate requires="bc-trailing">
+
+Pick a case and point at or tap a cell of the result. The pale cells are the stretched copies. NumPy never stores them.
+The lab uses its own numbers (a = [0, 1, 2, 3]), so its table is not the answer to the question below.
+
+<BroadcastLab />
+
+The rule, checked one dimension at a time **from the right**:
+
+1. If the two sizes are equal, fine.
+2. If one of them is 1, stretch it to the other.
+3. Otherwise, error.
+
+A missing dimension on the left counts as 1, so a (5,) array behaves like (1, 5).
+
+<Blank id="bc-value" />
+
+</Gate>
+
+<Gate requires="bc-value">
+
+## 6. Where you will need it
+
+This section looks ahead. Levels 10–15 explain its words; only the shapes matter here.
+In levels 14–15 the attention scores of a batch have shape (batch, words, words): for every sentence,
+every word's score for every other word. Some sentences are shorter and end in padding words, so each sentence
+comes with a padding mask: `True` marks a padding word that must be blocked (its score is set to −∞ before
+softmax, which you will meet in level 10). The mask is stored once per sentence, as (batch, 1, words),
+and broadcasting stretches it to every row.
+
+<Blank id="bc-mask" />
+
+<Gate requires="bc-mask">
+
+The same thing in 3D. Each sentence stores one mask row; broadcasting reads it for all 4 rows.
+
+<MaskTensors />
+
+</Gate>
+
+<Stuck q="Does NumPy really copy the column 5 times? Isn’t that wasteful?">
+
+No copy is made. NumPy remembers that the dimension has size 1. Each time a cell of the stretched array is read,
+it reads the same stored number again. That is why those cells in the lab are pale: they are not real cells.
+So broadcasting a (1, 5) row against a million rows costs no extra memory for the row.
+
+</Stuck>
+
+<Deeper title="The bias in X @ W + b is a broadcast too">
+
+A layer computes `X @ W + b`. `X @ W` is (N, `d_out`): one row per example. `b` is (`d_out`,), one number per
+output. By the rule, `b` is treated as (1, `d_out`) and stretched down to N rows, so every example gets the
+same bias. Nobody writes the copy; broadcasting does it. You will use it in every layer, starting in level 5.
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="bc-mask">
+
+## 7. Adding up along one axis
+
+Many steps add numbers up along one direction of a table. In NumPy you choose the direction with `axis`.
+Take A with shape (3, 2):
+
+```
+A = [[1, 2],
+     [3, 4],
+     [5, 6]]
+A.sum(axis=0)  →  [9, 12]       # go down the rows: one total per column, shape (2,)
+A.sum(axis=1)  →  [3, 7, 11]    # go across a row: one total per row, shape (3,)
+A.mean(axis=0) →  [3, 4]        # the same, divided by the 3 rows
+```
+
+`axis=0` removes the rows. `axis=1` removes the columns. The axis you name is the one that disappears.
+
+<Blank id="axis-shape" />
+
+</Gate>
+
+<Gate requires="axis-shape">
+
+Now put the two ideas together. `X.mean(axis=0)` has shape (d,): one mean per column. Subtracting it from `X`
+(shape (N, d)) is a broadcast: the row of means is stretched down to all N rows. The result has every column
+centered at 0. LayerNorm in level 16 centers in the same way, but each row instead of each column: it takes
+the mean along the last axis, one mean per word, and subtracts that.
+
+<CodeBlank id="center-code" />
+
+<TryIt title="Read a line of data code">
+
+Demo files often build a small dataset in one or two lines. Read them shape by shape:
+
+```
+# stack 60 rows on top of 60 rows → (120, 2)
+pts = np.vstack([np.zeros((60, 2)), np.ones((60, 2))])
+# 60 zeros, then 60 ones → (120,)
+labels = np.repeat([0, 1], 60)
+```
+
+`np.vstack` puts arrays on top of each other, so the row counts add up: 60 + 60 = 120. `np.repeat` repeats each
+item. When a demo line confuses you, print `.shape` after each step.
+
+</TryIt>
+
+Optional side trip: [level U1](/learn/tensors-in-memory/) shows how the computer stores an array like these as one
+row of numbers, and why some reshapes cost nothing. Level 2 continues the main line; you can come back to U1 any time.
+
+</Gate>
