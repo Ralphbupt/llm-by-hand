@@ -3,10 +3,16 @@
 The site is fully static: `npm run build` in `site/` writes everything to `site/dist`.
 Python runs in the browser with Pyodide, loaded from the official CDN (cdn.jsdelivr.net), so no large files ship.
 
+Live setup: the Pages project `llm-by-hand-site` is connected to GitHub `Ralphbupt/llm-by-hand`. A push to `main`
+builds and deploys production; any other branch or pull request gets a preview URL. Nothing to run by hand.
+
+Lock file: Cloudflare's Node 22 runs `npm ci` with npm 10, which rejects some npm 11 lock files. After changing
+dependencies, check with `npx -y npm@10 ci --dry-run`; if it fails, regenerate with `npx -y npm@10 install --package-lock-only`.
+
 ## 1. Create the project
 
-Cloudflare dashboard → Workers & Pages → Create → Pages → connect the Git repository (or upload `dist` with
-`npx wrangler pages deploy dist` after `npm run build`).
+Cloudflare dashboard → Workers & Pages → Create → Pages → Import an existing Git repository.
+(A Direct Upload project, deployed with `npx wrangler pages deploy dist`, cannot be connected to Git later.)
 
 | Setting | Value |
 | --- | --- |
@@ -23,8 +29,9 @@ The public URL lives in one place: `src/config/site.ts` (`SITE_URL`). Change it 
 ## 2. Custom domain `llm.liko.page`
 
 Pages project → Custom domains → Set up a custom domain → `llm.liko.page`.
-If `liko.page` is a zone on the same Cloudflare account, Cloudflare adds the record itself:
-`CNAME llm → <project>.pages.dev` (proxied). Otherwise add that CNAME at your DNS provider, then wait for the
+If `liko.page` is a zone on the same Cloudflare account and has no `llm` record yet, Cloudflare adds it itself:
+`CNAME llm → <project>.pages.dev` (proxied). An existing `llm` record is not changed: when moving the domain to
+another project, edit its target in DNS → Records, or the domain stays pending and the site returns 522. Otherwise add that CNAME at your DNS provider, then wait for the
 certificate (a few minutes). Add the domain in the dashboard first; a bare CNAME alone is not enough.
 
 ## 3. Analytics (GA4)
