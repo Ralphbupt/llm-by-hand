@@ -21,9 +21,11 @@ Cloudflare dashboard → Workers & Pages → Create → Pages → Import an exis
 | Build command | `npm run build` |
 | Build output directory | `dist` |
 | Node version | 22 (from `site/.node-version`; or set `NODE_VERSION=22`) |
-| Environment variable | `PUBLIC_GA4_ID` = your GA4 measurement ID (`G-…`), Production only |
+| Environment variable | `PUBLIC_GA4_ID` = your GA4 measurement ID (`G-…`), Production only (live: `G-DMEVN03V6F`) |
 
 Without `PUBLIC_GA4_ID` the site has no analytics code and no consent bar (keep it unset for preview deployments).
+It is set only in the Pages project, not in the repo, so local builds and previews carry no analytics.
+To test analytics locally: `PUBLIC_GA4_ID=G-… npm run build`.
 The public URL lives in one place: `src/config/site.ts` (`SITE_URL`). Change it there if the domain changes.
 
 ## 2. Custom domain `llm.liko.page`
