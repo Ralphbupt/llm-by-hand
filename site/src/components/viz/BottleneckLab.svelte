@@ -7,9 +7,30 @@
   import { onMount } from 'svelte'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   type Kind = 'plain' | 'attn'
-  let { models = ['plain', 'attn'] }: { models?: Kind[] } = $props()
+  let { models = ['plain', 'attn'], lang = 'en' }: { models?: Kind[]; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'without attention': '无注意力',
+    'with attention': '有注意力',
+    'Reversing digit strings: exact answers on new strings': '把数字串倒过来：在新数字串上完全答对的比例',
+    'Tap a length to read its numbers. Switch the state size H to give the model a bigger state.': '点一个长度，看它的数字。切换状态大小 H，给模型一个更大的状态。',
+    'Could not load the runs: {e}': '无法加载训练记录：{e}',
+    'Loading the recorded runs…': '正在加载录下的训练记录……',
+    'fraction of strings reversed with every digit right': '每一位都倒对了的数字串所占的比例',
+    'Accuracy against input length': '准确率随输入长度的变化',
+    'input length (digits)': '输入长度（位数）',
+    'length': '长度',
+    'state size H': '状态大小 H',
+    'H = {H}, strings of {n} digits:': 'H = {H}，{n} 位的数字串：',
+    ', ': '，',
+    'exactly right.': '完全正确。',
+    'Waiting for the recorded runs…': '正在等待录下的训练记录……',
+    'Same LSTM size, {n} training steps on lengths 2–24, then 300 new strings per length. An answer counts only if every digit is right.': 'LSTM 大小相同，在长度 2–24 上训练 {n} 步，然后每个长度测试 300 个新数字串。只有每一位都对，才算答对。',
+  })
   type Data = { lengths: number[]; steps: number } & Record<Kind, Record<string, number[]>>
   let data = $state<Data | null>(null)
   let error = $state('')
@@ -19,7 +40,7 @@
     fetch('/data/seq2seq-attention/bottleneck.json').then((r) => r.json()).then((d) => (data = d)).catch((e) => (error = String(e)))
   })
 
-  const NAME: Record<Kind, string> = { plain: 'without attention', attn: 'with attention' }
+  const NAME: Record<Kind, string> = { plain: t('without attention'), attn: t('with attention') }
   const W = 360, Hh = 200, L = 40, R = 14, TOP = 16, B = 36
   const px = (i: number, n: number) => L + (i / (n - 1)) * (W - L - R)
   const py = (a: number) => TOP + (1 - a) * (Hh - TOP - B)
@@ -31,18 +52,18 @@
 </script>
 
 <LabFrame
-  title="Reversing digit strings: exact answers on new strings"
-  hint="Tap a length to read its numbers. Switch the state size H to give the model a bigger state."
+  title={t('Reversing digit strings: exact answers on new strings')}
+  hint={t('Tap a length to read its numbers. Switch the state size H to give the model a bigger state.')}
   onreset={() => { H = '32'; sel = null }}
   resetDisabled={H === '32' && sel === null}
 >
   {#if error}
-    <p class="bad">Could not load the runs: {error}</p>
+    <p class="bad">{t('Could not load the runs: {e}', { e: error })}</p>
   {:else if !data}
-    <div class="loading">Loading the recorded runs…</div>
+    <div class="loading">{t('Loading the recorded runs…')}</div>
   {:else}
-    <div class="cap">fraction of strings reversed with every digit right</div>
-    <svg use:readable viewBox="0 0 {W} {Hh}" class="chart" role="group" aria-label="Accuracy against input length">
+    <div class="cap">{t('fraction of strings reversed with every digit right')}</div>
+    <svg use:readable viewBox="0 0 {W} {Hh}" class="chart" role="group" aria-label={t('Accuracy against input length')}>
       {#each [0, 0.5, 1] as a}
         <line x1={L} x2={W - R} y1={py(a)} y2={py(a)} class="grid" />
         <text x={L - 5} y={py(a) + 3.5} class="t" text-anchor="end">{a * 100}%</text>
@@ -51,7 +72,7 @@
       {#each data.lengths as len, i}
         <text x={px(i, n)} y={Hh - B + 15} class="t" class:on={i === at} text-anchor="middle">{len}</text>
       {/each}
-      <text x={(W + L) / 2} y={Hh - 4} class="t" text-anchor="middle">input length (digits)</text>
+      <text x={(W + L) / 2} y={Hh - 4} class="t" text-anchor="middle">{t('input length (digits)')}</text>
       {#each models as k}
         <path d={path(data[k][H])} class="line {k}" />
         {#each data[k][H] as a, i}<circle cx={px(i, n)} cy={py(a)} r={i === at ? 3.6 : 2.6} class="pt {k}" />{/each}
@@ -68,7 +89,7 @@
 
     <table>
       <thead>
-        <tr><th scope="col">length</th>
+        <tr><th scope="col">{t('length')}</th>
           {#each data.lengths as len, i}
             <th scope="col" class:on={i === at}><button type="button" aria-pressed={i === at} onclick={() => (sel = i)}>{len}</button></th>
           {/each}
@@ -83,24 +104,24 @@
   {/if}
 
   {#snippet controls()}
-    <span class="lbl">state size H</span>
-    <div class="seg" role="group" aria-label="state size H">
+    <span class="lbl">{t('state size H')}</span>
+    <div class="seg" role="group" aria-label={t('state size H')}>
       {#each ['32', '128'] as h}<button type="button" class:on={H === h} aria-pressed={H === h} onclick={() => (H = h)}>{h}</button>{/each}
     </div>
   {/snippet}
 
   {#snippet readout()}
     {#if data}
-      H = {H}, strings of {data.lengths[at]} digits:
-      {#each models as k, j}{j ? ', ' : ''}{NAME[k]} <b>{pct(data[k][H][at])}</b>{/each} exactly right.
+      {t('H = {H}, strings of {n} digits:', { H, n: data.lengths[at] })}
+      {#each models as k, j}{j ? t(', ') : ''}{NAME[k]} <b>{pct(data[k][H][at])}</b>{/each} {t('exactly right.')}
     {:else}
-      <span class="idle">Waiting for the recorded runs…</span>
+      <span class="idle">{t('Waiting for the recorded runs…')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
     {#each models as k}<span><i class="sw {k}"></i>{NAME[k]}</span>{/each}
-    {#if data}<span class="tip">Same LSTM size, {data.steps.toLocaleString('en-US')} training steps on lengths 2–24, then 300 new strings per length. An answer counts only if every digit is right.</span>{/if}
+    {#if data}<span class="tip">{t('Same LSTM size, {n} training steps on lengths 2–24, then 300 new strings per length. An answer counts only if every digit is right.', { n: data.steps.toLocaleString('en-US') })}</span>{/if}
   {/snippet}
 </LabFrame>
 

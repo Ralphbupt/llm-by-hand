@@ -5,9 +5,11 @@
   import { pickHint } from '@lib/grade'
   import { optionOrder } from '@lib/shuffle'
   import type { PredictEx } from '@lib/quiz'
+  import { translator, type Lang } from '@lib/i18n'
 
   // practice: start fresh even if already answered (the mistake book's "redo", the warm-up)
-  let { id, ex, practice = false }: { id: string; ex: PredictEx; practice?: boolean } = $props()
+  let { id, ex, practice = false, lang = 'en' }: { id: string; ex: PredictEx; practice?: boolean; lang?: Lang } = $props()
+  const t = translator(lang)
 
   let picked = $state<number | null>(null)
   let revealed = $state(false)
@@ -37,7 +39,7 @@
     if (graded && i !== ex.answer) {
       wrong = [...wrong, i]
       recordMiss(id)
-      hint = pickHint(ex.hints, { value: i }, wrong.length) ?? 'Not this one. Try another option.'
+      hint = pickHint(ex.hints, { value: i }, wrong.length) ?? t('Not this one. Try another option.')
       return
     }
     revealed = true
@@ -47,7 +49,7 @@
 </script>
 
 <div class="predict" class:revealed>
-  <div class="prompt"><span class="tag">{graded ? 'Choose' : 'Predict first'}</span><NoWrapText text={ex.prompt} /></div>
+  <div class="prompt"><span class="tag">{t(graded ? 'Choose' : 'Predict first')}</span><NoWrapText text={ex.prompt} /></div>
   <div class="opts">
     {#each order as i (i)}
       {@const opt = ex.options[i]}

@@ -10,9 +10,40 @@
 
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'All identity': '全是单位矩阵',
+    'Swap the keys': '交换键',
+    'One-way keys': '单向的键',
+    'V keeps only x': 'V 只保留 x',
+    'All identity: Q, K and V are each word’s own vector, so a score is the plain dot product of two words.': '全是单位矩阵：Q、K、V 都是每个词自己的向量，所以分数就是两个词的普通点积。',
+    'Swap the keys: each key becomes [y, x], so a word now matches words that are strong where it is weak.': '交换键：每个键变成 [y, x]，所以一个词现在会和那些在它弱的地方强的词匹配。',
+    'One-way keys: each key is [y, 0], so cat can look at car, but car does not look at cat.': '单向的键：每个键是 [y, 0]，所以 cat 可以看 car，但 car 不看 cat。',
+    'V keeps only x: each value is [x, 0], so the output only ever carries the first number.': 'V 只保留 x：每个值是 [x, 0]，所以输出永远只带着第一个数。',
+    'Three roles for every word: a question (Q), a label (K) and content (V)': '每个词的三个角色：问题（Q）、标签（K）和内容（V）',
+    'Edit any number, or try a preset. Point at or tap a score to read how it was made.': '改任意一个数，或试一个预设。指向或点一下某个分数，看它是怎么算出来的。',
+    'the words and the three projection matrices': '词和三个投影矩阵',
+    'every word gets a query, a key and a value': '每个词得到一个查询、一个键和一个值',
+    'score each query against each key, softmax, mix the values': '每个查询和每个键算分数，做 softmax，混合值',
+    'scores = Q Kᵀ': '分数 = Q Kᵀ',
+    'a can look at b more than b looks at a': 'a 看 b 可以多于 b 看 a',
+    'symmetric': '对称',
+    'not symmetric': '不对称',
+    'weights = softmax(scores / √2)': '权重 = softmax(分数 / √2)',
+    'output = weights V': '输出 = 权重 V',
+    'use projections W_Q, W_K, W_V': '使用投影 W_Q、W_K、W_V',
+    'Presets': '预设',
+    'Your own numbers: no preset.': '你自己的数：没有用预设。',
+    '{a}’s query': '{a} 的查询',
+    '{b}’s key': '{b} 的键',
+    'reversed:': '反过来：',
+    'Pick a score. The question comes from the row word’s Q, the label from the column word’s K.': '选一个分数。问题来自这一行的词的 Q，标签来自这一列的词的 K。',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -66,13 +97,13 @@
 </script>
 
 <LabFrame
-  title="Three roles for every word: a question (Q), a label (K) and content (V)"
-  hint="Edit any number, or try a preset. Point at or tap a score to read how it was made."
+  title={t('Three roles for every word: a question (Q), a label (K) and content (V)')}
+  hint={t('Edit any number, or try a preset. Point at or tap a score to read how it was made.')}
   onreset={resetAll}
   resetDisabled={!changed}
 >
   <div class="steps">
-    <p class="step"><b>1</b> the words and the three projection matrices</p>
+    <p class="step"><b>1</b> {t('the words and the three projection matrices')}</p>
     <div class="row">
       <MatrixGrid value={X} label="X" editable decimals={1} rowLabels={words} onchange={(v) => (X = v)} />
       <div class="ws" class:off={!project}>
@@ -82,40 +113,40 @@
       </div>
     </div>
 
-    <p class="step"><b>2</b> every word gets a query, a key and a value</p>
+    <p class="step"><b>2</b> {t('every word gets a query, a key and a value')}</p>
     <div class="row">
       <MatrixGrid value={Q} label={project ? 'Q = X W_Q' : 'Q = X'} rowLabels={words} hiRows={hiRows} />
       <MatrixGrid value={K} label={project ? 'K = X W_K' : 'K = X'} rowLabels={words} hiRows={hiCols} />
       <MatrixGrid value={V} label={project ? 'V = X W_V' : 'V = X'} rowLabels={words} />
     </div>
 
-    <p class="step"><b>3</b> score each query against each key, softmax, mix the values</p>
+    <p class="step"><b>3</b> {t('score each query against each key, softmax, mix the values')}</p>
     <div class="row">
       <div>
-        <MatrixGrid value={raw} label="scores = Q Kᵀ" rowLabels={words} colLabels={words} {hiRows} {hiCols} masked={mRaw} onhover={(c) => (cell = c)} />
-        <div class="badge" class:yes={symmetric} title={symmetric ? 'score(a, b) = score(b, a)' : 'a can look at b more than b looks at a'}>{symmetric ? 'symmetric' : 'not symmetric'}</div>
+        <MatrixGrid value={raw} label={t('scores = Q Kᵀ')} rowLabels={words} colLabels={words} {hiRows} {hiCols} masked={mRaw} onhover={(c) => (cell = c)} />
+        <div class="badge" class:yes={symmetric} title={symmetric ? 'score(a, b) = score(b, a)' : t('a can look at b more than b looks at a')}>{symmetric ? t('symmetric') : t('not symmetric')}</div>
       </div>
-      <Heatmap value={r.weights} label="weights = softmax(scores / √2)" rowLabels={words} colLabels={words} {hiRows} {hiCols} onhover={(c) => (cell = c)} />
-      <MatrixGrid value={r.out} label="output = weights V" rowLabels={words} {hiRows} />
+      <Heatmap value={r.weights} label={t('weights = softmax(scores / √2)')} rowLabels={words} colLabels={words} {hiRows} {hiCols} onhover={(c) => (cell = c)} />
+      <MatrixGrid value={r.out} label={t('output = weights V')} rowLabels={words} {hiRows} />
     </div>
   </div>
 
   {#snippet controls()}
-    <label class="sw"><input type="checkbox" bind:checked={project} /> use projections W_Q, W_K, W_V</label>
-    <span class="presets" role="group" aria-label="Presets">
+    <label class="sw"><input type="checkbox" bind:checked={project} /> {t('use projections W_Q, W_K, W_V')}</label>
+    <span class="presets" role="group" aria-label={t('Presets')}>
       {#each presets as [name, q, k, v]}
-        <button type="button" class="lab-btn" aria-pressed={active?.[0] === name} onclick={() => { WQ = copy(q); WK = copy(k); WV = copy(v); project = true }}>{name}</button>
+        <button type="button" class="lab-btn" aria-pressed={active?.[0] === name} onclick={() => { WQ = copy(q); WK = copy(k); WV = copy(v); project = true }}>{t(name)}</button>
       {/each}
     </span>
-    <p class="pnote">{active ? active[4] : 'Your own numbers: no preset.'}</p>
+    <p class="pnote">{active ? t(active[4]) : t('Your own numbers: no preset.')}</p>
   {/snippet}
 
   {#snippet readout()}
     {#if cell}
-      {words[cell.i]}’s query [{Q[cell.i].map(f).join(', ')}] · {words[cell.j]}’s key [{K[cell.j].map(f).join(', ')}] = <b>{rawText(cell.i, cell.j)}</b>;
-      reversed: <b>{rawText(cell.j, cell.i)}</b>
+      {t('{a}’s query', { a: words[cell.i] })} [{Q[cell.i].map(f).join(', ')}] · {t('{b}’s key', { b: words[cell.j] })} [{K[cell.j].map(f).join(', ')}] = <b>{rawText(cell.i, cell.j)}</b>;
+      {t('reversed:')} <b>{rawText(cell.j, cell.i)}</b>
     {:else}
-      <span class="idle">Pick a score. The question comes from the row word’s Q, the label from the column word’s K.</span>
+      <span class="idle">{t('Pick a score. The question comes from the row word’s Q, the label from the column word’s K.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

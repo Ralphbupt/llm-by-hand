@@ -10,6 +10,42 @@
   import { readable } from '@lib/readable'
   import { onMount } from 'svelte'
   import { landMask } from './landMask'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Mini-batches: each step sees only part of the data': '小批量：每一步只看一部分数据',
+    'Pick a batch size and take steps. Batch size 4 walks straight downhill; batch size 1 zig-zags.': '选一个批大小，然后走几步。批大小为 4 时径直下坡；批大小为 1 时走得歪歪扭扭。',
+    'Map': '平面图',
+    'loss': '损失',
+    'Loss over all 4 points as a 3D surface, with the path of steps': '全部 4 个点上的损失画成 3D 曲面，上面是走过的路径',
+    'Loss surface over w and b with the path taken': 'w 和 b 上的损失曲面，以及走过的路径',
+    'Loss over all 4 points for every (w, b): the fainter the gray, the lower the loss.': '每个 (w, b) 处全部 4 个点上的损失：灰色越浅，损失越低。',
+    'The four points, the current line, and the points this step used': '四个点、当前的直线，以及这一步用到的点',
+    'The 4 data points and your line.': '4 个数据点和你的直线。',
+    'Loss on all four points after each step': '每一步之后全部四个点上的损失',
+    'best possible {v}': '最好能到 {v}',
+    'take a step to draw the loss': '走一步，就会画出损失',
+    'step →': '步数 →',
+    'Loss on all 4 points after each step ({n} so far). Now:': '每一步之后全部 4 个点上的损失（已走 {n} 步）。现在：',
+    'Take one step': '走一步',
+    '10 steps': '走 10 步',
+    '100 steps': '走 100 步',
+    'batch size': '批大小',
+    '4 (full)': '4（全部）',
+    'learning rate': '学习率',
+    'This step used point {pts}.': '这一步用了点 {pts}。',
+    'This step used points {pts}.': '这一步用了点 {pts}。',
+    'Batch gradient:': '这一批的梯度：',
+    'The full-data gradient at the same spot was dL/dw = {a}, dL/db = {b}.': '在同一位置，用全部数据算出的梯度是 dL/dw = {a}，dL/db = {b}。',
+    'Start: w = 0.5, b = 0. Pick a batch size and take a few steps. Each epoch reshuffles the 4 points.': '起点：w = 0.5，b = 0。选一个批大小，走几步。每一轮都会重新打乱这 4 个点。',
+    'your steps and your line': '你走的步和你的直线',
+    'point the last step used': '上一步用到的点',
+    'points the last step used': '上一步用到的点',
+    'the best line, w = 1.6, b = 1': '最好的直线，w = 1.6，b = 1',
+  })
 
   const W0 = 0.5, B0 = 0, LR0 = 0.02, BS0 = 1
   const LW: [number, number] = [-1, 4], LB: [number, number] = [-3, 3]
@@ -95,9 +131,9 @@
 </script>
 
 <LabFrame
-  title="Mini-batches: each step sees only part of the data"
-  hint="Pick a batch size and take steps. Batch size 4 walks straight downhill; batch size 1 zig-zags."
-  views={[{ id: 'map', label: 'Map' }, { id: '3d', label: '3D' }]}
+  title={t('Mini-batches: each step sees only part of the data')}
+  hint={t('Pick a batch size and take steps. Batch size 4 walks straight downhill; batch size 1 zig-zags.')}
+  views={[{ id: 'map', label: t('Map') }, { id: '3d', label: '3D' }]}
   bind:view
   onreset={reset}
   resetDisabled={!changed}
@@ -108,11 +144,11 @@
         <Surface3D
           f={lossAt} xRange={LW} yRange={LB} zTransform={Math.log1p}
           path={path3d} point={{ x: Math.max(LW[0], Math.min(LW[1], w)), y: Math.max(LB[0], Math.min(LB[1], b)) }} best={{ x: BEST.w, y: BEST.b }}
-          axes={{ x: 'w', y: 'b', z: 'loss' }}
-          ariaLabel="Loss over all 4 points as a 3D surface, with the path of steps"
+          axes={{ x: 'w', y: 'b', z: t('loss') }}
+          ariaLabel={t('Loss over all 4 points as a 3D surface, with the path of steps')}
         />
       {:else}
-        <svg viewBox="-9 0 109 108" class="land" use:readable aria-label="Loss surface over w and b with the path taken">
+        <svg viewBox="-9 0 109 108" class="land" use:readable aria-label={t('Loss surface over w and b with the path taken')}>
           <defs><mask id={mid}><image href={land} x="0" y="0" width="100" height="100" preserveAspectRatio="none" /></mask></defs>
           <rect x="0" y="0" width="100" height="100" class="low" />
           {#if land}<rect x="0" y="0" width="100" height="100" class="high" mask="url(#{mid})" />{/if}
@@ -126,12 +162,12 @@
           <text x="-1.5" y="4" class="tick end name">b</text>
         </svg>
       {/if}
-      <figcaption>Loss over all 4 points for every (w, b): the fainter the gray, the lower the loss.</figcaption>
+      <figcaption>{t('Loss over all 4 points for every (w, b): the fainter the gray, the lower the loss.')}</figcaption>
     </figure>
 
     <div class="col">
       <figure>
-        <svg viewBox="-4 0 104 62" class="data" use:readable aria-label="The four points, the current line, and the points this step used">
+        <svg viewBox="-4 0 104 62" class="data" use:readable aria-label={t('The four points, the current line, and the points this step used')}>
           {#each [0, 3, 6, 9] as gy}
             <line x1="6" x2="96" y1={dy(gy)} y2={dy(gy)} class="grid" />
             <text x="3" y={dy(gy) + 1.2} class="tick end">{gy}</text>
@@ -143,52 +179,51 @@
             <text x={dx(x)} y="61" class="tick mid">x={x}</text>
           {/each}
         </svg>
-        <figcaption>The 4 data points and your line.</figcaption>
+        <figcaption>{t('The 4 data points and your line.')}</figcaption>
       </figure>
       <figure>
-        <svg viewBox="0 0 100 42" class="spark" use:readable aria-label="Loss on all four points after each step">
+        <svg viewBox="0 0 100 42" class="spark" use:readable aria-label={t('Loss on all four points after each step')}>
           <line x1="8" x2="98" y1={sy(BEST_LOSS)} y2={sy(BEST_LOSS)} class="floor" />
-          <text x="98" y={sy(BEST_LOSS) - 1.2} class="tick end ok">best possible {f(BEST_LOSS)}</text>
+          <text x="98" y={sy(BEST_LOSS) - 1.2} class="tick end ok">{t('best possible {v}', { v: f(BEST_LOSS) })}</text>
           {#if losses.length > 1}
             <polyline points={spark} class="line" />
           {:else}
-            <text x="53" y="22" class="tick mid">take a step to draw the loss</text>
+            <text x="53" y="22" class="tick mid">{t('take a step to draw the loss')}</text>
           {/if}
-          <text x="1" y="5" class="tick">loss</text>
-          <text x="98" y="41" class="tick end">step →</text>
+          <text x="1" y="5" class="tick">{t('loss')}</text>
+          <text x="98" y="41" class="tick end">{t('step →')}</text>
         </svg>
-        <figcaption>Loss on all 4 points after each step ({losses.length - 1} so far). Now: <b>{f(losses.at(-1)!)}</b></figcaption>
+        <figcaption>{t('Loss on all 4 points after each step ({n} so far). Now:', { n: losses.length - 1 })} <b>{f(losses.at(-1)!)}</b></figcaption>
       </figure>
     </div>
   </div>
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => step(1)}>Take one step</button>
-    <button class="lab-btn" onclick={() => step(10)}>10 steps</button>
-    <button class="lab-btn" onclick={() => step(100)}>100 steps</button>
-    <span class="knob" role="group" aria-label="batch size">batch size
+    <button class="lab-btn primary" onclick={() => step(1)}>{t('Take one step')}</button>
+    <button class="lab-btn" onclick={() => step(10)}>{t('10 steps')}</button>
+    <button class="lab-btn" onclick={() => step(100)}>{t('100 steps')}</button>
+    <span class="knob" role="group" aria-label={t('batch size')}>{t('batch size')}
       {#each [1, 2, 4] as v}
-        <button class="lab-btn seg" class:on={bs === v} aria-pressed={bs === v} onclick={() => setBs(v)}>{v === 4 ? '4 (full)' : v}</button>
+        <button class="lab-btn seg" class:on={bs === v} aria-pressed={bs === v} onclick={() => setBs(v)}>{v === 4 ? t('4 (full)') : v}</button>
       {/each}
     </span>
-    <label class="knob">learning rate <input type="range" min="0.005" max="0.04" step="0.005" bind:value={lr} /> <b>{lr.toFixed(3)}</b></label>
+    <label class="knob">{t('learning rate')} <input type="range" min="0.005" max="0.04" step="0.005" bind:value={lr} /> <b>{lr.toFixed(3)}</b></label>
   {/snippet}
 
   {#snippet readout()}
     {#if last}
-      This step used point{last.idx.length > 1 ? 's' : ''}
-      {last.idx.map((i) => `(${LINE_X[i]}, ${LINE_Y[i]})`).join(' ')}.
-      Batch gradient: dL/dw = <b>{f(last.gw)}</b>, dL/db = <b>{f(last.gb)}</b>.
-      The full-data gradient at the same spot was dL/dw = {f(last.fw)}, dL/db = {f(last.fb)}.
+      {t(last.idx.length > 1 ? 'This step used points {pts}.' : 'This step used point {pts}.', { pts: last.idx.map((i) => `(${LINE_X[i]}, ${LINE_Y[i]})`).join(' ') })}
+      {t('Batch gradient:')} dL/dw = <b>{f(last.gw)}</b>, dL/db = <b>{f(last.gb)}</b>.
+      {t('The full-data gradient at the same spot was dL/dw = {a}, dL/db = {b}.', { a: f(last.fw), b: f(last.fb) })}
     {:else}
-      <span class="idle">Start: w = 0.5, b = 0. Pick a batch size and take a few steps. Each epoch reshuffles the 4 points.</span>
+      <span class="idle">{t('Start: w = 0.5, b = 0. Pick a batch size and take a few steps. Each epoch reshuffles the 4 points.')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw acc"></i>your steps and your line</span>
-    <span><i class="sw used"></i>point{bs > 1 ? 's' : ''} the last step used</span>
-    <span><i class="sw okd"></i>the best line, w = 1.6, b = 1</span>
+    <span><i class="sw acc"></i>{t('your steps and your line')}</span>
+    <span><i class="sw used"></i>{t(bs > 1 ? 'points the last step used' : 'point the last step used')}</span>
+    <span><i class="sw okd"></i>{t('the best line, w = 1.6, b = 1')}</span>
   {/snippet}
 </LabFrame>
 

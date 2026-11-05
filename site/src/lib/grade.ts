@@ -29,7 +29,12 @@ export function pickHint(hints: Hint[] | undefined, ctx: MatchCtx, miss = 1): st
   return say
 }
 
+/** Full-width digits and signs from a Chinese keyboard ("－０．５", "（３，４）") → ASCII; the math minus "−" → "-". */
+export const halfWidth = (s: string) =>
+  s.replace(/[\uff01-\uff5e]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[−–]/g, '-').replace(/。/g, '.')
+
 export function gradeNumber(ex: NumberEx, raw: string, miss = 1): GradeResult {
+  raw = halfWidth(raw)
   const v = Number(raw.trim())
   if (raw.trim() === '' || Number.isNaN(v)) return { ok: false, hint: 'Enter a number.' }
   const ok = Math.abs(v - ex.answer) <= (ex.tol ?? 0)
@@ -38,7 +43,7 @@ export function gradeNumber(ex: NumberEx, raw: string, miss = 1): GradeResult {
 
 /** 接受 "3,4" / "(3, 4)" / "3 4" 三种写法 */
 export function parseShape(raw: string): number[] | null {
-  const nums = raw.match(/-?\d+/g)
+  const nums = halfWidth(raw).match(/-?\d+/g)
   return nums && nums.length ? nums.map(Number) : null
 }
 

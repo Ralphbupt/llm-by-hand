@@ -9,30 +9,32 @@
  * (level cleared, reading mode, or the debug "open" switch).
  */
 import { inlineMath } from '@lib/inlineMath'
+import { translator, type Lang } from '@lib/i18n'
 
-interface Props { recap: { can: string[]; keys: string[]; mistakes: string[] } }
-const { recap } = Astro.props
+interface Props { recap: { can: string[]; keys: string[]; mistakes: string[] }; lang?: Lang }
+const { recap, lang = 'en' } = Astro.props
+const t = translator(lang)
 const html = (s: string) => inlineMath(s)
 ---
 <details class="recap">
-  <summary><h2 class="rc-title">Recap</h2><span class="rc-wait">a summary for when you finish the level</span><span class="rc-chev" aria-hidden="true"></span></summary>
-  <p class="rc-later">The key formulas and common mistakes appear here once you clear the level.</p>
+  <summary><h2 class="rc-title">{t('Recap')}</h2><span class="rc-wait">{t('a summary for when you finish the level')}</span><span class="rc-chev" aria-hidden="true"></span></summary>
+  <p class="rc-later">{t('The key formulas and common mistakes appear here once you clear the level.')}</p>
   <div class="rc-grid">
     {recap.can.length > 0 && (
       <div class="rc-part rc-can">
-        <h3>You can now</h3>
+        <h3>{t('You can now')}</h3>
         <ul>{recap.can.map((s) => <li set:html={html(s)} />)}</ul>
       </div>
     )}
     {recap.keys.length > 0 && (
       <div class="rc-part rc-keys">
-        <h3>Keep in mind</h3>
+        <h3>{t('Keep in mind')}</h3>
         <ul>{recap.keys.map((s) => <li set:html={html(s)} />)}</ul>
       </div>
     )}
     {recap.mistakes.length > 0 && (
       <div class="rc-part rc-miss">
-        <h3>Common mistakes</h3>
+        <h3>{t('Common mistakes')}</h3>
         <ul>{recap.mistakes.map((s) => <li set:html={html(s)} />)}</ul>
       </div>
     )}

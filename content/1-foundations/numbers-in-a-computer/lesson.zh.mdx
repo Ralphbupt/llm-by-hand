@@ -1,0 +1,307 @@
+---
+glossarySkip: [bias]
+recap:
+  can:
+    - "从一个浮点数的比特读出它的值：符号位、指数位和尾数。"
+    - "说出一种格式什么时候会上溢成 inf、下溢成 0，或者丢掉一次很小的更新。"
+    - "用减最大值的技巧和 log-sum-exp 算 softmax 和交叉熵，不出现 inf 或 nan。"
+  keys:
+    - "值 = $(-1)^{s} \\times (1 + \\text{mant}/2^{M}) \\times 2^{\\,\\text{exp} - \\text{bias}}$"
+    - "float32：8 + 23 位 · float16：5 + 10 位（最大 65504）· bfloat16：8 + 7 位（表示范围和 float32 一样，但尾数只有 7 位）"
+    - "$\\text{softmax}(z) = \\text{softmax}(z - \\max z)$：先减去最大值，再求 exp"
+    - "$\\ln \\sum_j e^{z_j} = m + \\ln \\sum_j e^{z_j - m}$，交叉熵 = log-sum-exp − $z_{\\text{target}}$"
+    - "inf − inf、0 × inf、inf / inf 和 0 / 0 得到 nan；用 nan 算出来的一切都是 nan"
+  mistakes:
+    - "分两步算 `np.log(softmax(z))`：p 下溢成 0 时，损失就是 inf。"
+    - "把权重本身存成 bfloat16：很小的更新被舍入成 0，训练就停住了。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import FloatLab from '@viz/FloatLab.astro'
+import SoftmaxStableLab from '@viz/SoftmaxStableLab.astro'
+
+第 6、7 节会用到 softmax 和交叉熵，它们在第 10 关才正式讲。这一页会把需要的部分讲清楚。
+
+在纸上，一个数想多大就多大，想多精确就多精确。在计算机里，每个数只分到固定数量的比特：32 位、16 位，有时 8 位。
+这个限制能解释好几个看起来毫无来由的训练 bug：
+
+1. 损失突然变成 `nan`（“not a number”，不是一个数）；
+2. softmax 的代码在 `exp` 之前先减去最大的分数；
+3. 梯度明明不是 0，权重却不再变化。
+
+## 1. 用比特表示一个数
+
+浮点数的存法像科学计数法，只是用 2 的幂代替 10 的幂（[数学页](/math/#scientific)里有复习）。
+比如 $6 = 1.5 \times 2^2$。比特里存了三部分：
+
+- **符号位** $s$：1 位，0 表示 +，1 表示 −；
+- **指数位**：2 的几次幂。存的时候会加上一个固定的偏移量，叫**指数偏移**（exponent bias，不是神经元的偏置），
+  这样负的幂次也不需要符号；
+- **尾数**（mantissa）：“1.” 后面的部分，是一个 $M$ 位的小数。
+
+$$
+\text{value} = (-1)^{s} \times (1 + \text{mant}/2^{M}) \times 2^{\,\text{exp} - \text{bias}}
+$$
+
+深度学习里重要的格式有三种：
+
+| 格式 | 位数 | 指数位数 | 尾数位数 $M$ | 偏移 | 最大的数 |
+|---|---|---|---|---|---|
+| float32 | 32 | 8 | 23 | 127 | 约 $3.4 \times 10^{38}$ |
+| float16 | 16 | 5 | 10 | 15 | 65504 |
+| bfloat16 | 16 | 8 | 7 | 127 | 约 $3.4 \times 10^{38}$ |
+
+在 NumPy 里它们是 `np.float32` 和 `np.float16`；NumPy 默认的 `np.float64` 用 64 位。NumPy 没有 bfloat16。
+PyTorch 三种都有：`torch.float32`、`torch.float16`、`torch.bfloat16`。
+
+在实验台里输入一个数，或者点一下某一位把它翻转。比特下面那一行用上面的公式算出它的值。
+
+<FloatLab />
+
+<Blank id="decode-6" />
+
+<Gate requires="decode-6">
+
+## 2. 表示范围和精度
+
+两种 16 位格式分配比特的方式不同，它们的区别全在这里：
+
+- **指数位**决定**表示范围**：一个数最大能多大，最小能多小。bfloat16 保留了 float32 的 8 个指数位，
+  所以表示范围和 float32 一样。float16 只有 5 个，所以最大只到 65504。
+- **尾数**的位数决定**精度**：2 的一个幂到下一个幂之间有多少个数。
+
+<Blank id="count-bf16" />
+
+<Gate requires="count-bf16">
+
+每两个相邻的 2 的幂之间，用的都是同样的 128 种尾数组合：从 1 到 2，从 2 到 4，从 256 到 512。
+所以相邻两个数的间隔随着数的大小一起变大。精度是**相对的**：bfloat16 不管数在哪里，都只有大约 2 到 3 位有效数字是对的。
+
+<Blank id="gap-256" />
+
+<Gate requires="gap-256">
+
+落在两个相邻数之间的结果会被**舍入到离它更近的那个**。计算机只能存这些数。
+
+<Predict id="pred-bf16-add" />
+
+大多数数都存不精确，哪怕是很简单的数。0.1 不是一个分母为 2 的幂的分数，
+所以每种格式都存它能表示的最近的数：float32 里是 0.100000001490，float16 里是 0.099975585938，
+bfloat16 里是 0.100097656250。
+
+<TryIt>
+
+在实验台里按 **0.1**，然后在三种格式之间切换，比较每种格式离 0.1 有多远。
+再分别在 bfloat16 和 float16 下按 **256.75**：float16 的尾数位更多，所以它保住了 0.75。
+
+</TryIt>
+
+训练时也会发生同样的舍入。权重每一步都会有一点小变化，而在 16 位格式里，
+接近 1 的权重上的一点小变化可能在舍入时完全丢掉。
+
+<Blank id="bf16-update" />
+
+<Deeper title="正好在中间（平局），以及比最小的正规数还小的数">
+
+**平局。** 结果正好落在两个相邻数的正中间时，它会去最后一位尾数是 0 的那个（“就近舍入到偶数”）。
+所以在 bfloat16 里 256 + 1 是 256，不是 258。如果中间值总是往上舍，很长的求和会慢慢变得偏大；
+这个规则往上舍和往下舍的次数一样多。
+
+**次正规数。** 指数位全是 0 时，格式会去掉“1 +”，存的是
+$\text{mant}/2^{M} \times 2^{1 - \text{bias}}$。这些极小的数填补了 0 和最小的正规数之间的空隙。
+在 float16 里，最小的一个是 $2^{-24} \approx 6 \times 10^{-8}$。更小的数会舍入到 0 和
+$2^{-24}$ 中离它更近的那个，所以小于大约 $3 \times 10^{-8}$ 的数都会变成 0。
+指数位全是 1 时，这个组合表示 inf（尾数为 0）或 nan（尾数为其他值）。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="bf16-update">
+
+## 3. 上溢和下溢
+
+结果比格式能表示的最大数还大时，它会**上溢**（overflow），变成 `inf`（无穷大）。
+NumPy 不会报错，只给一个很容易被忽略的警告。
+
+<Predict id="pred-overflow" />
+
+在网络里，这最常发生在 `exp` 上，因为它增长得太快了：$z$ 每加 1，$e^z$ 就乘上大约 2.72
+（[数学页](/math/#exp-ln)里有关于 $e$ 的复习）。
+
+<Blank id="exp-limit" />
+
+<Gate requires="exp-limit">
+
+另一头是**下溢**（underflow）：太接近 0 的结果会变成正好 0。在 float32 里，
+$e^{-1000}$ 是 0。在 float16 里，任何小于大约 $3 \times 10^{-8}$ 的数都会舍入成 0。float16 里很小的梯度
+可能就这样下溢，消失不见。
+
+下溢在下一步才变得危险。第 3 关的损失要算 $-\ln p$。如果 $p$ 下溢成了 0，那么
+$-\ln 0 = $ `inf`。
+
+## 4. nan 是怎么出现的，又是怎么扩散的
+
+`nan` 的意思是“not a number”（不是一个数）。它来自少数几种没有合理答案的运算：
+
+| 运算 | 结果 |
+|---|---|
+| `inf - inf` | `nan` |
+| `0 * inf` | `nan` |
+| `inf / inf`, `0 / 0` | `nan` |
+| `np.log(-1)` | `nan` |
+
+所以上溢得到的 `inf`，或者下溢得到的 0，往往离 `nan` 只差一步。
+
+<Predict id="pred-nan-spread" />
+
+<Stuck q="我的损失前 300 步都是正常的数，然后变成了 nan。怎么找到它从哪里开始？">
+
+找第一个 `inf`，而不是第一个 `nan`：`nan` 通常晚一步出现。在每次 `exp` 和每次 softmax 之前，
+打印分数的最大绝对值，梯度也一样（`np.isnan(x).any()` 和
+`np.isinf(x).any()` 可以检查整个数组）。常见的原因，按顺序是：
+
+1. 学习率太高，权重无限制地变大（第 2 关）；
+2. 对很大的分数求 `exp`，没有先减去最大值（第 6 节）；
+3. 对下溢成 0 的概率求 `np.log`（第 7 节）；
+4. 除以一个可能为 0 的和或标准差。给它加上一个很小的 ε（第 16 关的 LayerNorm 就是这么做的）。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pred-nan-spread">
+
+## 5. 为什么大模型还是用 16 位训练
+
+一个 16 位的数占的内存是 float32 的一半。一个有 70 亿个权重的模型，用 float32 要占 28 GB，
+用 bfloat16 只要 14 GB，显卡要搬的字节也少一半。显卡做 16 位的矩阵乘法还要快好几倍。所以大模型用**混合精度**（mixed precision）：
+每种运算都用对它来说安全的格式。
+
+- 大的矩阵乘法用 bfloat16（或 float16）算。它们占了大部分工作量。
+- 权重的一份**主副本**（master copy）保留在 float32 里。更新加在那里，所以给值为 1 的权重加 0.001
+  不会像第 2 节那样被舍入掉。
+- 很多数的求和、softmax 和损失都用 float32 算。
+
+bfloat16 就是为此设计的。它保留了 float32 的表示范围，所以分数和梯度很少上溢或下溢。它的精度较低，
+所以由 float32 的主副本和 float32 的求和来保住真正要紧的精度。
+
+<Deeper title="float16 需要损失缩放">
+
+float16 的精度比 bfloat16 高，但表示范围小得多。$10^{-8}$ 这么小的梯度很常见，而 float16
+会把它们存成 0。解决办法是**损失缩放**（loss scaling）：在 `backward()` 之前，把损失乘上一个大数，比如 1024。
+这样每个梯度都大了 1024 倍，保持在 float16 的最小数之上（$10^{-8} \times 1024 \approx 10^{-5}$ 能存下）。
+更新之前，再用 float32 把梯度除以 1024。如果有梯度变成了 `inf`，就跳过这一步，换一个小一点的缩放倍数。
+PyTorch 的 `torch.amp` 会替你做完这一切。用 bfloat16 时，大多数训练根本不需要损失缩放。
+
+</Deeper>
+
+## 6. softmax 先减去最大的分数
+
+这一节不需要先学第 10 关：用到的东西这里都有定义。（第 10 关会正式讲 softmax，
+以及为什么要用它。）**softmax** 把一串分数变成加起来等于 1 的概率。对每个分数求 $e$ 的幂，
+再用每个结果除以它们的和：
+
+$$
+p_i = \frac{e^{z_i}}{\sum_j e^{z_j}}
+$$
+
+模型用它在很多个答案里做选择。这里两个分数就够了。取 $z = [1, 2]$：
+$e^1 \approx 2.72$，$e^2 \approx 7.39$，它们的和是 $10.11$，所以 softmax 给出 $[2.72/10.11,\ 7.39/10.11] = [0.27, 0.73]$。
+现在试试很大的分数。
+
+<Predict id="pred-naive" />
+
+<Gate requires="pred-naive">
+
+修复方法只用到一个事实。给每个分数都加上同一个数 $c$，softmax 不变：
+
+$$
+\frac{e^{z_i + c}}{\sum_j e^{z_j + c}} = \frac{e^{z_i} \cdot e^{c}}{\sum_j e^{z_j} \cdot e^{c}} = \frac{e^{z_i}}{\sum_j e^{z_j}}
+$$
+
+因子 $e^c$ 同时出现在分子和分母里，所以消掉了。取 $c = -\max(z)$：减去最大的分数。
+这样最大的分数变成 0，它的 $e^0 = 1$。没有哪个 $e^{z}$ 会上溢，而且和至少是 1，所以
+也不可能是 0。
+
+实验台用两种方法计算，每一步都舍入到你选的格式。
+
+<SoftmaxStableLab hide={{ p: "softmax-stable" }} />
+
+<Blank id="softmax-stable" />
+
+<Gate requires="softmax-stable">
+
+<TryIt>
+
+按 **[−1000, −999]**：现在每个 $e^z$ 都下溢成 0，而 0 / 0 是 `nan`。再切换到 float16，按
+**[10, 12]**：在 float16 里，分数到 11 左右就会上溢。减去最大值能修好所有这些情况。
+
+</TryIt>
+
+在 NumPy 里，`z.max(axis=-1, keepdims=True)` 给出每一行最大的分数，形状是 `(B, 1)`，这样它就能和形状为
+`(B, V)` 的 `z` 对得上（第 1 关的广播）。
+
+<CodeBlank id="code-softmax" />
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="code-softmax">
+
+## 7. log-sum-exp：没有 inf 的损失
+
+第 3 关里，是非题的损失是 $-\ln p$，$p$ 是正确答案的概率。用 softmax 在很多个答案里选时，损失也一样，
+是目标答案 $t$ 的 $-\ln p_t$（$p_t$ 是 softmax 给它的概率）。它叫**交叉熵**（cross-entropy）；
+第 10 关用它训练一个挑选词的模型。这里你只需要这一个公式。
+
+如果分两步算，先算 $p$ 再算 $-\ln p$，那么 $p$ 下溢成 0 时就会出错。不如把 $p_t$ 展开，再用
+$\ln(a/b) = \ln a - \ln b$ 和 $\ln e^{z} = z$（都在[数学页](/math/#exp-ln)上）：
+
+$$
+-\ln p_t = -\ln \frac{e^{z_t}}{\sum_j e^{z_j}} = \ln \sum_j e^{z_j} \;-\; z_t
+$$
+
+第一部分是这些分数的 **log-sum-exp**。它和 softmax 有同样的上溢问题，修复方法也一样。
+从每个分数里减去最大的分数 $m$：
+
+$$
+\ln \sum_j e^{z_j} = m + \ln \sum_j e^{z_j - m}
+$$
+
+<Blank id="lse" />
+
+<Gate requires="lse">
+
+现在把它写出来。模板已经替你取出了每一行的目标分数：`z[np.arange(B), t]` 从第 0 行取下标为 `t[0]` 的分数，
+从第 1 行取下标为 `t[1]` 的分数，依此类推。你来写 `lse`，每行一个 log-sum-exp。
+`m[:, 0]` 把形状 `(B, 1)` 的最大值变成形状 `(B,)`。
+
+<CodeBlank id="code-ce" />
+
+<Deeper title="PyTorch 的 `cross_entropy` 就是这么做的">
+
+`torch.nn.functional.cross_entropy(z, t)` 接收的是原始分数，而不是概率，原因正在于此：
+它在内部先减去最大值再算 log-sum-exp，然后减去目标分数。`torch.logsumexp` 和
+`torch.log_softmax` 存在也是同样的原因。如果你写了 `torch.log(torch.softmax(z, -1))`，就把它换成
+`torch.log_softmax(z, -1)`：数小的时候结果一样，数大的时候不会出现 `inf`。
+
+</Deeper>
+
+</Gate>
+
+</Gate>

@@ -1,0 +1,231 @@
+---
+recap:
+  can:
+    - "从嵌入表里取出对应的行，把一串 token id 变成形状 `(L, d)` 的数组。"
+    - "手算点积，并读懂它的符号：方向相同、成直角、方向相反。"
+    - "数邻居给每个词一行数，再把一句话里的向量按相等的权重平均。"
+  keys:
+    - "嵌入 = 取出 `E` 的第 `id` 行；`onehot @ E` 得到同样的行"
+    - "在形状为 `(V, d)` 的 `E` 里查 n 个 id → `(n, d)`"
+    - "$a \\cdot b = |a|\\,|b|\\cos\\theta$：[2, 1] · [1, 3] = 5"
+    - "`E[ids].mean(axis=0)`：权重相等的混合，形状 `(d,)`"
+    - "用在相同位置的词会得到相似的向量"
+  mistakes:
+    - "以为同一个词在不同句子里会从表里查到不同的向量：查表总是返回同一行。"
+    - "写成 `E @ onehot`，把表放在了前面：独热行 `(L, 4)` 应该放在前面。"
+---
+
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import TokenLab from '@viz/TokenLab.astro'
+import DotLab from '@viz/DotLab.astro'
+import ContextLab from '@viz/ContextLab.astro'
+import Embed3DLab from '@viz/Embed3DLab.astro'
+import Word2vecLab from '@viz/Word2vecLab.astro'
+
+第 12 关把文本变成了 token id。把 `hello` 切成字符，词表是 e、h、l、o（id 0 到 3），
+这个词就变成 `[1, 0, 2, 2, 3]`。
+
+网络不能直接用这些 id。它会把它们当成数量：`l`（2）会是 `h`（1）的“两倍”。
+所以每个 id 都换成一小串数，也就是一个**向量**（vector），从一张表里查出来。这叫**嵌入**（embedding）。
+
+## 1. 嵌入表
+
+这张表**每个 id 一行**。嵌入一个 token，就是取出它的那一行。这里每行有 2 个数；
+真实的模型有几百到几千个。所以一句 L 个 token 的话会变成形状 (L, d) 的数组：每个 token 一行。
+
+<Blank id="lookup-shape" />
+
+<Predict id="same-l" />
+
+<Gate requires="same-l">
+
+<TokenLab />
+
+“取第 2 行”也可以写成矩阵乘法。做一个**独热**（one-hot）行：全是 0，
+只在第 2 个位置上是 1。用它乘这张表，除了第 2 行，每一行都乘了 0。
+在实验台里选一个 token，看看 one-hot 那一列。
+
+<CodeBlank id="embed" />
+
+<Stuck q="为什么不直接把 id 当成数交给网络？h = 1、l = 2 本来就是数。">
+
+因为网络会把它们当成数量。它会“认为” `l`（2）是 `h`（1）的两倍，
+而 `o`（3）在 `l` 再往后一点的地方。这些都不对。id 只是名字，按字母顺序排而已。
+
+每个 token 用一个由好几个数组成、网络可以自由学习的向量，就没有这个问题。两个 token 可以
+因为真实的原因变得接近或远离，而且可以在很多个方向上接近。
+
+</Stuck>
+
+<Deeper title="表里的数是从哪来的">
+
+用第 12 关的 BPE token，这张表有几万行，每行有几百到几千个数。
+道理和这里一样：一个 id 选出一行。
+
+这些行一开始是随机数。它们就是权重，和第 3 关的权重完全一样，训练时用梯度下降
+去移动它们。用法相似的 token 会得到相似的行，因为这有助于模型预测下一个 token。
+没有人手工写进含义。第 3 节会说明为什么会这样。
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="embed">
+
+## 2. 比较两个向量：点积
+
+既然相似的 token 会得到相似的向量，你就需要一个数来表示“有多相似”。最简单的是
+**点积**（dot product）：把两个向量逐个数相乘，再加起来。你在第 1 关就做过这件事：
+它就是矩阵乘法里的一格。
+
+<DotLab />
+
+<Blank id="dot-5" />
+
+<Predict id="dot-sign" />
+
+<TryIt>
+
+cat·car 一开始正好是 0：cat 和 car 成直角。现在不动 dog，让 dog·car 正好等于 0。然后把 dog 沿同一个方向拖得离中心更远。
+它和 cat 的点积变大了，但 cos(夹角) 不变。点积混合了两件事：
+**方向**（夹角）和**长度**。
+
+</TryIt>
+
+<Deeper title="点积、长度和夹角">
+
+对两个向量 $a$ 和 $b$：
+
+$$a \cdot b = |a|\,|b|\cos\theta$$
+
+两个向量指向同一方向时 $\cos\theta$ 是 1，成直角时是 0，方向相反时是 −1。
+把点积除以两个长度，只剩下夹角那部分，叫作**余弦相似度**（cosine similarity）。
+
+下一关的注意力用的是普通的点积。长度在那里有影响：越长的向量，分数越大。
+
+</Deeper>
+
+### 不止两个数
+
+真实的嵌入每个 token 有几百个数，点积的算法一样：逐个数相乘，再加起来。
+有三个数时，你还能看到这些向量。转动图片，选两个词。
+三条轴就是每个向量的第 1、第 2、第 3 个数。它们没有名字：它们的含义由训练决定。
+
+<Embed3DLab />
+
+</Gate>
+
+<Gate requires="dot-sign">
+
+## 3. 向量从哪里来？
+
+这张表一开始是随机数，训练会移动它们。可是，是什么把“cat”和“dog”推到一起的？
+道理很简短：**一个词的含义来自它周围的词**。cat 和 dog 出现在相同的位置（“the … sleeps”、
+“my … is hungry”），所以一个要预测词的邻居的模型，给它们相似的向量效果最好。
+
+只靠数数你就能看到这一点。拿四个很短的句子：“cat eats fish”、“dog eats meat”、“cat drinks milk”、
+“car needs fuel”。对每个词，数一数 eats、drinks、needs 分别有几次紧挨着它（在它前面或后面一个词）。
+
+<Blank id="cat-count" />
+
+<Gate requires="cat-count">
+
+所以按 (eats, drinks, needs)，cat = [1, 1, 0]。同样数下去，dog = [1, 0, 0]，car = [0, 0, 1]。
+这些计数本身就是向量，可以用第 2 节的点积来比较。
+
+<Blank id="cat-dog" />
+
+<Gate requires="cat-dog">
+
+<Predict id="closest" />
+
+<Gate requires="closest">
+
+我们自己写的规则生成了 3,850 个关于动物、食物和交通工具的短句。数出每个词前后两个词以内出现的所有其他词，
+每个词就得到一长行计数。比较这些行（用余弦相似度），再把它们画到二维平面上，这些词的位置是这样的：
+
+<Word2vecLab />
+
+没有人告诉它哪些词是动物。三个组之所以出现，是因为每一组都用在自己那类句子里。
+同一组里的词很接近，但并不相同：每个词也有几句只属于自己的句子（“the dog barks at night”）。
+
+<TryIt>
+
+选“fish”。它最常见的邻居混合了两种用法：“people”（人吃鱼）旁边是“swims”、“drinks”和“water”。
+我们的规则有时把 fish 当作动物来用。它的点落在食物和动物之间，离食物最近。一个向量要同时服务两种用法，
+这正是下一节要讲的问题。
+
+</TryIt>
+
+下面是数数这一步的代码。`C[i, j] += 1` 给表的第 i 行、第 j 列加 1。
+
+<CodeBlank id="count-code" />
+
+<Deeper title="数数和预测">
+
+这一关先数邻居，再压缩这些计数（压缩这一步是矩阵分解；它保留各行差别最大的那些方向）。
+更有名的方法是预测：一个很小的网络拿到一个词，训练它给周围的词高概率，
+它的嵌入表就是结果。两种方法最后得到的向量相似，因为驱动它们的是同一件事：哪些词有相同的邻居。
+
+语言模型（第 11 关，以及第 21 关的 GPT）不用专门要求，也会做同样的事。它的嵌入表只为
+帮助预测下一个 token 而训练，用法相似的词就得到了相似的向量。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="count-code">
+
+## 4. 一个词一个向量还不够
+
+查找表对同一个 token 总是返回同一行，不管它在什么句子里。
+这对 **apple** 这样的词是个问题：它在一句话里是水果，在另一句话里是公司。
+
+这里四个数有可读的含义：水果（fruit）、科技（tech）、甜（sweet）、动作（action）。表里 apple = [1, 1, 0, 0]：
+水果上一个 1，科技上一个 1，因为同一行要同时服务两种含义。
+拿两句话来看：“sweet apple”和“apple releases phone”。
+
+<Predict id="static-apple" />
+
+<Gate requires="static-apple">
+
+<ContextLab hide={{ mix: "mix-fruit" }} />
+
+勾选方框，把每句话里的词按相等的权重混合起来。表里 sweet = [1, 0, 1, 0]，
+releases = [0, 1, 0, 1]，phone = [0, 1, 0, 0]。
+
+<Blank id="mix-fruit" />
+
+现在用代码写出这一步，只改一处：词不一定同等重要。每个词有一个**权重**，
+权重加起来等于 1，混合结果就是各行的加权和。权重相等（各 1/2，或各 1/3）就是
+实验台里的普通平均。用一个 id 列表去索引表，会按这个顺序取出那些行：
+
+```python
+T = np.array([[1, 2], [3, 4], [5, 6]])
+T[[2, 0]]                 # [[5, 6], [1, 2]]   第 2 行和第 0 行，形状 (2, 2)
+0.75 * T[2] + 0.25 * T[0] # [4, 5]   权重 0.75 和 0.25：0.75·[5, 6] + 0.25·[1, 2]
+```
+
+每个词写一项，只适用于词数固定的情况。第 1 关有更短的写法：一个权重向量
+`@` 一个矩阵，得到的正是它各行的加权和，行数多少都行。
+
+<CodeBlank id="mix-code" />
+
+</Gate>
+
+按相等的权重平均太简单了：每个邻居都一样重要，连不相关的词也是。
+下一关正好解决这个问题。每个词会用你刚学的点积，算出从每个邻居那里**取多少**。
+
+</Gate>

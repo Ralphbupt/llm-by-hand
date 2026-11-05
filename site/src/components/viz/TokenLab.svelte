@@ -6,6 +6,26 @@
    */
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'From token to vector: a table lookup': '从 token 到向量：查表',
+    'Pick a token to see its one-hot row times the table. Drag a point (or focus it and use the arrow keys) to change its row.': '选一个 token，看它的独热行乘以嵌入表。拖动一个点（或选中它后用方向键）可以改它那一行。',
+    'Text': '文本',
+    'Type something to see its vectors.': '输入一些文字，看看它们的向量。',
+    'Token ids ({n} tokens). Pick one.': 'token id（共 {n} 个 token）。选一个。',
+    'Embedding table E, shape ({n}, 2)': '嵌入表 E，形状 ({n}, 2)',
+    'char': '字符',
+    'E row': 'E 的行',
+    'Embedding vectors: drag a point, or focus it and use the arrow keys': '嵌入向量：拖动一个点，或选中它后用方向键',
+    'number 1 →': '第 1 个数 →',
+    '↑ number 2': '↑ 第 2 个数',
+    'vector for {c}: [{x}, {y}]': '{c} 的向量：[{x}, {y}]',
+    'row {i}': '第 {i} 行',
+    'No tokens yet.': '还没有 token。',
+  })
   let text = $state('hello')
   let sel = $state(0)
   let edits = $state<Record<string, number[]>>({})
@@ -51,19 +71,19 @@
 </script>
 
 <LabFrame
-  title="From token to vector: a table lookup"
-  hint="Pick a token to see its one-hot row times the table. Drag a point (or focus it and use the arrow keys) to change its row."
+  title={tx('From token to vector: a table lookup')}
+  hint={tx('Pick a token to see its one-hot row times the table. Drag a point (or focus it and use the arrow keys) to change its row.')}
   onreset={reset}
   resetDisabled={!changed}
 >
-  <label class="inp">Text
+  <label class="inp">{tx('Text')}
     <input bind:value={text} maxlength="40" spellcheck="false" autocomplete="off" oninput={() => (sel = 0)} />
   </label>
 
   {#if text.length === 0}
-    <p class="empty">Type something to see its vectors.</p>
+    <p class="empty">{tx('Type something to see its vectors.')}</p>
   {:else}
-    <p class="sec">Token ids ({ids.length} tokens). Pick one.</p>
+    <p class="sec">{tx('Token ids ({n} tokens). Pick one.', { n: ids.length })}</p>
     <div class="chips">
       {#each [...text] as c, i}
         <button type="button" class="chip tok" class:on={i === pick} aria-pressed={i === pick} onclick={() => (sel = i)}><b>{show(c)}</b><small>{ids[i]}</small></button>
@@ -72,9 +92,9 @@
 
     <div class="cols">
       <div class="col">
-        <p class="sec">Embedding table E, shape ({chars.length}, 2)</p>
+        <p class="sec">{tx('Embedding table E, shape ({n}, 2)', { n: chars.length })}</p>
         <table>
-          <thead><tr><th>id</th><th>char</th><th>one-hot</th><th>E row</th></tr></thead>
+          <thead><tr><th>id</th><th>{tx('char')}</th><th>one-hot</th><th>{tx('E row')}</th></tr></thead>
           <tbody>
             {#each chars as c, i}
               <tr class:on={i === pid}>
@@ -86,7 +106,7 @@
         </table>
       </div>
       <div class="col">
-        <svg bind:this={svg} viewBox="0 0 100 100" use:readable role="group" aria-label="Embedding vectors: drag a point, or focus it and use the arrow keys"
+        <svg bind:this={svg} viewBox="0 0 100 100" use:readable role="group" aria-label={tx('Embedding vectors: drag a point, or focus it and use the arrow keys')}
           onpointermove={move} onpointerup={() => (dragging = null)} onpointercancel={() => (dragging = null)}>
           {#each [-2, -1, 0, 1, 2] as t}
             <line x1={sx(t)} y1="0" x2={sx(t)} y2="100" class="grid" class:axis={t === 0} />
@@ -94,11 +114,11 @@
             {#if t !== 0}<text x={sx(t)} y={sy(0) + 5} class="tick" text-anchor="middle">{t}</text>
             <text x={sx(0) - 1.5} y={sy(t) + 1.5} class="tick" text-anchor="end">{t}</text>{/if}
           {/each}
-          <text x="98" y={sy(0) - 2} class="ax-l" text-anchor="end">number 1 →</text>
-          <text x={sx(0) + 2} y="5" class="ax-l">↑ number 2</text>
+          <text x="98" y={sy(0) - 2} class="ax-l" text-anchor="end">{tx('number 1 →')}</text>
+          <text x={sx(0) + 2} y="5" class="ax-l">{tx('↑ number 2')}</text>
           {#if E[pid]}<line x1={sx(0)} y1={sy(0)} x2={sx(E[pid][0])} y2={sy(E[pid][1])} class="vec" />{/if}
           {#each chars as c, i}
-            <g class="pt-g" role="button" tabindex="0" aria-label={`vector for ${show(c)}: [${f(E[i][0])}, ${f(E[i][1])}]`}
+            <g class="pt-g" role="button" tabindex="0" aria-label={tx('vector for {c}: [{x}, {y}]', { c: show(c), x: f(E[i][0]), y: f(E[i][1]) })}
               onpointerdown={(e) => { dragging = c; const at = [...text].indexOf(c); if (at >= 0) sel = at; svg.setPointerCapture(e.pointerId) }}
               onkeydown={(e) => key(e, c, i)}>
               <circle cx={sx(E[i][0])} cy={sy(E[i][1])} r="7" class="hit" />
@@ -113,9 +133,9 @@
 
   {#snippet readout()}
     {#if text.length}
-      “{show(text[pick])}” → id {pid} → one-hot [{chars.map((_, i) => (i === pid ? 1 : 0)).join(', ')}] @ E = row {pid} = <b>[{f(E[pid][0])}, {f(E[pid][1])}]</b>
+      “{show(text[pick])}” → id {pid} → one-hot [{chars.map((_, i) => (i === pid ? 1 : 0)).join(', ')}] @ E = {tx('row {i}', { i: pid })} = <b>[{f(E[pid][0])}, {f(E[pid][1])}]</b>
     {:else}
-      <span class="idle">No tokens yet.</span>
+      <span class="idle">{tx('No tokens yet.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

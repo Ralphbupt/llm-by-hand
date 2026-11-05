@@ -71,6 +71,12 @@ function headingText(raw: string): string {
   return raw.replace(/`([^`]*)`/g, '$1').replace(/\$([^$]*)\$/g, (_, m: string) => texToText(m)).replace(/\*/g, '').trim()
 }
 
+/** The ids Astro gives a lesson's headings (## to ######), in page order. A translation reuses them (astro.config.mjs). */
+export function headingIds(body: string): { depth: number; id: string }[] {
+  const slugger = new GithubSlugger()
+  return [...body.replace(/```[\s\S]*?```/g, '').matchAll(/^(#{2,6})\s+(.*)$/gm)].map((m) => ({ depth: m[1].length, id: slugger.slug(headingText(m[2])) }))
+}
+
 /**
  * Split a lesson body into sections at its `##` headings. Anchors use the same slugger as Astro
  * (every heading level counts toward de-duplication, in page order).

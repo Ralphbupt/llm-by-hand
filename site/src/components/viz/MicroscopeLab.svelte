@@ -9,6 +9,9 @@
   import { fade } from 'svelte/transition'
   import LabFrame from './LabFrame.svelte'
   import { reducedMotion } from '@lib/settings'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  import { MICROSCOPE_ZH } from './MicroscopeLab.zh'
 
   type Tensor = {
     name: string
@@ -22,7 +25,45 @@
   type Step = { title: string; text: string; tensors: Tensor[]; top?: [string, number][]; targets?: string[]; loss?: number }
   type Data = { input: string; warning?: string; steps: Step[] }
 
-  let { data: slug }: { data: string } = $props()
+  let { data: slug, lang = 'en' }: { data: string; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'The whole model under a microscope: “{s}”': '显微镜下的整个模型：“{s}”',
+    'The whole model under a microscope': '显微镜下的整个模型',
+    'Step through one input, from token ids to the next token. Point at or tap any number to read where it sits.': '一步一步跟着一个输入走，从 token id 到下一个 token。把鼠标指向或点一下任何一个数，就能看到它在哪个位置。',
+    'The recorded run could not be loaded. Reload the page to try again.': '录下的运行过程没能加载。刷新页面再试一次。',
+    'Loading the recorded run…': '正在加载录下的运行过程……',
+    'Steps through the model': '经过模型的各个步骤',
+    'Step {n}: {s}': '第 {n} 步：{s}',
+    'Step {k} of {n}': '第 {k} 步，共 {n} 步',
+    shape: '形状',
+    'In the full model:': '在完整模型里：',
+    'Same size, different meaning:': '大小相同，意思不同：',
+    '{a} are both {n} here. Distinguish them by position, never by size.': '{a} 在这里都是 {n}。要靠位置区分它们，不要靠大小。',
+    ' and ': ' 和 ',
+    'The table shows {s}.': '表里显示的是 {s}。',
+    '{n} = 0 (of {v})': '{n} = 0（共 {v}）',
+    '{n} {a} per row, too many to list. The three highest in each row:': '每行 {n} 个 {a}，太多了列不下。每行最高的三个：',
+    'rows ↓ {a}': '行 ↓ {a}',
+    'columns → {a}': '列 → {a}',
+    '← swipe the table to see all {n} columns →': '← 左右滑动表格，看全部 {n} 列 →',
+    'Last position, as probabilities (softmax). The five highest:': '最后一个位置，变成概率（softmax）。最高的五个：',
+    'Next token:': '下一个 token：',
+    'While training, every row is compared with tgt_out = {t}: loss {l}.': '训练时，每一行都和 tgt_out = {t} 比较：损失 {l}。',
+    Back: '上一步',
+    'Next step': '下一步',
+    'Start again from step 1': '从第 1 步重新开始',
+    ' (blocked by the mask)': '（被掩码挡住）',
+    'Point at or tap a number to see its full index. ← → also move between steps.': '把鼠标指向或点一下一个数，看它的完整下标。← → 键也可以在步骤之间切换。',
+    positive: '正数',
+    negative: '负数',
+    '−∞ blocked by the mask': '−∞ 被掩码挡住',
+    batch: '批',
+    positions: '位置',
+    widths: '宽度',
+    heads: '头',
+    vocabulary: '词表',
+  })
   let data = $state<Data | null>(null)
   let failed = $state(false)
   let k = $state(0)
@@ -38,8 +79,19 @@
   })
 
   onMount(async () => {
-    try { data = await (await fetch(`/data/${slug}/microscope.json`)).json() } catch { failed = true }
+    try { data = translateData(await (await fetch(`/data/${slug}/microscope.json`)).json()) } catch { failed = true }
   })
+
+  // the step texts come from trace.py in English; Chinese pages swap them for MicroscopeLab.zh.ts
+  function translateData(d: Data): Data {
+    if (lang !== 'zh') return d
+    const z = (x: string) => MICROSCOPE_ZH[x] ?? x
+    return {
+      ...d,
+      warning: d.warning && z(d.warning),
+      steps: d.steps.map((st) => ({ ...st, title: z(st.title), text: z(st.text), tensors: st.tensors.map((tn) => ({ ...tn, name: z(tn.name), note: tn.note && z(tn.note) })) })),
+    }
+  }
 
   const step = $derived(data ? data.steps[k] : null)
   function go(i: number) {
@@ -127,19 +179,19 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={root} onkeydown={onKey}>
 <LabFrame
-  title={data ? `The whole model under a microscope: “${data.input}”` : 'The whole model under a microscope'}
-  hint="Step through one input, from token ids to the next token. Point at or tap any number to read where it sits."
+  title={data ? tx('The whole model under a microscope: “{s}”', { s: data.input }) : tx('The whole model under a microscope')}
+  hint={tx('Step through one input, from token ids to the next token. Point at or tap any number to read where it sits.')}
 >
   {#if failed}
-    <p class="dim">The recorded run could not be loaded. Reload the page to try again.</p>
+    <p class="dim">{tx('The recorded run could not be loaded. Reload the page to try again.')}</p>
   {:else if !data || !step}
     <div class="skeleton" aria-hidden="true"></div>
-    <p class="dim">Loading the recorded run…</p>
+    <p class="dim">{tx('Loading the recorded run…')}</p>
   {:else}
-    <ol class="rail" bind:this={rail} aria-label="Steps through the model">
+    <ol class="rail" bind:this={rail} aria-label={tx('Steps through the model')}>
       {#each data.steps as s, i}
         <li class:on={i === k} class:past={i < k}>
-          <button type="button" aria-current={i === k ? 'step' : undefined} aria-label={`Step ${i + 1}: ${s.title}`} title={s.title} onclick={() => go(i)}>{i + 1}</button>
+          <button type="button" aria-current={i === k ? 'step' : undefined} aria-label={tx('Step {n}: {s}', { n: i + 1, s: s.title })} title={s.title} onclick={() => go(i)}>{i + 1}</button>
         </li>
       {/each}
     </ol>
@@ -147,7 +199,7 @@
     {#key k}
     <div class="stepbody" in:fade={stepIn()}>
     <div class="stephead">
-      <span class="sn">Step {k + 1} of {data.steps.length}</span>
+      <span class="sn">{tx('Step {k} of {n}', { k: k + 1, n: data.steps.length })}</span>
       <h5>{step.title}</h5>
     </div>
     <p class="text">{step.text}</p>
@@ -159,7 +211,7 @@
       <div class="tensor">
         <div class="tname">
           <span class="nm">{t.name}</span>
-          <span class="axes" aria-label="shape">
+          <span class="axes" aria-label={tx('shape')}>
             (
             {#each t.axes as [n, v], ai}
               {#if ai}<span class="comma">,</span>{/if}
@@ -168,18 +220,18 @@
             )
           </span>
         </div>
-        <div class="big">In the full model: <span class="mono">{t.big}</span></div>
+        <div class="big">{tx('In the full model:')} <span class="mono">{t.big}</span></div>
         {#if clash.size}
-          <p class="clashnote"><b>Same size, different meaning:</b> {[...clash].join(' and ')} are both {t.axes.find(([n]) => clash.has(n))?.[1]} here. Distinguish them by position, never by size.</p>
+          <p class="clashnote"><b>{tx('Same size, different meaning:')}</b> {tx('{a} are both {n} here. Distinguish them by position, never by size.', { a: [...clash].join(tx(' and ')), n: t.axes.find(([n]) => clash.has(n))?.[1] ?? '' })}</p>
         {/if}
         {#if t.note}<p class="note">{t.note}</p>{/if}
         {#if sliced(t).length}
-          <p class="note">The table shows {sliced(t).map(([n, v]) => `${n} = 0 (of ${v})`).join(', ')}.</p>
+          <p class="note">{tx('The table shows {s}.', { s: sliced(t).map(([n, v]) => tx('{n} = 0 (of {v})', { n, v })).join(', ') })}</p>
         {/if}
 
         {#if wide(t)}
           <div class="tops">
-            <p class="note toplbl">{t.values[0].length} {ca[0]} per row, too many to list. The three highest in each row:</p>
+            <p class="note toplbl">{tx('{n} {a} per row, too many to list. The three highest in each row:', { n: t.values[0].length, a: ca[0] })}</p>
             {#each t.values as row, r}
               <div class="toprow">
                 <span class="rl" style:--ax={ra ? axisColor(ra[0]) : 'var(--dim)'}>{t.rows?.[r] ?? r}</span>
@@ -197,8 +249,8 @@
           {@const showRows = !!ra && t.values.length > 1}
           <div class="tablewrap">
             <div class="axislabels">
-              {#if ra && t.values.length > 1}<span class="axl" style:--ax={axisColor(ra[0])}>rows ↓ {ra[0]}</span>{/if}
-              <span class="axl" style:--ax={axisColor(ca[0])}>columns → {ca[0]}</span>
+              {#if ra && t.values.length > 1}<span class="axl" style:--ax={axisColor(ra[0])}>{tx('rows ↓ {a}', { a: ra[0] })}</span>{/if}
+              <span class="axl" style:--ax={axisColor(ca[0])}>{tx('columns → {a}', { a: ca[0] })}</span>
             </div>
             <div class="scroll" use:cue>
               <table class:ids>
@@ -228,7 +280,7 @@
                 </tbody>
               </table>
             </div>
-            <p class="cue" aria-hidden="true">← swipe the table to see all {t.values[0].length} columns →</p>
+            <p class="cue" aria-hidden="true">{tx('← swipe the table to see all {n} columns →', { n: t.values[0].length })}</p>
           </div>
         {/if}
       </div>
@@ -236,12 +288,12 @@
 
     {#if step.top}
       <div class="next">
-        <div class="lbl">Last position, as probabilities (softmax). The five highest:</div>
+        <div class="lbl">{tx('Last position, as probabilities (softmax). The five highest:')}</div>
         {#each step.top as [w, p], i}
           <div class="bar" class:win={i === 0}><span class="w">{w}</span><span class="track"><i style="width: {Math.max(1, p * 100)}%"></i></span><span class="p">{p.toFixed(3)}</span></div>
         {/each}
-        <p class="note">Next token: <b class="nt">{step.top[0][0]}</b>.
-          {#if step.targets} While training, every row is compared with tgt_out = {step.targets.join(' ')}: loss {step.loss}.{/if}</p>
+        <p class="note">{tx('Next token:')} <b class="nt">{step.top[0][0]}</b>.
+          {#if step.targets} {tx('While training, every row is compared with tgt_out = {t}: loss {l}.', { t: step.targets.join(' '), l: step.loss ?? '' })}{/if}</p>
       </div>
     {/if}
 
@@ -251,30 +303,30 @@
   {/if}
 
   {#snippet controls()}
-    <button type="button" class="lab-btn" onclick={() => go(k - 1)} disabled={!data || k === 0}>‹ Back</button>
+    <button type="button" class="lab-btn" onclick={() => go(k - 1)} disabled={!data || k === 0}>‹ {tx('Back')}</button>
     {@const end = !data || k === data.steps.length - 1}
-    <button type="button" class="lab-btn" class:primary={!end} onclick={() => go(k + 1)} disabled={end}>Next step ›</button>
-    {#if data && k === data.steps.length - 1}<button type="button" class="lab-btn ghost" onclick={() => go(0)}>Start again from step 1</button>{/if}
+    <button type="button" class="lab-btn" class:primary={!end} onclick={() => go(k + 1)} disabled={end}>{tx('Next step')} ›</button>
+    {#if data && k === data.steps.length - 1}<button type="button" class="lab-btn ghost" onclick={() => go(0)}>{tx('Start again from step 1')}</button>{/if}
   {/snippet}
 
   {#snippet readout()}
     {#if picked && pick}
       {@const v = picked.values[pick.r][pick.c]}
-      {where(picked, pick.r, pick.c)} = <b>{fmtIn(picked, v)}</b>{#if v === null} (blocked by the mask){/if}
+      {where(picked, pick.r, pick.c)} = <b>{fmtIn(picked, v)}</b>{#if v === null}{tx(' (blocked by the mask)')}{/if}
     {:else}
-      <span class="idle">Point at or tap a number to see its full index. ← → also move between steps.</span>
+      <span class="idle">{tx('Point at or tap a number to see its full index. ← → also move between steps.')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--pos) 60%, var(--bg))"></i>positive</span>
-    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--neg) 60%, var(--bg))"></i>negative</span>
-    <span class="lg"><i class="sw hatch"></i>−∞ blocked by the mask</span>
-    <span class="lg"><i class="dot" style="background: var(--cat-5)"></i>batch</span>
-    <span class="lg"><i class="dot" style="background: var(--cat-1)"></i>positions</span>
-    <span class="lg"><i class="dot" style="background: var(--cat-4)"></i>widths</span>
-    <span class="lg"><i class="dot" style="background: var(--cat-3)"></i>heads</span>
-    <span class="lg"><i class="dot" style="background: var(--cat-2)"></i>vocabulary</span>
+    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--pos) 60%, var(--bg))"></i>{tx('positive')}</span>
+    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--neg) 60%, var(--bg))"></i>{tx('negative')}</span>
+    <span class="lg"><i class="sw hatch"></i>{tx('−∞ blocked by the mask')}</span>
+    <span class="lg"><i class="dot" style="background: var(--cat-5)"></i>{tx('batch')}</span>
+    <span class="lg"><i class="dot" style="background: var(--cat-1)"></i>{tx('positions')}</span>
+    <span class="lg"><i class="dot" style="background: var(--cat-4)"></i>{tx('widths')}</span>
+    <span class="lg"><i class="dot" style="background: var(--cat-3)"></i>{tx('heads')}</span>
+    <span class="lg"><i class="dot" style="background: var(--cat-2)"></i>{tx('vocabulary')}</span>
   {/snippet}
 </LabFrame>
 </div>

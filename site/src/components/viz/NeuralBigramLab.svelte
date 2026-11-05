@@ -8,6 +8,36 @@
   import { bigramCounts, neuralBigramStep, rowProbs, softmaxRow, streamPerplexity } from '@lib/lm'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Learn the same table with gradient descent': '用梯度下降学出同一张表',
+    'Train the 10×10 weight table W and watch its perplexity on the held-out sentences fall toward the counting model’s.': '训练 10×10 的权重表 W，看它在留出句子上的困惑度怎样降向计数模型的困惑度。',
+    'Could not load the stories. Reload the page to try again.': '故事没能加载。刷新页面再试一次。',
+    'Loading the stories…': '正在加载故事……',
+    'Perplexity on the held-out sentences over training steps': '训练过程中留出句子上的困惑度',
+    'counting model {v}': '计数模型 {v}',
+    '10 = guessing uniformly': '10 = 均匀乱猜',
+    '↑ perplexity (log scale)': '↑ 困惑度（对数刻度）',
+    'step → ({n} so far)': '步数 →（目前 {n}）',
+    'Compare one row. After': '比较一行。在',
+    'previous word': '前一个词',
+    'the next word is…': '后面，下一个词是……',
+    'neural: softmax(W[row])': '神经网络：softmax(W[row])',
+    counting: '计数',
+    'Train 100 steps': '训练 100 步',
+    'Train 10 steps': '训练 10 步',
+    'learning rate': '学习率',
+    step: '步数',
+    'train loss': '训练损失',
+    perplexity: '困惑度',
+    '(counting model {v})': '（计数模型 {v}）',
+    'the neural table (yours, being trained)': '神经网络的表（你的，正在训练）',
+    'the counting model (the target)': '计数模型（目标）',
+  })
 
   const LR0 = 5
   let vocab = $state<string[]>([])
@@ -67,35 +97,35 @@
 </script>
 
 <LabFrame
-  title="Learn the same table with gradient descent"
-  hint="Train the 10×10 weight table W and watch its perplexity on the held-out sentences fall toward the counting model’s."
+  title={tx('Learn the same table with gradient descent')}
+  hint={tx('Train the 10×10 weight table W and watch its perplexity on the held-out sentences fall toward the counting model’s.')}
   onreset={reset}
   resetDisabled={step === 0 && lr === LR0}
 >
   {#if failed}
-    <p class="state">Could not load the stories. Reload the page to try again.</p>
+    <p class="state">{tx('Could not load the stories. Reload the page to try again.')}</p>
   {:else if !vocab.length}
-    <p class="state">Loading the stories…</p>
+    <p class="state">{tx('Loading the stories…')}</p>
   {:else}
-    <svg viewBox="0 0 {Wd} {H}" class="chart" use:readable role="img" aria-label="Perplexity on the held-out sentences over training steps">
+    <svg viewBox="0 0 {Wd} {H}" class="chart" use:readable role="img" aria-label={tx('Perplexity on the held-out sentences over training steps')}>
       {#each [10, 5, 3, 2] as t}
         <line x1={L0} x2={Wd - 6} y1={y(t)} y2={y(t)} class="grid" />
         <text x={L0 - 4} y={y(t) + 3} class="tx" text-anchor="end">{t}</text>
       {/each}
       <line x1={L0} x2={Wd - 6} y1={y(pplCount)} y2={y(pplCount)} class="ref" />
-      <text x={Wd - 8} y={y(pplCount) + 11} class="tx okt" text-anchor="end">counting model {pplCount.toFixed(3)}</text>
-      <text x={L0 + 3} y={y(10) + 11} class="tx">10 = guessing uniformly</text>
+      <text x={Wd - 8} y={y(pplCount) + 11} class="tx okt" text-anchor="end">{tx('counting model {v}', { v: pplCount.toFixed(3) })}</text>
+      <text x={L0 + 3} y={y(10) + 11} class="tx">{tx('10 = guessing uniformly')}</text>
       <path d={path} class="line" />
       {#if curve.length}<circle cx={xs(curve.length - 1)} cy={y(curve[curve.length - 1])} r="3.5" class="head" />{/if}
-      <text x={L0} y={H - 4} class="tx">↑ perplexity (log scale)</text>
-      <text x={Wd - 6} y={H - 4} class="tx" text-anchor="end">step → ({step} so far)</text>
+      <text x={L0} y={H - 4} class="tx">{tx('↑ perplexity (log scale)')}</text>
+      <text x={Wd - 6} y={H - 4} class="tx" text-anchor="end">{tx('step → ({n} so far)', { n: step })}</text>
     </svg>
 
-    <p class="sec">Compare one row. After
-      <label class="sel"><span class="sr-only">previous word</span><select bind:value={row}>{#each vocab as w, i}<option value={i}>{w}</option>{/each}</select></label>
-      the next word is…</p>
+    <p class="sec">{tx('Compare one row. After')}
+      <label class="sel"><span class="sr-only">{tx('previous word')}</span><select bind:value={row}>{#each vocab as w, i}<option value={i}>{w}</option>{/each}</select></label>
+      {tx('the next word is…')}</p>
     <div class="bars">
-      <div class="b bh"><span></span><span>neural: softmax(W[row])</span><span>counting</span></div>
+      <div class="b bh"><span></span><span>{tx('neural: softmax(W[row])')}</span><span>{tx('counting')}</span></div>
       {#each vocab as w, j}
         <div class="b">
           <span class="l2">{w}</span>
@@ -111,18 +141,18 @@
   {/if}
 
   {#snippet controls()}
-    <button type="button" class="lab-btn primary" onclick={() => train_(100)} disabled={!vocab.length}>Train 100 steps</button>
-    <button type="button" class="lab-btn" onclick={() => train_(10)} disabled={!vocab.length}>Train 10 steps</button>
-    <label class="lr">learning rate <input type="range" min="0.5" max="20" step="0.5" bind:value={lr} /> <b>{lr}</b></label>
+    <button type="button" class="lab-btn primary" onclick={() => train_(100)} disabled={!vocab.length}>{tx('Train 100 steps')}</button>
+    <button type="button" class="lab-btn" onclick={() => train_(10)} disabled={!vocab.length}>{tx('Train 10 steps')}</button>
+    <label class="lr">{tx('learning rate')} <input type="range" min="0.5" max="20" step="0.5" bind:value={lr} /> <b>{lr}</b></label>
   {/snippet}
 
   {#snippet readout()}
-    step <b>{step}</b> · train loss <b>{loss === null ? '–' : loss.toFixed(4)}</b> · perplexity <b class="acc">{pplNow.toFixed(3)}</b> (counting model {pplCount.toFixed(3)})
+    {tx('step')} <b>{step}</b> · {tx('train loss')} <b>{loss === null ? '–' : loss.toFixed(4)}</b> · {tx('perplexity')} <b class="acc">{pplNow.toFixed(3)}</b> {tx('(counting model {v})', { v: pplCount.toFixed(3) })}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw acc-sw"></i> the neural table (yours, being trained)</span>
-    <span><i class="sw ok-sw"></i> the counting model (the target)</span>
+    <span><i class="sw acc-sw"></i> {tx('the neural table (yours, being trained)')}</span>
+    <span><i class="sw ok-sw"></i> {tx('the counting model (the target)')}</span>
   {/snippet}
 </LabFrame>
 

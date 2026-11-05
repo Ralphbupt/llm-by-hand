@@ -10,6 +10,7 @@ import { toJsonScript } from '@lib/score'
 import Consent from './Consent.astro'
 import bricolage from '@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2?url'
 import type { PageInfo } from '@lib/analytics'
+import { HTML_LANG, langOf, type Lang } from '@lib/i18n'
 
 interface Props {
   /** the full <title> */
@@ -29,9 +30,15 @@ interface Props {
   preloadDisplayFont?: boolean
   /** facts for analytics events (slug, level, …) */
   page?: PageInfo
+  /** the same page in each language that has it (paths): hreflang links; English is also x-default */
+  alternates?: Partial<Record<Lang, string>>
+  /** a page that only repeats another one (a level not translated yet) points search engines at that one */
+  canonicalPath?: string
 }
-const { title, description, image = '/og/site.png', imageAlt = `${SITE_NAME}: build your own GPT, by hand`, type = 'website', jsonLd, markdown, noindex = false, preloadDisplayFont = false, page = {} } = Astro.props
-const canonical = abs(Astro.url.pathname)
+const { title, description, image = '/og/site.png', imageAlt = `${SITE_NAME}: build your own GPT, by hand`, type = 'website', jsonLd, markdown, noindex = false, preloadDisplayFont = false, page = {}, alternates = {}, canonicalPath } = Astro.props
+const canonical = abs(canonicalPath ?? Astro.url.pathname)
+const lang = langOf(Astro.url.pathname)
+const OG_LOCALE: Record<Lang, string> = { en: 'en_US', zh: 'zh_CN' }
 const img = abs(image)
 const ld = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []
 ---
@@ -46,6 +53,8 @@ const ld = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []
 <link rel="icon" href="/favicon.ico" sizes="32x32" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 {preloadDisplayFont && <link rel="preload" href={bricolage} as="font" type="font/woff2" crossorigin />}
+{Object.entries(alternates).map(([l, p]) => <link rel="alternate" hreflang={HTML_LANG[l as Lang]} href={abs(p!)} />)}
+{alternates.en && <link rel="alternate" hreflang="x-default" href={abs(alternates.en)} />}
 {markdown && <link rel="alternate" type="text/markdown" href={markdown} title="This level as Markdown" />}
 
 <meta property="og:site_name" content={SITE_NAME} />
@@ -57,7 +66,8 @@ const ld = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content={imageAlt} />
-<meta property="og:locale" content="en_US" />
+<meta property="og:locale" content={OG_LOCALE[lang]} />
+{Object.keys(alternates).filter((l) => l !== lang).map((l) => <meta property="og:locale:alternate" content={OG_LOCALE[l as Lang]} />)}
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />

@@ -10,8 +10,43 @@
   import { reducedMotion } from '@lib/settings'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { dropout: withDropout = false }: { dropout?: boolean } = $props()
+  let { dropout: withDropout = false, lang = 'en' }: { dropout?: boolean; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'The same run with dropout': '同样的训练，加上 dropout',
+    'Train too long and the held-out loss rises again': '训练太久，留出集损失又会上升',
+    'Train once without dropout, then check the dropout box and train again.': '先不加 dropout 训练一次，然后勾选 dropout 再训练一次。',
+    'Press Train and watch both losses. The ring marks where early stopping would stop.': '按“训练”，看两条损失曲线。圆圈标出早停会停在哪里。',
+    'Train and held-out loss over training steps, log scale': '训练损失和留出集损失随训练步数的变化，对数刻度',
+    'step': '步',
+    'loss': '损失',
+    'press Train to play the run': '按“训练”播放这次训练',
+    'Loss by training step, log scale.': '每个训练步的损失，对数刻度。',
+    'The data and the network’s curve at the current step': '数据，以及网络在当前这一步的曲线',
+    'The data and the network’s curve at step {s}.': '数据，以及网络在第 {s} 步的曲线。',
+    'Pause': '暂停',
+    'Play again': '再播一次',
+    'Continue': '继续',
+    'Train {n} steps': '训练 {n} 步',
+    'dropout p = 0.3 on the hidden units': '在隐藏单元上使用 dropout，p = 0.3',
+    'Step {s}: train': '第 {s} 步：训练',
+    'held-out': '留出集',
+    'Lowest held-out so far:': '目前最低的留出集损失：',
+    'at step {s}.': '（第 {s} 步）。',
+    'Early stopping would keep the weights from step {s}.': '早停会保留第 {s} 步的权重。',
+    'A network with 32 hidden units has {n} parameters for 10 points. Press Train.': '一个有 32 个隐藏单元的网络，有 {n} 个参数，却只有 10 个点。按“训练”。',
+    'train loss': '训练损失',
+    'held-out loss': '留出集损失',
+    'lowest held-out so far': '目前最低的留出集损失',
+    '10 training points': '10 个训练点',
+    'held-out points': '留出点',
+    'the network now': '网络现在的曲线',
+    'at its best step': '在它最好的那一步',
+    'true curve': '真实曲线',
+  })
 
   const H = 32, STEPS = 3000, EVERY = 20
   let drop = $state(false)
@@ -62,21 +97,21 @@
 </script>
 
 <LabFrame
-  title={withDropout ? 'The same run with dropout' : 'Train too long and the held-out loss rises again'}
-  hint={withDropout ? 'Train once without dropout, then check the dropout box and train again.' : 'Press Train and watch both losses. The ring marks where early stopping would stop.'}
+  title={withDropout ? t('The same run with dropout') : t('Train too long and the held-out loss rises again')}
+  hint={withDropout ? t('Train once without dropout, then check the dropout box and train again.') : t('Press Train and watch both losses. The ring marks where early stopping would stop.')}
   onreset={reset}
   resetDisabled={shown === 0 && !drop}
 >
   <div class="panes">
     <figure>
-      <svg viewBox="-4 -2 104 48" use:readable aria-label="Train and held-out loss over training steps, log scale">
+      <svg viewBox="-4 -2 104 48" use:readable aria-label={t('Train and held-out loss over training steps, log scale')}>
         <rect x="10" y="3" width="86" height="35" class="plot" />
         {#each [1, 0.1, 0.01, 0.001] as g}
           <line x1="10" x2="96" y1={ly(g)} y2={ly(g)} class="grid" /><text x="8.8" y={ly(g) + 1} class="tick end">{g}</text>
         {/each}
         {#each [0, 1000, 2000, 3000] as st}<text x={lx(st)} y="42" class="tick mid">{st}</text>{/each}
-        <text x="96" y="45.6" class="tick end name">step</text>
-        <text x="1" y="1.6" class="tick name">loss</text>
+        <text x="96" y="45.6" class="tick end name">{t('step')}</text>
+        <text x="1" y="1.6" class="tick name">{t('loss')}</text>
         <polyline points={line('train')} class="tr" />
         <polyline points={line('held')} class="ho" />
         {#if shown > 1}
@@ -84,13 +119,13 @@
           <circle cx={lx(bestSoFar.step)} cy={ly(bestSoFar.held)} r="1.4" class="bestpt" />
           <circle cx={lx(cur.step)} cy={ly(cur.held)} r="0.9" class="head" />
         {:else}
-          <text x="53" y="22" class="tick mid">press Train to play the run</text>
+          <text x="53" y="22" class="tick mid">{t('press Train to play the run')}</text>
         {/if}
       </svg>
-      <figcaption>Loss by training step, log scale.</figcaption>
+      <figcaption>{t('Loss by training step, log scale.')}</figcaption>
     </figure>
     <figure>
-      <svg viewBox="0 0 100 60" class="data" use:readable aria-label="The data and the network’s curve at the current step">
+      <svg viewBox="0 0 100 60" class="data" use:readable aria-label={t('The data and the network’s curve at the current step')}>
         <polyline points={SNAP_X.map((x) => `${sx(x)},${sy(truth(x))}`).join(' ')} class="truth" />
         {#if shown > 1 && bestIdx !== vis.length - 1}
           <polyline points={snapLine(bestIdx)} class="ghost" />
@@ -99,36 +134,36 @@
         {#each run.data.heldX as x, i}<circle cx={sx(x)} cy={sy(run.data.heldY[i])} r="0.8" class="held" />{/each}
         {#each run.data.trainX as x, i}<circle cx={sx(x)} cy={sy(run.data.trainY[i])} r="1.3" class="train" />{/each}
       </svg>
-      <figcaption>The data and the network’s curve at step {cur.step}.</figcaption>
+      <figcaption>{t('The data and the network’s curve at step {s}.', { s: cur.step })}</figcaption>
     </figure>
   </div>
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={play}>{playing ? 'Pause' : done ? 'Play again' : shown > 0 ? 'Continue' : `Train ${STEPS} steps`}</button>
+    <button class="lab-btn primary" onclick={play}>{playing ? t('Pause') : done ? t('Play again') : shown > 0 ? t('Continue') : t('Train {n} steps', { n: STEPS })}</button>
     {#if withDropout}
-      <label class="chk"><input type="checkbox" bind:checked={drop} onchange={() => { stop(); shown = 0 }} /> dropout p = 0.3 on the hidden units</label>
+      <label class="chk"><input type="checkbox" bind:checked={drop} onchange={() => { stop(); shown = 0 }} /> {t('dropout p = 0.3 on the hidden units')}</label>
     {/if}
   {/snippet}
 
   {#snippet readout()}
     {#if shown > 0}
-      Step {cur.step}: train <b>{f4(cur.train)}</b>, held-out <b>{f4(cur.held)}</b>.
-      Lowest held-out so far: <b>{f4(bestSoFar.held)}</b> at step {bestSoFar.step}.
-      {#if done}Early stopping would keep the weights from step {bestSoFar.step}.{/if}
+      {t('Step {s}: train', { s: cur.step })} <b>{f4(cur.train)}</b>, {t('held-out')} <b>{f4(cur.held)}</b>.
+      {t('Lowest held-out so far:')} <b>{f4(bestSoFar.held)}</b> {t('at step {s}.', { s: bestSoFar.step })}
+      {#if done}{t('Early stopping would keep the weights from step {s}.', { s: bestSoFar.step })}{/if}
     {:else}
-      <span class="idle">A network with 32 hidden units has {3 * H + 1} parameters for 10 points. Press Train.</span>
+      <span class="idle">{t('A network with 32 hidden units has {n} parameters for 10 points. Press Train.', { n: 3 * H + 1 })}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="ln tr"></i>train loss</span>
-    <span><i class="ln ho"></i>held-out loss</span>
-    <span><i class="ring"></i>lowest held-out so far</span>
-    <span><i class="dot train"></i>10 training points</span>
-    <span><i class="dot held"></i>held-out points</span>
-    <span><i class="ln fit"></i>the network now</span>
-    <span><i class="ln ghost"></i>at its best step</span>
-    <span><i class="ln truth"></i>true curve</span>
+    <span><i class="ln tr"></i>{t('train loss')}</span>
+    <span><i class="ln ho"></i>{t('held-out loss')}</span>
+    <span><i class="ring"></i>{t('lowest held-out so far')}</span>
+    <span><i class="dot train"></i>{t('10 training points')}</span>
+    <span><i class="dot held"></i>{t('held-out points')}</span>
+    <span><i class="ln fit"></i>{t('the network now')}</span>
+    <span><i class="ln ghost"></i>{t('at its best step')}</span>
+    <span><i class="ln truth"></i>{t('true curve')}</span>
   {/snippet}
 </LabFrame>
 

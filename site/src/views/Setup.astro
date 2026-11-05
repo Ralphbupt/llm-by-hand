@@ -1,0 +1,211 @@
+---
+import '../styles/global.css'
+import { settingsBootScript } from '@lib/settings'
+import SiteHeader from '../components/SiteHeader.astro'
+import { allLevels } from '@lib/levels'
+import SeoHead from '../components/SeoHead.astro'
+import { breadcrumbLd } from '@lib/seo'
+import { HTML_LANG, href, translator, type Lang } from '@lib/i18n'
+
+interface Props { lang?: Lang }
+const { lang = 'en' } = Astro.props
+const zh = lang === 'zh'
+const t = translator(lang, {
+  'about 1 s': '约 1 秒',
+  'a few seconds': '几秒',
+  'a few minutes': '几分钟',
+  'about 12 s (downloads the digits once)': '约 12 秒（第一次会下载数字图片）',
+  'about 2–3 min (downloads the digits once)': '约 2–3 分钟（第一次会下载数字图片）',
+  'your model trains in about 2 min': '你的模型训练约 2 分钟',
+})
+const L = (p: string) => href(lang, p)
+
+// the files a level asks you to run on your computer (served from /files/, see scripts/sync_files.py);
+// level numbers and titles come from each lesson's frontmatter
+const LOCAL: [string, string[], string][] = [
+  ['numpy-to-pytorch', ['first_run.py'], 'about 1 s'],
+  ['debugging', ['broken_train.py', 'check.py'], 'a few seconds'],
+  ['lstm', ['boss.py'], 'a few minutes'],
+  ['seq2seq-attention', ['boss.py'], 'a few minutes'],
+  ['autoencoders', ['demo.py'], 'about 12 s (downloads the digits once)'],
+  ['latents-and-dit', ['boss.py'], 'about 2–3 min (downloads the digits once)'],
+  ['write-a-gpt', ['skeleton.py', 'skeleton_hints.py', 'check.py', 'check_weights.json'], 'your model trains in about 2 min'],
+]
+const bySlug = new Map((await allLevels(lang)).map((l) => [l.id, l.data]))
+const local = LOCAL.map(([slug, files, time]) => {
+  const d = bySlug.get(slug)
+  return { label: d ? `${d.level} ${d.title}` : slug, slug, files, time: t(time) }
+})
+---
+<!doctype html>
+<html lang={HTML_LANG[lang]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title={`${t('Run it on your computer')} · LLM by Hand`}
+      description={zh ? '安装 Python、NumPy 和 PyTorch，在你自己的电脑上运行各关下载的脚本。' : "Install Python, NumPy and PyTorch, and run a level's downloaded scripts on your own computer."}
+      jsonLd={breadcrumbLd([['LLM by Hand', L('/')], [t('Run it on your computer'), L('/setup/')]])} page={{ kind: 'setup' }}
+      alternates={{ en: '/setup/', zh: '/zh/setup/' }} />
+    <script is:inline set:html={settingsBootScript} />
+    <style>
+      .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .top .tools { display: flex; gap: 0.5rem; }
+      .crumb { font-size: 0.85rem; color: var(--dim); text-decoration: none; }
+      .crumb:hover { color: var(--accent); }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0.3rem 0 0.2rem; }
+      .lede { color: var(--dim); margin: 0 0 1.5rem; max-width: 62ch; }
+      h2 { font-size: 1.2rem; margin: 2.2rem 0 0.5rem; }
+      p, li { max-width: 66ch; }
+      pre { font-size: 0.85rem; }
+      pre code { white-space: pre; }
+      .os { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.8rem; }
+      .os div { border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; background: var(--card); min-width: 0; }
+      .os h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+      .os p { margin: 0; font-size: 0.9rem; }
+      .scroll { overflow-x: auto; }
+      td code { white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <SiteHeader current="setup" />
+    <div class="wrap">
+      {zh ? (<>
+      <h1>在你的电脑上运行</h1>
+      <p class="lede">大多数关在浏览器里就能做，什么都不用装。有几部分要在你自己的电脑上运行：
+        用 PyTorch 训练真实模型的 Boss 关，以及几个可选的运行。这些只需设置一次，大约十分钟。</p>
+
+      <h2>1. 拿到文件</h2>
+      <p>每个要在你电脑上运行的部分，都会给出它需要的文件链接，比如 <code>boss.py</code>。建一个课程文件夹，
+        在里面为每一关各建一个文件夹。把这一关的文件下载到它的文件夹里，这一关的所有命令都在这个文件夹里运行。
+        第 6 步的表格列出了所有文件。</p>
+      <p>在那个文件夹里打开一个终端。终端是一个用来输入命令的窗口。在 macOS 上，它是“终端”这个应用
+        （应用程序 → 实用工具）。在 Windows 上用 PowerShell（在开始菜单里）。在终端里，
+        <code>cd</code> 后面跟上文件夹的路径，就会进入那个文件夹。</p>
+
+      <h2>2. 安装 Python</h2>
+      <p>你需要 Python 3.10 或更新的版本。先看看你装的是哪个版本：</p>
+      <pre><code>python3 --version</code></pre>
+      <div class="os">
+        <div><h3>macOS</h3><p>从 python.org 安装，或者用 Homebrew：<code>brew install python</code>。</p></div>
+        <div><h3>Windows</h3><p>从 python.org 安装，并勾选“Add python.exe to PATH”。之后凡是本页写 <code>python3</code> 的地方，都改用 <code>py</code>。</p></div>
+        <div><h3>Linux</h3><p>用你的包管理器，比如 <code>sudo apt install python3 python3-venv</code>。</p></div>
+      </div>
+
+      <h2>3. 建一个虚拟环境，安装需要的包</h2>
+      <p>虚拟环境是这门课专用的一个装包的文件夹，这样就不会和电脑上的其他东西冲突。只需建一次，
+        建在放各关文件夹的那个文件夹里（比如 <code>llm-by-hand/</code>）：</p>
+      <pre><code>python3 -m venv .venv
+# Windows 上用：  .venv\Scripts\activate
+source .venv/bin/activate
+pip install numpy torch</code></pre>
+      <p>环境激活后，命令提示符的开头会出现 <code>(.venv)</code>。打开新的终端时，先再运行一次
+        <code>source</code> 那一行，再开始做课程。</p>
+
+      <h2>4. 运行一个脚本</h2>
+      <p>环境激活后，进入这一关的文件夹，运行里面的文件。比如支线 N4：</p>
+      <pre><code>cd lstm          # 放 boss.py 的文件夹
+python boss.py</code></pre>
+      <p>脚本会把它们生成的文件（训练好的模型、下载的数字图片）写到这个文件夹里，或者写到你主目录下的一个缓存里。</p>
+
+      <h2>5. CPU、NVIDIA GPU 还是 Apple GPU</h2>
+      <p>所有内容在普通 CPU 上都能运行。有些脚本找到更快的设备时会用它：在有 NVIDIA 显卡的电脑上用
+        <code>"cuda"</code>，在 Apple 芯片（M1 或更新）的 Mac 上用 <code>"mps"</code>，否则用
+        <code>"cpu"</code>。可以这样查看 PyTorch 能用哪些设备：</p>
+      <pre><code>python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"</code></pre>
+
+      <h2>6. 所有可以运行的文件，以及要花多久</h2>
+      <p>时间是在一台较新的笔记本上测的；没有 GPU、只用 CPU 时可能慢 2–3 倍。</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>关卡</th><th>文件</th><th>时间</th></tr></thead>
+          <tbody>
+            {local.map((d) => (
+              <tr><td>{d.label}</td><td>{d.files.map((f, i) => (<>{i > 0 && '、'}<a href={`/files/${d.slug}/${f}`}><code>{f}</code></a></>))}</td><td>{d.time}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h2>7. 出了问题怎么办</h2>
+      <ul>
+        <li><b>“command not found: python3”</b>：Python 没有安装，或者不在 PATH 里。回到第 2 步（在 Windows 上试试 <code>py</code>）。</li>
+        <li>安装时出现 <b>“externally-managed-environment”</b>：你是在虚拟环境之外安装。先运行 <code>source .venv/bin/activate</code> 那一行。</li>
+        <li><b>torch 装不上</b>：先升级 pip（<code>pip install --upgrade pip</code>），再检查你的 Python 是 64 位的，而且不比 PyTorch 支持的最新版本更新。还是不行的话，安装只用 CPU 的版本：<code>pip install torch --index-url https://download.pytorch.org/whl/cpu</code>。在浏览器里做的关完全不需要 torch。</li>
+        <li><b>下载很慢</b>：pip 可以从离你更近的镜像下载。用
+          <code>pip install -i &lt;镜像地址&gt; numpy torch</code>，填上你所在国家的一个 PyPI 镜像的地址。</li>
+        <li><b>“No module named numpy”</b>（或 torch）：这个终端里没有激活环境。再运行一次 <code>source</code> 那一行。</li>
+        <li><b>脚本很慢</b>：Boss 关训练的是真实模型，花几分钟是正常的（见上面的表格）。</li>
+      </ul>
+      </>) : (<>
+
+      <h1>Run it on your computer</h1>
+      <p class="lede">Most levels run in your browser and need nothing installed. A few parts run on your own computer:
+        the bosses that train real models with PyTorch, and a few optional runs. Set this up once; it takes about ten minutes.</p>
+
+      <h2>1. Get the files</h2>
+      <p>Each part that runs on your computer links the files it needs, for example <code>boss.py</code>. Make one course folder,
+        and inside it one folder for each level. Download that level’s files into its folder, and run every command for that level in that folder.
+        The table in step 6 lists every file.</p>
+      <p>Open a terminal in that folder. A terminal is a window where you type commands. On macOS it is the app
+        Terminal (Applications → Utilities). On Windows use PowerShell (from the Start menu). In the terminal,
+        <code>cd</code> followed by the folder’s path moves you into the folder.</p>
+
+      <h2>2. Install Python</h2>
+      <p>You need Python 3.10 or newer. Check what you have:</p>
+      <pre><code>python3 --version</code></pre>
+      <div class="os">
+        <div><h3>macOS</h3><p>Install from python.org, or with Homebrew: <code>brew install python</code>.</p></div>
+        <div><h3>Windows</h3><p>Install from python.org and check the box “Add python.exe to PATH”. Then use <code>py</code> where this page says <code>python3</code>.</p></div>
+        <div><h3>Linux</h3><p>Use your package manager, for example <code>sudo apt install python3 python3-venv</code>.</p></div>
+      </div>
+
+      <h2>3. Make a virtual environment and install the packages</h2>
+      <p>A virtual environment is a private folder of packages for this course, so nothing conflicts with the rest of your
+        computer. Make it once, in a folder that holds your level folders (for example <code>llm-by-hand/</code>):</p>
+      <pre><code>python3 -m venv .venv
+# on Windows use:  .venv\Scripts\activate
+source .venv/bin/activate
+pip install numpy torch</code></pre>
+      <p>When the environment is active, your prompt starts with <code>(.venv)</code>. In a new terminal, run the
+        <code>source</code> line again before working on the course.</p>
+
+      <h2>4. Run a script</h2>
+      <p>With the environment active, go into the level’s folder and run the file there. For example, for level N4:</p>
+      <pre><code>cd lstm          # the folder that holds boss.py
+python boss.py</code></pre>
+      <p>The scripts write their own files (a trained model, downloaded digits) into that folder or into a cache in your home folder.</p>
+
+      <h2>5. CPU, NVIDIA GPU or Apple GPU</h2>
+      <p>Everything works on a plain CPU. Some scripts use a faster device when they find one: <code>"cuda"</code> on a
+        computer with an NVIDIA graphics card, <code>"mps"</code> on a Mac with an Apple chip (M1 or newer), otherwise
+        <code>"cpu"</code>. You can check what PyTorch sees with:</p>
+      <pre><code>python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"</code></pre>
+
+      <h2>6. Every file you can run, and how long it takes</h2>
+      <p>Times on a recent laptop; a CPU without a GPU can be 2–3× slower.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>level</th><th>files</th><th>time</th></tr></thead>
+          <tbody>
+            {local.map((d) => (
+              <tr><td>{d.label}</td><td>{d.files.map((f, i) => (<>{i > 0 && ', '}<a href={`/files/${d.slug}/${f}`}><code>{f}</code></a></>))}</td><td>{d.time}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h2>7. If something goes wrong</h2>
+      <ul>
+        <li><b>“command not found: python3”</b>: Python isn’t installed or isn’t on your PATH. Go back to step 2 (on Windows, try <code>py</code>).</li>
+        <li><b>“externally-managed-environment”</b> when installing: you are installing outside the virtual environment. Run the <code>source .venv/bin/activate</code> line first.</li>
+        <li><b>torch fails to install</b>: update pip first (<code>pip install --upgrade pip</code>), and check that your Python is 64-bit and not newer than the newest version PyTorch supports. If it still fails, install the CPU-only build: <code>pip install torch --index-url https://download.pytorch.org/whl/cpu</code>. The browser levels don’t need torch at all.</li>
+        <li><b>Downloads are very slow</b>: pip can download from a mirror closer to you. Use
+          <code>pip install -i &lt;mirror URL&gt; numpy torch</code>, with the address of a PyPI mirror in your country.</li>
+        <li><b>“No module named numpy”</b> (or torch): the environment isn’t active in this terminal. Run the <code>source</code> line again.</li>
+        <li><b>A script is slow</b>: the bosses train real models, so minutes are expected (see the table above).</li>
+      </ul>
+      </>)}
+    </div>
+  </body>
+</html>

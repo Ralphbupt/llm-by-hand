@@ -9,8 +9,29 @@
   import { readable } from '@lib/readable'
   import { has, subscribe } from '@lib/progress'
   import { silu } from '@lib/modern'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide }: { hide?: string } = $props()
+  let { hide, lang = 'en' }: { hide?: string; lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is a loop variable in the markup (tick values), so the translator is `tx`
+  const tx = useT({
+    'SwiGLU: a SiLU gate decides how much of the value passes': 'SwiGLU：一个 SiLU 门决定值能通过多少',
+    'Move the gate g and the value u. Watch the output bar: the gate scales the value.': '移动门 g 和值 u。看输出条：门在缩放值。',
+    'SiLU and ReLU curves; the gate g = {g} is marked': 'SiLU 和 ReLU 曲线；标出了门 g = {g}',
+    'gate g →': '门 g →',
+    'the value u and the output, as bars from zero': '值 u 和输出，画成从 0 开始的条',
+    'value u': '值 u',
+    'output': '输出',
+    'Unlike ReLU, a slightly negative gate keeps a small part of the value, with its sign flipped.': '和 ReLU 不同，稍微为负的门会留下值的一小部分，只是正负号反过来了。',
+    'gate g =': '门 g =',
+    'value u =': '值 u =',
+    '· output = SiLU(g) × u =': '· 输出 = SiLU(g) × u =',
+    'ReLU, for comparison': 'ReLU，用来对比',
+    'your gate g': '你的门 g',
+    'positive': '正',
+    'negative': '负',
+  })
   let solved = $state(false)
   onMount(() => {
     if (!hide) return
@@ -38,12 +59,12 @@
 </script>
 
 <LabFrame
-  title="SwiGLU: a SiLU gate decides how much of the value passes"
-  hint="Move the gate g and the value u. Watch the output bar: the gate scales the value."
+  title={tx('SwiGLU: a SiLU gate decides how much of the value passes')}
+  hint={tx('Move the gate g and the value u. Watch the output bar: the gate scales the value.')}
   onreset={() => { g = -1; u = 2 }} resetDisabled={g === -1 && u === 2}
 >
   <div class="wrap">
-    <svg use:readable viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`SiLU and ReLU curves; the gate g = ${g.toFixed(1)} is marked`}>
+    <svg use:readable viewBox={`0 0 ${W} ${H}`} role="img" aria-label={tx('SiLU and ReLU curves; the gate g = {g} is marked', { g: g.toFixed(1) })}>
       {#each [-4, -2, 0, 2, 4] as t}
         <line x1={sx(t)} y1={sy(Y0)} x2={sx(t)} y2={sy(Y1)} stroke="var(--line)" stroke-width="0.5" />
         <text x={sx(t)} y={T + PH + 13} class="tick" text-anchor="middle">{t}</text>
@@ -54,7 +75,7 @@
       {/each}
       <line x1={sx(X0)} y1={sy(0)} x2={sx(X1)} y2={sy(0)} stroke="var(--dim)" stroke-width="0.8" />
       <line x1={sx(0)} y1={sy(Y0)} x2={sx(0)} y2={sy(Y1)} stroke="var(--dim)" stroke-width="0.8" />
-      <text x={sx(X1)} y={H - 3} class="tick" text-anchor="end">gate g →</text>
+      <text x={sx(X1)} y={H - 3} class="tick" text-anchor="end">{tx('gate g →')}</text>
       <path d={path((x) => Math.max(0, x))} fill="none" stroke="var(--dim)" stroke-width="1.4" stroke-dasharray="4 3" />
       <path d={path(silu)} fill="none" stroke="var(--fg)" stroke-width="2" />
       {#if !hideS}
@@ -66,9 +87,9 @@
     </svg>
 
     <div class="flow">
-      <div class="bars" role="img" aria-label="the value u and the output, as bars from zero">
+      <div class="bars" role="img" aria-label={tx('the value u and the output, as bars from zero')}>
         <div class="brow">
-          <span class="bl">value u</span>
+          <span class="bl">{tx('value u')}</span>
           <span class="track"><i class:neg={u < 0} style:width={bw(u)}></i></span>
           <span class="bv">{u.toFixed(1)}</span>
         </div>
@@ -77,30 +98,30 @@
           <span class="mult">{hideS ? '?' : s.toFixed(4)}</span>
         </div>
         <div class="brow">
-          <span class="bl"><b>output</b></span>
+          <span class="bl"><b>{tx('output')}</b></span>
           <span class="track">{#if hideS}<span class="q">?</span>{:else}<i class:neg={out < 0} style:width={bw(out)}></i>{/if}</span>
           <span class="bv"><b>{hideS ? '?' : out.toFixed(4)}</b></span>
         </div>
       </div>
-      <p class="note">Unlike ReLU, a slightly negative gate keeps a small part of the value, with its sign flipped.</p>
+      <p class="note">{tx('Unlike ReLU, a slightly negative gate keeps a small part of the value, with its sign flipped.')}</p>
     </div>
   </div>
 
   {#snippet controls()}
-    <label class="knob"><span>gate g = <b>{g.toFixed(1)}</b></span><input type="range" min="-4" max="4" step="0.5" value={g} oninput={(e) => (g = +e.currentTarget.value)} /></label>
-    <label class="knob"><span>value u = <b>{u.toFixed(1)}</b></span><input type="range" min="-3" max="3" step="0.5" value={u} oninput={(e) => (u = +e.currentTarget.value)} /></label>
+    <label class="knob"><span>{tx('gate g =')} <b>{g.toFixed(1)}</b></span><input type="range" min="-4" max="4" step="0.5" value={g} oninput={(e) => (g = +e.currentTarget.value)} /></label>
+    <label class="knob"><span>{tx('value u =')} <b>{u.toFixed(1)}</b></span><input type="range" min="-3" max="3" step="0.5" value={u} oninput={(e) => (u = +e.currentTarget.value)} /></label>
   {/snippet}
 
   {#snippet readout()}
-    SiLU(g) = g × sigmoid(g) = <b>{hideS ? '?' : s.toFixed(4)}</b> · output = SiLU(g) × u = <b>{hideS ? '?' : out.toFixed(4)}</b>
+    SiLU(g) = g × sigmoid(g) = <b>{hideS ? '?' : s.toFixed(4)}</b> {tx('· output = SiLU(g) × u =')} <b>{hideS ? '?' : out.toFixed(4)}</b>
   {/snippet}
 
   {#snippet legend()}
     <span class="lg"><i class="ln"></i>SiLU(z) = z · sigmoid(z)</span>
-    <span class="lg"><i class="ln dash"></i>ReLU, for comparison</span>
-    <span class="lg"><i class="dot"></i>your gate g</span>
-    <span class="lg"><i class="sw" style="background: var(--pos)"></i>positive</span>
-    <span class="lg"><i class="sw" style="background: var(--neg)"></i>negative</span>
+    <span class="lg"><i class="ln dash"></i>{tx('ReLU, for comparison')}</span>
+    <span class="lg"><i class="dot"></i>{tx('your gate g')}</span>
+    <span class="lg"><i class="sw" style="background: var(--pos)"></i>{tx('positive')}</span>
+    <span class="lg"><i class="sw" style="background: var(--neg)"></i>{tx('negative')}</span>
   {/snippet}
 </LabFrame>
 

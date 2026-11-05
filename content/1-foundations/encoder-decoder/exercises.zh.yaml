@@ -1,0 +1,148 @@
+cross-kv:
+  prompt: "在解码器的交叉注意力里，K 和 V 从哪里来？"
+  options: ["和 Q 一样，来自目标词", "来自 memory，即编码器的输出", "K 来自 memory，V 来自目标词"]
+  hints:
+    - "那样它又成了解码器的自注意力。交叉注意力是解码器读源句子的方式。"
+    - "键 j 和值 j 属于同一个 token：键决定这个 token 得到多少权重，值是这个 token 随后交给输出的东西。两者描述的都是源 token。"
+  reveal: "来自 memory。Q 问的是“对我正在写的这个词来说，哪些源词重要？”，所以 Q 来自解码器，而它要搜索的键和值来自编码器的输出。"
+
+cross-weights:
+  prompt: "批大小为 2。解码器输入有 3 个 token（<bos> 加 2 个目标词），源序列有 6 个词。一个头的交叉注意力权重是什么形状？"
+  after: "每个解码器输入 token（查询，<bos> 也算）一行，每个源词（键）一列。每一行说明这个 token 给每个源词多少权重。"
+  hints:
+    - "行来自 Q，也就是解码器输入：3 个 token。列来自 K：6 个源词。"
+    - "那是带掩码的自注意力。在交叉注意力里，键是源词。"
+    - "把批这个维度留在最前面。"
+    - ["行来自 Q（解码器输入的 token），列来自 K（memory 里的源词）。", "Q 是 (2, 3, d)，K 是 (2, 6, d)。保留批，然后是行 × 列。"]
+
+cross-out:
+  prompt: "一个解码器 token 读一个有 2 个源 token 的 memory，dₖ = 2。它的查询是 q = [√2 · ln 3, 0]，约为 [1.55, 0]。来自 memory 的键是 k₀ = [1, 0] 和 k₁ = [0, 1]，值是 v₀ = [4, 0] 和 v₁ = [0, 8]。输出是一个有 2 个数的向量。它的第一个数是多少？"
+  promptShort: "手算交叉注意力：一个查询 q = [√2 · ln 3, 0]，dₖ = 2，来自 memory 的键 k₀ = [1, 0]、k₁ = [0, 1]，值 v₀ = [4, 0]、v₁ = [0, 8]。输出的第一个数是多少？"
+  after: "分数：q · k₀ / √2 = ln 3，q · k₁ / √2 = 0。softmax：e^(ln 3) = 3，e⁰ = 1，所以权重是 3/4 = 0.75 和 1/4 = 0.25。输出：0.75 · [4, 0] + 0.25 · [0, 8] = [3, 2]。查询来自解码器；键和值来自 memory。"
+  hints:
+    - "这样就把全部权重放在了源 token 0 上。softmax 会给每个 token 分一部分权重，所以 token 1 也有一些。"
+    - "这样两个 token 的权重就一样了。两个分数不同，所以它们的权重也不同。"
+    - "0.75 是源 token 0 的权重。输出是值的加权平均：每个值乘以它的权重，再相加。"
+    - ["和第 14 关一样：每个源 token 一个分数，q · k / √dₖ。然后 softmax 把分数变成权重，输出是值的加权平均。", "q · k₀ = √2 · ln 3，所以第一个分数是 ln 3；第二个分数是 0。e^(ln 3) 和 e⁰ 分别是多少？", "权重是 3/4 和 1/4。输出是 3/4 · v₀ + 1/4 · v₁。"]
+
+memory-shape:
+  prompt: "一个模型把数读出来，`d_model` = 64。一批有 32 个数。源序列的数字填充到 3 个 token，解码器输入有 5 个 token。memory（编码器的输出）是什么形状？"
+  promptShort: "`d_model` = 64，一批 32 个数，源数字填充到 3 个 token，解码器输入 5 个 token。memory（编码器的输出）是什么形状？"
+  after: "批、源 token、`d_model`：3 个数字各有一个 64 个数的向量。解码器输入的 5 个 token 不出现，因为 memory 在解码器运行之前就做好了。每个解码器层读的都是这同一个 (32, 3, 64) 的 memory。"
+  hints:
+    - "5 是解码器输入的长度。memory 是编码器做出来的，那它是给哪个序列的每个 token 一个向量？"
+    - "那是一个数的 memory。把批这个维度留在最前面。"
+    - "那是一张交叉注意力权重表。memory 本身是一列向量，每个 token 一个。"
+    - ["memory 是最后一个编码器层的输出。每一层都保持输入的形状：每个 token 一个向量。", "编码器只读源序列：32 个数，每个 3 个 token，每个 token 64 个数。"]
+
+dec-extra:
+  prompt: "默认大小下，一个解码器层有 49,856 个参数，一个编码器层有 33,280 个。相差 16,576，正好等于一个 FFN。解码器层有什么是编码器层没有的？"
+  options: ["第二个 FFN", "交叉注意力（16,448）和多一个 LayerNorm（128）", "因果掩码，它是学出来的"]
+  hints:
+    - "数一数第 1 节里解码器层的子层。其中有几个是 FFN？"
+    - "掩码是一张 True/False 表，由长度生成。里面有什么是训练出来的吗？"
+  reveal: "交叉注意力和多一个 LayerNorm。解码器层有三个子层（带掩码的自注意力、交叉注意力、FFN）；编码器层有两个。多出来的是交叉注意力：16,448 个参数。每个子层都有自己的 LayerNorm，所以还多一个：128。16,448 + 128 = 16,576。它正好等于一个 FFN 只是巧合。"
+
+cross-shape:
+  prompt: "一个模型把数读出来。一批有 64 个数，源数字填充到 3 个 token，解码器输入有 5 个 token（词），有 4 个头。交叉注意力分数是什么形状？"
+  after: "批、头、解码器 token、源数字：每个例子的每个头都有一张 5 × 3 的表，每个词（Q）一行，每个数字（K）一列。"
+  hints:
+    - "行来自 Q，而在交叉注意力里 Q 来自词（解码器输入）。列来自 K：memory 里的数字。"
+    - "表是对的，但完整模型有 4 个头，每个头都有自己的分数。"
+    - ["1 个例子、1 个头、3 个词、2 个数字时，交叉注意力分数是 (1, 3, 2)：先是批，然后是词，然后是数字。", "现在用真实的大小：64 个例子，4 个头，5 个词，3 个数字。"]
+
+step-rows:
+  prompt: "正在读 742。模型已经写出了“seven hundred forty”。这一步有多少行进入解码器？"
+  after: "<bos>、seven、hundred、forty：4 行。只用最后一行来挑下一个词。第 17 关的模型在这一步有 7 行，因为数字和 = 都在它的同一个序列里。这个解码器只拿到 <bos> 和那些词。数字通过交叉注意力到达它。"
+  hints:
+    - "别忘了开头的 <bos> token。它总是在那里。"
+    - "5 是它最长能有多长。这一步只写出了一部分词。"
+    - "数一数解码器到目前为止看到的 token，从 <bos> 开始。"
+
+cross-cache:
+  prompt: "一个 2 层的解码器读 742：4 个词，每步一个。模型把步与步之间不会变的结果都存起来（缓存），重复使用。在一个解码器层里，整个答案写完，memory 一共乘以 `W_K` 几次？"
+  promptShort: "一个 2 层解码器写 4 个词，每步一个，并缓存步与步之间不会变的结果。在一层里，memory 乘以 `W_K` 几次？"
+  after: "一次。解码器写的时候 memory 不变，所以它的键（memory @ `W_K`）和值（memory @ `W_V`）每一步都一样。每个解码器层在写第一个词之前算一次，然后留着：每个源 token 一行，这个缓存从不变大。自注意力的缓存不一样：每一步都为新词加一行。"
+  hints:
+    - "这样每一步都重新算一遍键。解码器写的时候 memory 会变吗？`W_K` 会变吗？"
+    - "这把两层和每一步都算进去了。题目问的是一层。再想想每一步之间什么会变。"
+    - "这把两层都算进去了。题目问的是一层。"
+    - ["在交叉注意力里，哪些输入每一步都会变：查询、键还是值？", "键是 memory @ `W_K`。memory 在写第一个词之前就做好了，`W_K` 也是固定的。"]
+
+mask-6:
+  prompt: "源序列有 5 个 token。解码器输入是 <bos> 加 5 个目标词。解码器自注意力里的因果掩码是什么形状（一个句子）？"
+  after: "解码器自注意力的 Q 和 K 都来自解码器输入：6 个 token。这里源序列的长度无关紧要。"
+  hints:
+    - "5 是源序列的长度，或者是不算 <bos> 的目标词数。因果掩码用在解码器的自注意力里：数一数解码器的输入。"
+    - "那是交叉注意力分数的形状。因果掩码在解码器的自注意力里，那里 Q 和 K 来自同一个序列。"
+    - ["哪种注意力有因果掩码？它的 Q 和 K 来自哪里？", "数一数解码器输入：<bos> 加 5 个词。"]
+
+decoder-mask-count:
+  prompt: "读 42，所在的批里较长的答案需要 5 个词。解码器输入是 <bos> forty two PAD PAD：5 个位置。如果因果掩码挡住某一格，或者这一格所在的列是 PAD 词，解码器自注意力的掩码就挡住它。25 格里有多少格被挡住？"
+  after: "一行一行数没被挡住的格。<bos> 看到 1 格，forty 看到 2 格，two 看到 3 格，每个 PAD 行只看到那 3 个真实的词：1 + 2 + 3 + 3 + 3 = 12 格没被挡住，所以 25 − 12 = 13 格被挡住。PAD 行仍然有输出，但损失会跳过它们。"
+  hints:
+    - "10 只是因果掩码。PAD 列还会挡住一些因果掩码没挡的格。"
+    - "有些格被两种掩码同时挡住。每个被挡住的格只数一次。"
+    - "12 是没被挡住的格数。题目问的是被挡住的。"
+    - ["画出 5 × 5 的网格：第 i 行是位置 i 的查询，第 j 列是位置 j 的键。", "一行一行看。第 i 行可以看第 0 到第 i 列，但永远看不到 PAD 列。每一行各是几格？"]
+
+three-masks:
+  prompt: "为一个例子构造三种掩码。src 存的是数字的 id，`tgt_in` 是解码器输入的 id，pad 是 PAD 的 id。返回 (enc, dec, cross)，被挡住的格为 True：enc 是 (Ls, Ls)，dec 是 (Lt, Lt)，cross 是 (Lt, Ls)。需要写好几行。"
+  template: |
+    def three_masks(src, tgt_in, pad=0):
+        Ls, Lt = len(src), len(tgt_in)
+        ____
+        return enc, dec, cross
+
+    src = np.array([7, 5, 0])            # "42"，然后是一个 PAD
+    tgt_in = np.array([1, 25, 5, 0, 0])  # <bos> forty two PAD PAD
+    enc, dec, cross = three_masks(src, tgt_in)
+    print("enc:\n", enc.astype(int))
+    print("dec:\n", dec.astype(int))
+    print("cross:\n", cross.astype(int))
+  tests:
+    - "enc：只挡住 PAD 数字那一列"
+    - "dec：因果，再加上两个 PAD 词的列：13 格被挡住"
+    - "cross：每个解码器 token 一行，每个数字一列；只挡住 PAD 数字"
+    - "完全没有 PAD：只有因果掩码挡住格子，3 格"
+    - "这里 PAD 的 id 是 2：每个掩码都挡住 id 为 2 的列"
+  hints:
+    - "在 return 那一行之前给 enc、dec 和 cross 赋值。先从两行填充标记开始：src == pad 和 `tgt_in` == pad。"
+    - ["用 | 合并的两张表形状必须一样，或者是 NumPy 能拉伸成一样的形状。", "让每个掩码的形状和它的分数一样：（行来自 Q，列来自 K）。"]
+    - ["enc 应该只挡住 PAD 数字那一列，每一行都一样。", "用 `np.broadcast_to` 把 src == pad 拉伸成 Ls 行。"]
+    - ["dec 是因果掩码，或（|）上 PAD 词的列。对角线没被挡住吗？k = 1 的 np.triu 会让它保持不挡。", "PAD 列来自 `tgt_in` == pad，拉伸成 Lt 行。"]
+    - ["cross 每个解码器 token 一行，每个数字一列：(Lt, Ls)。", "它的列是数字，所以它的填充行是 src == pad。它没有因果的部分。"]
+    - "这个测试用 pad=2 调用函数。要和参数 pad 比较，而不是和数字 0 比较。"
+    - ["每个掩码的形状和它的分数一样：行来自 Q，列来自 K。对照上面的表看每种注意力。", "先做两行填充标记：src == pad 和 `tgt_in` == pad。每个掩码挡住它的键里的 PAD 列。", "只有 dec 要加因果掩码：np.triu(np.ones((Lt, Lt), dtype=bool), k=1)，用 | 合并。"]
+  after: "每个掩码都挡住自己的键里的 PAD 列，并拉伸到所有查询行上。只有解码器的自注意力加上因果三角，因为只有它的键里有要猜的词。源序列的长度决定 enc 和 cross 的列数；解码器输入的长度决定 dec 和 cross 的行数。"
+
+cross-attn-code:
+  prompt: "写一个交叉注意力头。y 是解码器的行，memory 是编码器的输出；src_pad 在源 token 是 PAD 时为 True。返回 (out, A)：输出和权重。需要写好几行。"
+  promptShort: "写 `cross_attention(y, memory, src_pad)`：一个头，挡住源序列里的 PAD token。返回 (out, A)。"
+  template: |
+    def cross_attention(y, memory, src_pad):
+        # y：(Lt, d)，解码器的行    memory：(Ls, d)，编码器的输出
+        # src_pad：(Ls,)，源 token 是 PAD 时为 True
+        # 为了简短，这里省掉了 W_Q、W_K 和 W_V：直接使用这些行。
+        d = y.shape[1]
+        ____
+        return A @ V, A
+
+    # 5 个解码器行，以及一个有 2 个数字、再加 PAD 的 memory
+    y = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 0.0], [0.0, 2.0]])
+    memory = np.array([[2.0, 0.0], [0.0, 2.0], [1.0, 1.0]])
+    src_pad = np.array([False, False, True])
+    out, A = cross_attention(y, memory, src_pad)
+    print("out", out.shape, "\n", out.round(3))
+    print("A", A.shape, "\n", A.round(3))
+  tests:
+    - "5 个解码器行，3 个源 token：out 每个解码器 token 一行，宽度和 memory 的一行一样"
+    - "PAD 源 token 在每一行里的权重都是 0"
+    - "具体数值：每一行都是两个真实 memory 行的加权平均"
+  hints:
+    - "在 return 那一行之前给 Q、K、V 和 A 赋值。return 那一行用到了 A 和 V。"
+    - ["Q 来自解码器的行 y。K 和 V 都来自 memory，不是 y。这样分数就是 (Lt, Ls)：每个解码器 token 一行，每个源 token 一列。", "src_pad 每个源 token 一项，所以它和 (Lt, Ls) 分数的列对得上。"]
+    - ["PAD 那一列在每一行里的权重都必须是 0。和第 15 关一样，被挡住的分数在 softmax 之前变成 −∞。", "np.where(src_pad, -np.inf, S) 挡住 PAD 列：src_pad 会自己沿行拉伸。"]
+    - "形状和 PAD 列都对了，但权重太尖了。和第 14 关一样，把分数除以 √d。"
+    - ["第 14 关的步骤：分数、掩码、softmax。新的只是 Q、K、V 的来源。", "Q 来自 y；K 和 V 来自 memory。分数 S = Q @ K.T / np.sqrt(d)，然后挡住 PAD 列，再做 softmax。", "Q 是 y；K 和 V 都是 memory。把 Q @ K.T 除以 √d，用 np.where 把 PAD 列设为 −∞，再做 softmax。"]
+  after: "Q 来自解码器，所以 A 每个解码器 token 一行（5 行）。K 来自 memory，所以 A 每个源 token 一列（3 列），PAD 那一列的权重是 0。V 也来自 memory，所以输出的每一行都是真实 memory 行的加权平均，out 是 (5, 2)。真实的模型会先乘以 `W_Q`、`W_K` 和 `W_V`，并把工作分给多个头。其余都一样。"

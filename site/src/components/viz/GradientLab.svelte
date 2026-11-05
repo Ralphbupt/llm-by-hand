@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Gradient descent lab: three points, a line y = w·x + b, and the loss surface.
-   * Move w and b by hand, or press "Take one step" and watch the gradient push them downhill.
+   * Move w and b by hand, or press t('Take one step') and watch the gradient push them downhill.
    * Everything is computed live from the same formulas as demo.py.
    */
   import { onMount } from 'svelte'
@@ -10,11 +10,41 @@
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
   import { landMask } from './landMask'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // Values that answer a question on the page stay hidden ("?") until that question is solved.
   //   loss: the error² column and the loss.  grad: the gradient columns and means.
   //   step: the step buttons stay locked, so the learner works out one step by hand first.
-  let { hide = {} }: { hide?: { loss?: string; grad?: string; step?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { loss?: string; grad?: string; step?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Gradient descent on three points': '三个点上的梯度下降',
+    'Move w and b by hand, or take steps. The line, the errors and the loss surface move together.': '手动调 w 和 b，或者让它一步步走。直线、误差和损失曲面会一起动。',
+    'Map': '平面图',
+    'Three data points and the line y = w·x + b': '三个数据点和直线 y = w·x + b',
+    'The data, the line y = w·x + b, and each error as a dashed line.': '数据、直线 y = w·x + b，每个误差画成一条虚线。',
+    'Loss surface in 3D: height is ln(1 + loss) for each w and b': '3D 损失曲面：每个 w 和 b 处的高度是 ln(1 + loss)',
+    'Height is ln(1 + loss) for every (w, b): low is good, and the big losses are made much smaller so the bottom stays visible.': '每个 (w, b) 处的高度是 ln(1 + loss)：越低越好。大的损失被压小了很多，这样谷底还看得清。',
+    'Loss map: drag, or use the arrow keys, to choose w and b': '损失平面图：拖动或用方向键选择 w 和 b',
+    'Loss for every (w, b): the fainter the gray, the lower the loss. Drag or use the arrow keys to move.': '每个 (w, b) 处的损失：灰色越浅，损失越低。拖动或用方向键移动。',
+    'error': '误差',
+    'loss': '损失',
+    'mean': '平均',
+    'learning rate': '学习率',
+    'Take one step': '走一步',
+    '10 steps': '10 步',
+    '100 steps': '100 步',
+    'The loss is growing very fast: each step jumps past the lowest point and lands higher on the other side. Lower the learning rate and reset.': '损失涨得很快：每一步都跳过了最低点，落到对面更高的地方。调低学习率，再重置。',
+    'The step buttons unlock once you compute one step by hand below.': '在下面亲手算出一步之后，这些按钮才会解锁。',
+    'Step {k}:': '第 {k} 步：',
+    'Loss {a} → {b}.': '损失 {a} → {b}。',
+    'Press “Take one step”. Each step moves w and b against their gradients.': '按“走一步”。每一步都让 w 和 b 逆着各自的梯度移动。',
+    'you: (w, b) now': '你：当前的 (w, b)',
+    'the lowest loss, w = 2, b = 0': '损失最低处，w = 2，b = 0',
+    'the path of steps': '走过的路径',
+    'an error (prediction − y)': '一个误差（预测值 − y）',
+  })
   const mid = $props.id()
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
@@ -133,15 +163,15 @@
 </script>
 
 <LabFrame
-  title="Gradient descent on three points"
-  hint="Move w and b by hand, or take steps. The line, the errors and the loss surface move together."
-  views={[{ id: 'map', label: 'Map' }, { id: '3d', label: '3D' }]}
+  title={t('Gradient descent on three points')}
+  hint={t('Move w and b by hand, or take steps. The line, the errors and the loss surface move together.')}
+  views={[{ id: 'map', label: t('Map') }, { id: '3d', label: '3D' }]}
   bind:view
   onreset={reset}
 >
   <div class="panes">
     <figure>
-      <svg viewBox="0 0 100 100" class="plot" use:readable aria-label="Three data points and the line y = w·x + b">
+      <svg viewBox="0 0 100 100" class="plot" use:readable aria-label={t('Three data points and the line y = w·x + b')}>
         {#each [0, 2, 4, 6, 8] as gy}
           <line x1="8" x2="100" y1={sy(gy)} y2={sy(gy)} class="grid" />
           <text x="6" y={sy(gy) + 1.2} class="tick end">{gy}</text>
@@ -161,7 +191,7 @@
           <circle cx={sx(x)} cy={sy(YS[i])} r="2.4" class="pt" />
         {/each}
       </svg>
-      <figcaption>The data, the line y = w·x + b, and each error as a dashed line.</figcaption>
+      <figcaption>{t('The data, the line y = w·x + b, and each error as a dashed line.')}</figcaption>
     </figure>
 
     <figure>
@@ -169,15 +199,15 @@
         <Surface3D
           f={lossAt} xRange={[LW[0], LW[1]]} yRange={[LB[0], LB[1]]} zTransform={Math.log1p}
           path={path.map((p) => ({ x: p.w, y: p.b }))} point={diverged ? null : { x: w, y: b }} best={{ x: 2, y: 0 }}
-          axes={{ x: 'w', y: 'b', z: 'loss' }} onpick={(x, y) => setByHand(snap(x), snap(y))} hover={!locked('loss')}
+          axes={{ x: 'w', y: 'b', z: t('loss') }} onpick={(x, y) => setByHand(snap(x), snap(y))} hover={!locked('loss')}
           step={diverged || locked('step') ? null : { x: w - lr * s.gw, y: b - lr * s.gb }}
-          ariaLabel="Loss surface in 3D: height is ln(1 + loss) for each w and b"
+          ariaLabel={t('Loss surface in 3D: height is ln(1 + loss) for each w and b')}
         />
-        <figcaption>Height is ln(1 + loss) for every (w, b): low is good, and the big losses are made much smaller so the bottom stays visible.</figcaption>
+        <figcaption>{t('Height is ln(1 + loss) for every (w, b): low is good, and the big losses are made much smaller so the bottom stays visible.')}</figcaption>
       {:else}
         <svg
           viewBox="-9 0 109 108" class="land" use:readable
-          role="slider" aria-label="Loss map: drag, or use the arrow keys, to choose w and b" aria-valuenow={w} aria-valuetext={`w ${f(w, 2)}, b ${f(b, 2)}`} tabindex="0"
+          role="slider" aria-label={t('Loss map: drag, or use the arrow keys, to choose w and b')} aria-valuenow={w} aria-valuetext={`w ${f(w, 2)}, b ${f(b, 2)}`} tabindex="0"
           onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onkeydown={key}
         >
           <defs><mask id={mid}><image href={land} x="0" y="0" width="100" height="100" preserveAspectRatio="none" /></mask></defs>
@@ -192,7 +222,7 @@
           <text x="-1.5" y="4" class="tick end name">b</text>
           <text x="99" y="104" class="tick end name">w</text>
         </svg>
-        <figcaption>Loss for every (w, b): the fainter the gray, the lower the loss. Drag or use the arrow keys to move.</figcaption>
+        <figcaption>{t('Loss for every (w, b): the fainter the gray, the lower the loss. Drag or use the arrow keys to move.')}</figcaption>
       {/if}
     </figure>
   </div>
@@ -200,7 +230,7 @@
   {#if !diverged}
     <div class="scroll">
       <table>
-        <thead><tr><th>x</th><th>y</th><th>w·x + b</th><th>error</th><th>error²</th><th>2·error·x</th><th>2·error</th></tr></thead>
+        <thead><tr><th>x</th><th>y</th><th>w·x + b</th><th>{t('error')}</th><th>{t('error')}²</th><th>2·error·x</th><th>2·error</th></tr></thead>
         <tbody>
           {#each s.rows as r}
             <tr><td>{r.x}</td><td>{r.y}</td><td>{f(r.pred)}</td><td>{f(r.err)}</td>
@@ -208,7 +238,7 @@
               <td>{#if locked('grad')}<span class="q">?</span>{:else}{f(r.gw)}{/if}</td>
               <td>{#if locked('grad')}<span class="q">?</span>{:else}{f(r.gb)}{/if}</td></tr>
           {/each}
-          <tr class="mean"><td colspan="4">mean</td>
+          <tr class="mean"><td colspan="4">{t('mean')}</td>
             <td>loss = <b>{#if locked('loss')}<span class="q">?</span>{:else}{f(s.loss)}{/if}</b></td>
             <td>grad_w = <b>{#if locked('grad')}<span class="q">?</span>{:else}{f(s.gw)}{/if}</b></td>
             <td>grad_b = <b>{#if locked('grad')}<span class="q">?</span>{:else}{f(s.gb)}{/if}</b></td></tr>
@@ -221,32 +251,32 @@
     <div class="knobs">
       <label>w <input type="range" min="-1" max="4" step="0.05" value={w} oninput={(e) => setByHand(+e.currentTarget.value, b)} /> <b>{f(w, 3)}</b></label>
       <label>b <input type="range" min="-3" max="3" step="0.05" value={b} oninput={(e) => setByHand(w, +e.currentTarget.value)} /> <b>{f(b, 3)}</b></label>
-      <label>learning rate <input type="range" min="0.01" max="0.25" step="0.01" bind:value={lr} /> <b>{lr.toFixed(2)}</b></label>
+      <label>{t('learning rate')} <input type="range" min="0.01" max="0.25" step="0.01" bind:value={lr} /> <b>{lr.toFixed(2)}</b></label>
     </div>
-    <button class="lab-btn primary" onclick={() => step(1)} disabled={diverged || locked('step')}>Take one step</button>
-    <button class="lab-btn" onclick={() => step(10)} disabled={diverged || locked('step')}>10 steps</button>
-    <button class="lab-btn" onclick={() => step(100)} disabled={diverged || locked('step')}>100 steps</button>
+    <button class="lab-btn primary" onclick={() => step(1)} disabled={diverged || locked('step')}>{t('Take one step')}</button>
+    <button class="lab-btn" onclick={() => step(10)} disabled={diverged || locked('step')}>{t('10 steps')}</button>
+    <button class="lab-btn" onclick={() => step(100)} disabled={diverged || locked('step')}>{t('100 steps')}</button>
   {/snippet}
 
   {#snippet readout()}
     {#if diverged}
-      <span class="warn">The loss is growing very fast: each step jumps past the lowest point and lands higher on the other side. Lower the learning rate and reset.</span>
+      <span class="warn">{t('The loss is growing very fast: each step jumps past the lowest point and lands higher on the other side. Lower the learning rate and reset.')}</span>
     {:else if locked('step')}
-      <span class="idle">The step buttons unlock once you compute one step by hand below.</span>
+      <span class="idle">{t('The step buttons unlock once you compute one step by hand below.')}</span>
     {:else if last}
-      Step {last.k}: w ← {f(last.w)} − {lr.toFixed(2)} × ({f(last.gw)}) = <b>{f(last.nw)}</b>,
+      {t('Step {k}:', { k: last.k })} w ← {f(last.w)} − {lr.toFixed(2)} × ({f(last.gw)}) = <b>{f(last.nw)}</b>,
       b ← {f(last.b)} − {lr.toFixed(2)} × ({f(last.gb)}) = <b>{f(last.nb)}</b>.
-      Loss {f(last.loss)} → {f(s.loss)}.
+      {t('Loss {a} → {b}.', { a: f(last.loss), b: f(s.loss) })}
     {:else}
-      <span class="idle">Press “Take one step”. Each step moves w and b against their gradients.</span>
+      <span class="idle">{t('Press “Take one step”. Each step moves w and b against their gradients.')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k-me"></i>you: (w, b) now</span>
-    <span class="key"><i class="k-best"></i>the lowest loss, w = 2, b = 0</span>
-    <span class="key"><i class="k-path"></i>the path of steps</span>
-    <span class="key"><i class="k-err"></i>an error (prediction − y)</span>
+    <span class="key"><i class="k-me"></i>{t('you: (w, b) now')}</span>
+    <span class="key"><i class="k-best"></i>{t('the lowest loss, w = 2, b = 0')}</span>
+    <span class="key"><i class="k-path"></i>{t('the path of steps')}</span>
+    <span class="key"><i class="k-err"></i>{t('an error (prediction − y)')}</span>
   {/snippet}
 </LabFrame>
 

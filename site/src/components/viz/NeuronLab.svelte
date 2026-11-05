@@ -8,9 +8,30 @@
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // z / p columns stay "?" until the question asking for them is solved
-  let { hide = {} }: { hide?: { z?: string; p?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { z?: string; p?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'One neuron, four points': '一个神经元，四个点',
+    'Drag on the board, or use the arrow keys, to slide the line. The sliders turn and sharpen it.': '在图上拖动或用方向键来平移这条线。滑块可以旋转它、让它更陡。',
+    'Decision board: drag or use the arrow keys to move the boundary': '决策图：拖动或用方向键移动边界',
+    'target': '目标值',
+    'says': '回答',
+    'Data': '数据',
+    'steepness k': '陡度 k',
+    'AND neuron (1, 1, −1.5)': 'AND 神经元 (1, 1, −1.5)',
+    'OR neuron (1, 1, −0.5)': 'OR 神经元 (1, 1, −0.5)',
+    '{n} / 4 correct': '答对 {n} / 4',
+    ' · loss (cross-entropy) ': ' · 损失（交叉熵）',
+    'background: how sure the neuron is of 1 (stronger = surer)': '背景：神经元有多确定是 1（颜色越深越确定）',
+    'target 1': '目标值 1',
+    'target 0': '目标值 0',
+    'a wrong answer': '答错的点',
+    'p = 0.5, the decision line': 'p = 0.5，决策线',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -108,15 +129,15 @@
 </script>
 
 <LabFrame
-  title="One neuron, four points"
-  hint="Drag on the board, or use the arrow keys, to slide the line. The sliders turn and sharpen it."
+  title={t('One neuron, four points')}
+  hint={t('Drag on the board, or use the arrow keys, to slide the line. The sliders turn and sharpen it.')}
   onreset={resetAll}
 >
   <div class="pic">
     <div class="boardwrap">
       <svg
         viewBox="0 0 100 100" class="board" use:readable role="slider" tabindex="0" aria-valuenow={b} aria-valuetext={`b ${b.toFixed(1)}`}
-        aria-label="Decision board: drag or use the arrow keys to move the boundary"
+        aria-label={t('Decision board: drag or use the arrow keys to move the boundary')}
         onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onkeydown={key}
       >
         {#each grid as row, r}
@@ -141,7 +162,7 @@
       <p class="formula">p = sigmoid(k · (w1·x1 + w2·x2 + b))</p>
       <div class="scroll">
         <table>
-          <thead><tr><th>x1, x2</th><th>target</th><th>z = k·(…)</th><th>p</th><th>says</th></tr></thead>
+          <thead><tr><th>x1, x2</th><th>{t('target')}</th><th>z = k·(…)</th><th>p</th><th>{t('says')}</th></tr></thead>
           <tbody>
             {#each rows as r}
               <tr class:miss={r.guess !== r.y}>
@@ -155,8 +176,8 @@
   </div>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="Data">
-      <span class="seg-l">Data</span>
+    <div class="seg" role="group" aria-label={t('Data')}>
+      <span class="seg-l">{t('Data')}</span>
       {#each Object.keys(SETS) as name}
         <button class="lab-btn seg" class:on={set === name} aria-pressed={set === name} onclick={() => (set = name as typeof set)}>{name}</button>
       {/each}
@@ -165,22 +186,22 @@
       <label>w1 <input type="range" min="-4" max="4" step="0.1" bind:value={w1} /> <b>{w1.toFixed(1)}</b></label>
       <label>w2 <input type="range" min="-4" max="4" step="0.1" bind:value={w2} /> <b>{w2.toFixed(1)}</b></label>
       <label>b <input type="range" min="-6" max="6" step="0.1" bind:value={b} /> <b>{b.toFixed(1)}</b></label>
-      <label>steepness k <input type="range" min="0.5" max="10" step="0.5" bind:value={k} /> <b>{k.toFixed(1)}</b></label>
+      <label>{t('steepness k')} <input type="range" min="0.5" max="10" step="0.5" bind:value={k} /> <b>{k.toFixed(1)}</b></label>
     </div>
-    <button class="lab-btn" onclick={() => preset(1, 1, -1.5)}>AND neuron (1, 1, −1.5)</button>
-    <button class="lab-btn" onclick={() => preset(1, 1, -0.5)}>OR neuron (1, 1, −0.5)</button>
+    <button class="lab-btn" onclick={() => preset(1, 1, -1.5)}>{t('AND neuron (1, 1, −1.5)')}</button>
+    <button class="lab-btn" onclick={() => preset(1, 1, -0.5)}>{t('OR neuron (1, 1, −0.5)')}</button>
   {/snippet}
 
   {#snippet readout()}
-    <span class:good={correct === 4}>{correct} / 4 correct</span> · loss (cross-entropy) {loss.toFixed(4)}
+    <span class:good={correct === 4}>{t('{n} / 4 correct', { n: correct })}</span>{t(' · loss (cross-entropy) ')}{loss.toFixed(4)}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k-bg"></i>background: how sure the neuron is of 1 (stronger = surer)</span>
-    <span class="key"><i class="k-one"></i>target 1</span>
-    <span class="key"><i class="k-zero"></i>target 0</span>
-    <span class="key"><i class="k-miss"></i>a wrong answer</span>
-    <span class="key"><i class="k-edge"></i>p = 0.5, the decision line</span>
+    <span class="key"><i class="k-bg"></i>{t('background: how sure the neuron is of 1 (stronger = surer)')}</span>
+    <span class="key"><i class="k-one"></i>{t('target 1')}</span>
+    <span class="key"><i class="k-zero"></i>{t('target 0')}</span>
+    <span class="key"><i class="k-miss"></i>{t('a wrong answer')}</span>
+    <span class="key"><i class="k-edge"></i>{t('p = 0.5, the decision line')}</span>
   {/snippet}
 </LabFrame>
 

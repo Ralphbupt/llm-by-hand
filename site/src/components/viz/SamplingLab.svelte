@@ -7,9 +7,38 @@
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'mat': '垫子',
+    'sofa': '沙发',
+    'roof': '屋顶',
+    'moon': '月亮',
+    'Temperature changes the probabilities; sampling picks words with them': '温度改变概率；采样按这些概率挑词',
+    'Move the temperature, then sample words and compare the counts with the probabilities.': '调一调温度，然后采样一些词，把计数和概率比一比。',
+    'The cat sat on the': '那只猫坐在',
+    'Scores, probabilities and sampled fractions': '分数、概率和采样得到的比例',
+    'word': '词',
+    'score': '分数',
+    'probability': '概率',
+    'sampled': '采样',
+    'The probabilities appear once you answer the question below.': '回答下面的问题之后，概率才会显示出来。',
+    'Sample 1 word': '采样 1 个词',
+    'Sample 100': '采样 100 个',
+    'Sample 1000': '采样 1000 个',
+    'Clear counts': '清空计数',
+    'temperature T =': '温度 T =',
+    'Temperature presets': '常用温度',
+    '{n} sample at T = {T}. Last word drawn:': 'T = {T} 时采样了 {n} 次。最后抽到的词：',
+    '{n} samples at T = {T}. Last word drawn:': 'T = {T} 时采样了 {n} 次。最后抽到的词：',
+    'No samples yet. Changing T clears the counts.': '还没有采样。改变 T 会清空计数。',
+    'fraction of the samples so far': '目前为止采样结果中的比例',
+    'the word drawn last': '最后抽到的词',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -58,18 +87,18 @@
 </script>
 
 <LabFrame
-  title="Temperature changes the probabilities; sampling picks words with them"
-  hint="Move the temperature, then sample words and compare the counts with the probabilities."
+  title={t('Temperature changes the probabilities; sampling picks words with them')}
+  hint={t('Move the temperature, then sample words and compare the counts with the probabilities.')}
   onreset={() => setT(1)}
   resetDisabled={T === 1 && total === 0}
 >
-  <p class="ctx">The cat sat on the <b class:blank={last === null}>{last === null ? '___' : WORDS[last]}</b></p>
+  <p class="ctx">{t('The cat sat on the')} <b class:blank={last === null}>{last === null ? '___' : t(WORDS[last])}</b>{lang === 'zh' ? ' 上' : ''}</p>
 
-  <div class="table" role="table" aria-label="Scores, probabilities and sampled fractions">
-    <div class="tr th" role="row"><span role="columnheader">word</span><span role="columnheader" class="r">score</span><span role="columnheader" class="r">score / T</span><span role="columnheader">probability</span><span role="columnheader" class="r">sampled</span></div>
+  <div class="table" role="table" aria-label={t('Scores, probabilities and sampled fractions')}>
+    <div class="tr th" role="row"><span role="columnheader">{t('word')}</span><span role="columnheader" class="r">{t('score')}</span><span role="columnheader" class="r">{t('score')} / T</span><span role="columnheader">{t('probability')}</span><span role="columnheader" class="r">{t('sampled')}</span></div>
     {#each WORDS as w, i}
       <div class="tr" class:hit={last === i} role="row">
-        <span class="w" role="cell">{w}</span>
+        <span class="w" role="cell">{t(w)}</span>
         <span class="num" role="cell">{SCORES[i].toFixed(1)}</span>
         <span class="num" role="cell">{(SCORES[i] / T).toFixed(2)}</span>
         <span class="bar" role="cell">
@@ -81,20 +110,20 @@
       </div>
     {/each}
   </div>
-  {#if locked('prob')}<p class="note">The probabilities appear once you answer the question below.</p>{/if}
+  {#if locked('prob')}<p class="note">{t('The probabilities appear once you answer the question below.')}</p>{/if}
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => sample(1)}>Sample 1 word</button>
-    <button class="lab-btn" onclick={() => sample(100)}>Sample 100</button>
-    <button class="lab-btn" onclick={() => sample(1000)}>Sample 1000</button>
-    <button class="lab-btn" onclick={clear} disabled={total === 0}>Clear counts</button>
+    <button class="lab-btn primary" onclick={() => sample(1)}>{t('Sample 1 word')}</button>
+    <button class="lab-btn" onclick={() => sample(100)}>{t('Sample 100')}</button>
+    <button class="lab-btn" onclick={() => sample(1000)}>{t('Sample 1000')}</button>
+    <button class="lab-btn" onclick={clear} disabled={total === 0}>{t('Clear counts')}</button>
     <div class="temp">
       <label class="knob">
-        <span>temperature T = <b>{T.toFixed(2)}</b></span>
+        <span>{t('temperature T =')} <b>{T.toFixed(2)}</b></span>
         <input type="range" min="0.1" max="3" step="0.05" value={T}
           oninput={(e) => setT(+(e.currentTarget as HTMLInputElement).value)} />
       </label>
-      <span class="presets" role="group" aria-label="Temperature presets">
+      <span class="presets" role="group" aria-label={t('Temperature presets')}>
         {#each [0.1, 0.5, 1, 2, 3] as v}
           <button class="lab-btn seg" class:on={T === v} aria-pressed={T === v} onclick={() => setT(v)}>T = {v}</button>
         {/each}
@@ -103,14 +132,14 @@
   {/snippet}
 
   {#snippet readout()}
-    {#if total}{total} sample{total === 1 ? '' : 's'} at T = {T.toFixed(2)}. Last word drawn: <b>{WORDS[last ?? 0]}</b>.
-    {:else}<span class="idle">No samples yet. Changing T clears the counts.</span>{/if}
+    {#if total}{t(total === 1 ? '{n} sample at T = {T}. Last word drawn:' : '{n} samples at T = {T}. Last word drawn:', { n: total, T: T.toFixed(2) })} <b>{t(WORDS[last ?? 0])}</b>{lang === 'zh' ? '。' : '.'}
+    {:else}<span class="idle">{t('No samples yet. Changing T clears the counts.')}</span>{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="key p"></i>probability</span>
-    <span><i class="key s"></i>fraction of the samples so far</span>
-    <span><i class="key hit"></i>the word drawn last</span>
+    <span><i class="key p"></i>{t('probability')}</span>
+    <span><i class="key s"></i>{t('fraction of the samples so far')}</span>
+    <span><i class="key hit"></i>{t('the word drawn last')}</span>
   {/snippet}
 </LabFrame>
 

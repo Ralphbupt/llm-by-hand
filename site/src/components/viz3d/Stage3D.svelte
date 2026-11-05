@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useT } from '@lib/i18nSvelte'
+  const t = useT()
   /**
    * The frame every 3D view sits in: the WebGL view (focusable, with HTML labels), and one line under it with the
    * input hint and the Reset view button (and Done on touch while the view holds one-finger drags).
@@ -38,11 +40,11 @@
     }
   })
 
-  const hint = $derived(
+  const hint = $derived(t(
     st.focused ? 'Arrow keys turn · + − zoom · 0 resets'
     : st.coarse ? (st.active ? 'One finger turns · Done to scroll' : 'Tap, then drag to turn · two fingers zoom')
     : st.active ? 'Scroll to zoom · Esc to release' : 'Drag to turn · click, then scroll to zoom',
-  )
+  ))
 </script>
 
 {#if ok}
@@ -54,9 +56,9 @@
     <div class="stage3d-bar">
       <span class="stage3d-hint" id={hintId} class:on={st.active}>{hint}</span>
       {#if st.active && st.coarse}
-        <button type="button" class="stage3d-btn" onclick={() => stage?.setActive(false)}>Done</button>
+        <button type="button" class="stage3d-btn" onclick={() => stage?.setActive(false)}>{t('Done')}</button>
       {/if}
-      <button type="button" class="stage3d-btn" onclick={() => stage?.resetView()}>Reset view</button>
+      <button type="button" class="stage3d-btn" onclick={() => stage?.resetView()}>{t('Reset view')}</button>
     </div>
   </div>
 {:else}
@@ -64,7 +66,7 @@
     {#if fallback}
       {@render fallback()}
     {:else}
-      <p><b>3D view not available.</b> This browser can't draw WebGL (it may be disabled). The view shows: {ariaLabel}.</p>
+      <p><b>{t('3D view not available.')}</b> {t("This browser can't draw WebGL (it may be disabled). The view shows: {what}.", { what: ariaLabel })}</p>
     {/if}
   </div>
 {/if}

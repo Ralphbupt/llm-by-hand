@@ -8,9 +8,39 @@
   import LabFrame from './LabFrame.svelte'
   import { has, subscribe } from '@lib/progress'
   import { greedyWithPenalty, repeatLength, followsRules, type Trigram } from '@lib/generation'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // the "score after penalty" column stays "?" until that question is solved
-  let { hide }: { hide?: string } = $props()
+  let { hide, lang = 'en' }: { hide?: string; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Why greedy writing loops, and how a penalty breaks the loop': '贪心为什么会写成循环，惩罚又怎样打破循环',
+    'Raise the repetition penalty and watch the loop break. Tap a word to see the scores that chose it.': '调高重复惩罚，看循环被打破。点一个词，看看是哪些分数选中了它。',
+    'Could not load the model data. Reload the page to try again.': '无法加载模型数据。请刷新页面重试。',
+    'Loading the counting model…': '正在加载计数模型…',
+    'generated text': '生成的文本',
+    'from here the same {n} words come again': '从这里开始，同样的 {n} 个词又来了一遍',
+    '↻ repeats every {n} words': '↻ 每 {n} 个词重复一次',
+    'no loop in these 14 words': '这 14 个词里没有循环',
+    'Every word fits the sentence rules.': '每个词都符合句子规则。',
+    'Some words break the sentence rules.': '有些词不符合句子规则。',
+    'Step {k}: after “': '第 {k} 步：在“',
+    '”, the 4 best scores': '”之后，最好的 4 个分数',
+    'word': '词',
+    'times written': '写过的次数',
+    'times': '次数',
+    '− penalty × times': '− 惩罚 × 次数',
+    '− penalty': '− 惩罚',
+    'score': '分数',
+    'repetition penalty': '重复惩罚',
+    'Greedy repeats a {n}-word loop': '贪心在重复一个 {n} 个词的循环',
+    'No loop': '没有循环',
+    '{a} at penalty {p} · model: last two words → next word, counted from {w} rule-made words': '{a}，惩罚为 {p} · 模型：最后两个词 → 下一个词，从按规则写出的 {w} 个词里统计而来',
+    ' · scores of penalized words show “?” until you answer the question below': ' · 被惩罚的词的分数显示为“?”，等你回答了下面的问题才会显示',
+    'the word being inspected': '正在查看的词',
+    'words inside the loop': '循环里的词',
+  })
   let solved = $state(false)
   let model = $state<Trigram | null>(null)
   let failed = $state(false)
@@ -38,33 +68,33 @@
 </script>
 
 <LabFrame
-  title="Why greedy writing loops, and how a penalty breaks the loop"
-  hint="Raise the repetition penalty and watch the loop break. Tap a word to see the scores that chose it."
+  title={t('Why greedy writing loops, and how a penalty breaks the loop')}
+  hint={t('Raise the repetition penalty and watch the loop break. Tap a word to see the scores that chose it.')}
   onreset={() => { penalty = 0; at = 7 }}
   resetDisabled={penalty === 0 && at === 7}
 >
   {#if failed}
-    <p class="dim">Could not load the model data. Reload the page to try again.</p>
+    <p class="dim">{t('Could not load the model data. Reload the page to try again.')}</p>
   {:else if !run}
     <div class="skeleton" aria-hidden="true"></div>
-    <p class="dim">Loading the counting model…</p>
+    <p class="dim">{t('Loading the counting model…')}</p>
   {:else}
-    <p class="text" aria-label="generated text">
+    <p class="text" aria-label={t('generated text')}>
       {#each words as w, i}
-        {#if loop > 0 && i === loop}<span class="loopmark" title={`from here the same ${loop} words come again`}>↻</span>{/if}
+        {#if loop > 0 && i === loop}<span class="loopmark" title={t('from here the same {n} words come again', { n: loop })}>↻</span>{/if}
         <button type="button" class="tok" class:inspect={i === at + 1} class:loop={loop > 0 && i >= loop} aria-pressed={i === at + 1} onclick={() => i > 0 && (at = i - 1)}>{w}</button>
       {/each}
     </p>
     <p class="status">
-      {#if loop}<span class="pill warn">↻ repeats every {loop} words</span>{:else}<span class="pill ok">no loop in these 14 words</span>{/if}
-      <span class="dim">{valid ? 'Every word fits the sentence rules.' : 'Some words break the sentence rules.'}</span>
+      {#if loop}<span class="pill warn">{t('↻ repeats every {n} words', { n: loop })}</span>{:else}<span class="pill ok">{t('no loop in these 14 words')}</span>{/if}
+      <span class="dim">{valid ? t('Every word fits the sentence rules.') : t('Some words break the sentence rules.')}</span>
     </p>
 
     {#if step}
       <div class="step">
-        <div class="ctxline">Step {at + 1}: after “<b>{step.context[0]} {step.context[1]}</b>”, the 4 best scores</div>
+        <div class="ctxline">{t('Step {k}: after “', { k: at + 1 })}<b>{step.context[0]} {step.context[1]}</b>{t('”, the 4 best scores')}</div>
         <div class="table" role="table">
-          <div class="tr th" role="row"><span>word</span><span>log p</span><span><span class="long">times written</span><span class="short">times</span></span><span><span class="long">− penalty × times</span><span class="short">− penalty</span></span><span>score</span><span class="barcol"></span></div>
+          <div class="tr th" role="row"><span>{t('word')}</span><span>log p</span><span><span class="long">{t('times written')}</span><span class="short">{t('times')}</span></span><span><span class="long">{t('− penalty × times')}</span><span class="short">{t('− penalty')}</span></span><span>{t('score')}</span><span class="barcol"></span></div>
           {#each top as s}
             <div class="tr" class:pick={s.word === step.pick} role="row">
               <span class="w">{s.word}{s.word === step.pick ? ' ←' : ''}</span>
@@ -81,21 +111,21 @@
   {/if}
 
   {#snippet controls()}
-    <label class="knob">repetition penalty <b>{penalty.toFixed(1)}</b>
+    <label class="knob">{t('repetition penalty')} <b>{penalty.toFixed(1)}</b>
       <input type="range" min="0" max="3" step="0.1" value={penalty} oninput={(e) => (penalty = +e.currentTarget.value)} />
     </label>
   {/snippet}
 
   {#snippet readout()}
     {#if run}
-      {loop ? `Greedy repeats a ${loop}-word loop` : 'No loop'} at penalty {penalty.toFixed(1)} · model: last two words → next word, counted from {model?.n_words.toLocaleString()} rule-made words
-      {#if masked && penalty > 0}<span class="idle"> · scores of penalized words show “?” until you answer the question below</span>{/if}
+      {t('{a} at penalty {p} · model: last two words → next word, counted from {w} rule-made words', { a: loop ? t('Greedy repeats a {n}-word loop', { n: loop }) : t('No loop'), p: penalty.toFixed(1), w: model?.n_words.toLocaleString() ?? '' })}
+      {#if masked && penalty > 0}<span class="idle">{t(' · scores of penalized words show “?” until you answer the question below')}</span>{/if}
     {:else}…{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="sw" style="background: var(--accent)"></i>the word being inspected</span>
-    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--warn) 30%, var(--bg)); border: 1px solid var(--warn)"></i>words inside the loop</span>
+    <span class="lg"><i class="sw" style="background: var(--accent)"></i>{t('the word being inspected')}</span>
+    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--warn) 30%, var(--bg)); border: 1px solid var(--warn)"></i>{t('words inside the loop')}</span>
   {/snippet}
 </LabFrame>
 

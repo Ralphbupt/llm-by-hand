@@ -1,0 +1,177 @@
+---
+recap:
+  can:
+    - "构造因果掩码和填充掩码，并说出它们挡住了权重表的哪些格子。"
+    - "把 `d_model` 拆给几个头，并说出每个头的输出在 concat 里的位置。"
+    - "用 NumPy 写出一个带掩码的注意力头，从 X 一直到输出。"
+  keys:
+    - "True = 挡住；被挡住的分数在 softmax 之前变成 −∞，而 e^−∞ = 0"
+    - "因果掩码，形状 `(L, L)`：对一张全是 True 的表做 `np.triu(…, k=1)`"
+    - "用 `np.where(mask, -np.inf, scores)` 加上掩码"
+    - "$d_k = d_\\text{model} / h$：各个头平分宽度"
+    - "concat 是 `(L, d_model)`，头 0 在最前；`W_O` 把各个头混合起来"
+  mistakes:
+    - "把被挡住的分数设成 0 而不是 −∞：e⁰ = 1，被挡住的词仍然会拿到权重。"
+    - "在 `np.triu` 里用 `k=0`：这样连对角线也挡住了，而一个词是可以看它自己的。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import MaskLab from '@viz/MaskLab.astro'
+import MultiHeadLab from '@viz/MultiHeadLab.astro'
+
+在第 14 关，每个词都看每个词，只用一组 `W_Q`、`W_K` 和 `W_V`。GPT 还需要两样东西：
+
+1. **掩码**（mask），让一个词可以被禁止看某些词：它后面的词，或者填充。
+2. **好几个头**，让模型可以同时用好几种方式去看。
+
+这一关把两样都加上，最后由你写出 GPT 的一个注意力头。
+
+## 1. 掩码：谁不许看
+
+有两种情况，需要把权重表里的一些格子强制设为零。
+
+- **不许往后看。** 模型一次写一个词时，词 3 不能用词 4：词 4 正是它要
+  预测的东西。**因果掩码**（causal mask）挡住对角线上方的每一格。
+- **不许看填充。** 一个批里的句子长短不一，所以短句会用 PAD token 补齐，
+  直到长度都一样。谁都不应该看这些 token。**填充掩码**（padding mask）挡住它们所在的列。
+
+掩码是一张 True/False 的表，**True = 挡住**。被挡住的分数在 softmax 之前变成 −∞，而 e^−∞ = 0。
+两个掩码用 OR 合并：只要有一个掩码挡住某一格，这一格就被挡住。
+
+<Predict id="fill-zero" />
+
+<Gate requires="fill-zero">
+
+<MaskLab />
+
+<TryIt>
+
+在掩码实验台里取消勾选“因果”，点最后两个词，把它们变成填充。现在哪些列空了？
+再把“因果”打开。不管你填充哪些词，哪一行总是正好只有一个开着的格子？
+
+</TryIt>
+
+<Blank id="mask-shape" />
+
+<Stuck q="为什么因果掩码是一张 6×6 的表，而不只是 6 个数？">
+
+因为它是加在*权重*上的掩码，而权重表每个去看的词占一行，每个被看的词
+占一列。对因果掩码来说，“词 i 能不能看词 j”同时取决于 i 和 j，所以需要一整张 6×6 的表。
+
+填充掩码确实只要 6 个数，每列一个：PAD token 对所有人都是挡住的。
+所以它存成一行，形状 (1, 6)，用的时候再往下复制到每一行。
+
+表的大小来自看自己的那个序列：6 个 token 看同样这 6 个 token。支线 [N7](/learn/encoder-decoder/) 里有两个
+序列的模型（源序列和目标序列，长度不同）。它的第 5 节说明了每种注意力用哪个掩码，以及哪个长度决定掩码的大小。
+
+</Stuck>
+
+<Blank id="open-cells" />
+
+</Gate>
+
+<Gate requires="open-cells">
+
+### 整个批用一个掩码
+
+一个批里有好几个句子，每个句子有自己的填充。它的分数形状是 (B, L, L)。
+
+<Stuck q="(B, 1, L) 里的 B 是什么？">
+
+B 是批大小：一起处理多少个句子。每个句子有自己的填充方式，
+所以填充掩码是 (B, L)，每个句子一行。分数是 (B, L, L)。为了让形状对得上，掩码在
+中间加一个 1，变成 (B, 1, L)，NumPy 再把这一行复制到所有 L 个查询行。这种复制叫作广播。
+
+</Stuck>
+
+<Blank id="pad-broadcast" />
+
+在实验台里，PAD 行仍然把自己的权重分给真实的词。这没关系：PAD token 的输出从来不会被用到，
+损失也会跳过它。掩码只需要挡住真实的词去**看** PAD。
+
+掩码要用到两个 NumPy 函数。`np.where(mask, a, b)` 在 mask 为 True 的地方取 a，其余地方取 b：
+
+```python
+blocked = np.array([True, False, False])
+np.where(blocked, -np.inf, np.array([0.34, 0.05, 0.9]))   # [-inf, 0.05, 0.9]
+```
+
+要构造因果掩码，还要一个函数。`np.triu(M, k)`（“triangle, upper”，上三角）保留 M 在第 k 条对角线上及其上方的元素，
+其余的设为 0（或 False）。k = 0 是主对角线，k = 1 从它上面一格开始：
+
+```python
+np.triu(np.ones((3, 3), dtype=int), k=0)    # [[1, 1, 1],
+                                            #  [0, 1, 1],
+                                            #  [0, 0, 1]]
+```
+
+<CodeBlank id="causal-mask" />
+
+</Gate>
+
+## 2. 多个头
+
+一组 `W_Q` 和 `W_K` 给出一种看法：一张分数表。可是词和词之间同时有好几种关系。
+**多头注意力**（multi-head attention）并排运行几个注意力，每个用这些数中单独的一片，最后再把它们混合起来。
+
+这里 `d_model` = 4，有 2 个头，所以每个头分到 `d_k` = 2 列。头和其他东西一样，从 0 开始编号。
+每个头给每个词输出 2 个数，各个头的输出并排放进一张表，叫作 **concat**（拼接），
+头 0 在最前面。
+
+拆分不会增加参数。`W_Q`、`W_K` 和 `W_V` 仍然是 (`d_model`, `d_model`)：各个头分用它们的列，
+而不是每个头都拿一份完整的副本，所以 8 个头的开销和 1 个大头一样。
+
+<Gate requires="causal-mask">
+
+<Blank id="concat-shape" />
+
+<Blank id="head2-col" />
+
+<Gate requires="head2-col">
+
+现在在实验台里选一个头，跟着看它的那几列。
+
+<MultiHeadLab />
+
+头 0 用 Q、K、V 的第 0 列和第 1 列，这里正好就是第 14 关（第 2 节）的 cat、dog、car，所以它给出同样的权重。
+头 1 用第 2 列和第 3 列，而且因为它的键交换过，得到的是另一种模式。最后只有一个输出：进去 2 个头，
+经过 `W_O` 之后，出来 1 个输出。
+
+</Gate>
+
+<Stuck q="头 0 只看到每个词的一半吗？">
+
+不是。每个头都用到每个词的全部 `d_model` 个数：Q = X @ `W_Q` 把每个输入数都混进 Q 的每一列。
+拆分发生在 Q、K、V 上，而不是 X 上。在这个实验台里 `W_Q` 是单位矩阵，所以 Q 的列碰巧就是
+X 的列。在训练好的模型里，Q 的第 0 列是这个词全部四个数的混合。
+
+</Stuck>
+
+<Deeper title="`W_O` 做什么">
+
+各个头运行完后，它们的输出并排放着：concat 是 (3, 4)。没有 `W_O` 的话，头 0 的结果会一直待在
+第 0–1 列，头 1 的待在第 2–3 列，永远是分开的。`W_O` 是一个 (4, 4) 的矩阵。输出的第 j 列是
+concat 全部四列的混合，所以每个输出数都能用上两个头。`W_O` 的第 0–1 行是头 0 那些数的权重，
+第 2–3 行是头 1 的。
+
+</Deeper>
+
+<Blank id="dk-512" />
+
+</Gate>
+
+## 3. 全部合在一起
+
+现在你已经知道每个部分了：三个投影、分数、缩放、掩码、softmax、加权平均。
+下面把它们写成一个带因果掩码的函数。这就是 GPT 的一个注意力头。
+
+<Gate requires="dk-512">
+
+<CodeBlank id="masked-attention" />
+
+</Gate>

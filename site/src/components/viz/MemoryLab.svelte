@@ -6,10 +6,31 @@
   import { onMount } from 'svelte'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   type Kind = 'rnn' | 'lstm0' | 'lstm'
-  let { kinds = ['rnn'] }: { kinds?: Kind[] } = $props()
-  const NAME: Record<Kind, string> = { rnn: 'RNN', lstm0: 'LSTM, every bias starts at 0', lstm: 'LSTM, forget bias starts at 2' }
+  let { kinds = ['rnn'], lang = 'en' }: { kinds?: Kind[]; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'LSTM, every bias starts at 0': 'LSTM，所有偏置从 0 开始',
+    'LSTM, forget bias starts at 2': 'LSTM，遗忘门偏置从 2 开始',
+    'Remember the first symbol: real training runs': '记住第一个符号：真实的训练过程',
+    'Pick a sequence length k. Try k = 40 and k = 80 to see where the networks start to differ.': '选一个序列长度 k。试试 k = 40 和 k = 80，看网络从哪里开始拉开差距。',
+    'Pick a sequence length k. Try the longer ones.': '选一个序列长度 k。试试更长的。',
+    'Could not load the runs: {e}': '无法加载训练记录：{e}',
+    'accuracy during training for k = {k}': 'k = {k} 时训练过程中的准确率',
+    'accuracy on new sequences, k = {k}': '在新序列上的准确率，k = {k}',
+    guessing: '瞎猜',
+    'training step 0': '训练第 0 步',
+    'step {n}': '第 {n} 步',
+    'Loading runs…': '正在加载训练记录…',
+    'Sequence length k': '序列长度 k',
+    'sequence length k': '序列长度 k',
+    'after {n} steps': '训练 {n} 步后',
+    '1,500 steps of 64 sequences, a 32-number hidden state, accuracy on 1,000 new sequences': '1,500 步，每步 64 个序列，隐藏状态 32 个数，在 1,000 个新序列上测准确率',
+  })
+  const NAME: Record<Kind, string> = { rnn: 'RNN', lstm0: tx('LSTM, every bias starts at 0'), lstm: tx('LSTM, forget bias starts at 2') }
   const SHORT: Record<Kind, string> = { rnn: 'RNN', lstm0: 'LSTM b=0', lstm: 'LSTM f=2' }
   const COLOR: Record<Kind, string> = { rnn: 'var(--cat-3)', lstm0: 'var(--cat-5)', lstm: 'var(--cat-1)' }
 
@@ -38,34 +59,34 @@
 </script>
 
 <LabFrame
-  title="Remember the first symbol: real training runs"
-  hint={kinds.length > 1 ? 'Pick a sequence length k. Try k = 40 and k = 80 to see where the networks start to differ.' : 'Pick a sequence length k. Try the longer ones.'}
+  title={tx('Remember the first symbol: real training runs')}
+  hint={kinds.length > 1 ? tx('Pick a sequence length k. Try k = 40 and k = 80 to see where the networks start to differ.') : tx('Pick a sequence length k. Try the longer ones.')}
 >
-  {#if error}<p class="bad">Could not load the runs: {error}</p>{/if}
+  {#if error}<p class="bad">{tx('Could not load the runs: {e}', { e: error })}</p>{/if}
   {#if data}
     {@const ys = endYs(kinds, data, k)}
-    <svg use:readable viewBox="0 0 {W} {H}" class="chart" role="img" aria-label="accuracy during training for k = {k}">
-      <text x={L} y="13" class="t">accuracy on new sequences, k = {k}</text>
+    <svg use:readable viewBox="0 0 {W} {H}" class="chart" role="img" aria-label={tx('accuracy during training for k = {k}', { k })}>
+      <text x={L} y="13" class="t">{tx('accuracy on new sequences, k = {k}', { k })}</text>
       {#each [0.5, 0.75, 1] as a}
         <line x1={L} x2={W - R} y1={py(a)} y2={py(a)} class="grid" class:chance={a === 0.5} />
         <text x={L - 4} y={py(a) + 4} class="t" text-anchor="end">{a * 100}%</text>
       {/each}
-      <text x={L + 4} y={py(0.5) - 4} class="t">guessing</text>
-      <text x={L} y={H - 6} class="t">training step 0</text>
-      <text x={W - R} y={H - 5} class="t" text-anchor="end">step {data.steps}</text>
+      <text x={L + 4} y={py(0.5) - 4} class="t">{tx('guessing')}</text>
+      <text x={L} y={H - 6} class="t">{tx('training step 0')}</text>
+      <text x={W - R} y={H - 5} class="t" text-anchor="end">{tx('step {n}', { n: data.steps })}</text>
       {#each kinds as kind}
         <path d={path(data[kind][String(k)])} style="stroke:{COLOR[kind]};{kinds.length > 1 ? STYLE[kind] : 'stroke-width:2.5'}" class="line" />
         <text x={W - R + 4} y={ys[kind]} class="end" style="fill:{COLOR[kind]}">{SHORT[kind]}</text>
       {/each}
     </svg>
   {:else if !error}
-    <p class="dim">Loading runs…</p>
+    <p class="dim">{tx('Loading runs…')}</p>
   {/if}
 
   {#snippet controls()}
     {#if data}
-      <div class="ks" role="group" aria-label="Sequence length k">
-        <span class="dim">sequence length k</span>
+      <div class="ks" role="group" aria-label={tx('Sequence length k')}>
+        <span class="dim">{tx('sequence length k')}</span>
         {#each data.ks as kk}<button class:on={k === kk} aria-pressed={k === kk} onclick={() => (k = kk)}>{kk}</button>{/each}
       </div>
     {/if}
@@ -73,13 +94,13 @@
 
   {#snippet readout()}
     {#if data}
-      k = {k}: {kinds.map((kind) => `${SHORT[kind]} ${(data![kind][String(k)].at(-1)! * 100).toFixed(1)}%`).join(' · ')} after {data.steps} steps
+      k = {k}: {kinds.map((kind) => `${SHORT[kind]} ${(data![kind][String(k)].at(-1)! * 100).toFixed(1)}%`).join(' · ')} {tx('after {n} steps', { n: data.steps })}
     {:else}…{/if}
   {/snippet}
 
   {#snippet legend()}
     {#each kinds as kind}<span><i style="background:{COLOR[kind]}"></i>{NAME[kind]}</span>{/each}
-    <span>1,500 steps of 64 sequences, a 32-number hidden state, accuracy on 1,000 new sequences</span>
+    <span>{tx('1,500 steps of 64 sequences, a 32-number hidden state, accuracy on 1,000 new sequences')}</span>
   {/snippet}
 </LabFrame>
 

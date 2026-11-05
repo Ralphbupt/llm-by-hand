@@ -6,6 +6,27 @@
   import { gradThroughTime, rnnScalar } from '@lib/classic'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'How much does step 1 still matter at step t?': '到第 t 步时，第 1 步还有多重要？',
+    'Drag w_h and switch the activation. The line is the gradient d h_t / d h_1 over 30 steps.': '拖动 w_h，切换激活函数。这条线是 30 步里的梯度 d h_t / d h_1。',
+    'size of d h_t / d h_1 against t, log scale': 'd h_t / d h_1 的大小随 t 的变化，对数刻度',
+    vanishing: '消失',
+    exploding: '爆炸',
+    'd h_t / d h_1 (log scale)': 'd h_t / d h_1（对数刻度）',
+    Activation: '激活函数',
+    'no activation': '无激活函数',
+    'at t = 30, d h_30 / d h_1 =': 't = 30 时，d h_30 / d h_1 =',
+    ': the first input has almost no say, so training does not see that it matters': '：第一个输入几乎没有影响，所以训练看不出它重要',
+    ': tiny changes early grow very large, so training jumps around': '：前面的微小变化会变得非常大，所以训练会乱跳',
+    ': the signal survives': '：信号保留下来了',
+    'input 1 at step 1, then 0; w_x = 1, b = 0': '第 1 步输入 1，之后是 0；w_x = 1，b = 0',
+    'each step multiplies by w_h × (slope of the activation); tanh’s slope is at most 1': '每一步乘上 w_h ×（激活函数的斜率）；tanh 的斜率最大是 1',
+    'vanishing or exploding': '消失或爆炸',
+  })
 
   const T = 30
   let wh = $state(0.5)
@@ -32,18 +53,18 @@
 </script>
 
 <LabFrame
-  title="How much does step 1 still matter at step t?"
-  hint="Drag w_h and switch the activation. The line is the gradient d h_t / d h_1 over 30 steps."
+  title={tx('How much does step 1 still matter at step t?')}
+  hint={tx('Drag w_h and switch the activation. The line is the gradient d h_t / d h_1 over 30 steps.')}
   onreset={() => { wh = 0.5; act = 'tanh' }}
   resetDisabled={!changed}
 >
-  <svg use:readable viewBox="0 0 {W} {H}" class="chart" role="img" aria-label="size of d h_t / d h_1 against t, log scale">
+  <svg use:readable viewBox="0 0 {W} {H}" class="chart" role="img" aria-label={tx('size of d h_t / d h_1 against t, log scale')}>
     <!-- zones: below 1e-3 the early input is forgotten, above 1e3 it explodes -->
     <rect x={L} y={y(10 ** -3)} width={W - L - R} height={y(10 ** LO) - y(10 ** -3)} class="zone" />
     <rect x={L} y={y(10 ** HI)} width={W - L - R} height={y(10 ** 3) - y(10 ** HI)} class="zone" />
-    <text x={W - R - 4} y={y(10 ** -11)} class="zone-t" text-anchor="end">vanishing</text>
-    <text x={W - R - 4} y={y(10 ** 5)} class="zone-t" text-anchor="end">exploding</text><!-- en-ok: explod (the term) -->
-    <text x={L + 4} y={15} class="lab-t">d h_t / d h_1 (log scale)</text>
+    <text x={W - R - 4} y={y(10 ** -11)} class="zone-t" text-anchor="end">{tx('vanishing')}</text>
+    <text x={W - R - 4} y={y(10 ** 5)} class="zone-t" text-anchor="end">{tx('exploding')}</text><!-- en-ok: explod (the term) -->
+    <text x={L + 4} y={15} class="lab-t">{tx('d h_t / d h_1 (log scale)')}</text>
     {#each ticks as tk}
       <line x1={L} x2={W - R} y1={y(10 ** tk)} y2={y(10 ** tk)} class="grid" />
       <text x={L - 4} y={y(10 ** tk) + 3} class="lab-t" text-anchor="end">1e{tk}</text>
@@ -56,20 +77,20 @@
 
   {#snippet controls()}
     <label class="knob">w_h <b>{wh.toFixed(2)}</b> <input type="range" min="0.1" max="2" step="0.05" bind:value={wh} aria-label="w_h" /></label>
-    <span class="opts" role="radiogroup" aria-label="Activation">
+    <span class="opts" role="radiogroup" aria-label={tx('Activation')}>
       <label><input type="radio" bind:group={act} value="tanh" /> tanh</label>
-      <label><input type="radio" bind:group={act} value="none" /> no activation</label>
+      <label><input type="radio" bind:group={act} value="none" /> {tx('no activation')}</label>
     </span>
   {/snippet}
 
   {#snippet readout()}
-    at t = 30, d h_30 / d h_1 = <b>{fmt(last)}</b>{#if last < 1e-3}: the first input has almost no say, so training does not see that it matters{:else if last > 1e3}: tiny changes early grow very large, so training jumps around{:else}: the signal survives{/if}
+    {tx('at t = 30, d h_30 / d h_1 =')} <b>{fmt(last)}</b>{#if last < 1e-3}{tx(': the first input has almost no say, so training does not see that it matters')}{:else if last > 1e3}{tx(': tiny changes early grow very large, so training jumps around')}{:else}{tx(': the signal survives')}{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span>input 1 at step 1, then 0; w_x = 1, b = 0</span>
-    <span>each step multiplies by w_h × (slope of the activation); tanh’s slope is at most 1</span>
-    <span><i class="sw zone-sw"></i>vanishing or exploding</span><!-- en-ok: explod (the term) -->
+    <span>{tx('input 1 at step 1, then 0; w_x = 1, b = 0')}</span>
+    <span>{tx('each step multiplies by w_h × (slope of the activation); tanh’s slope is at most 1')}</span>
+    <span><i class="sw zone-sw"></i>{tx('vanishing or exploding')}</span><!-- en-ok: explod (the term) -->
   {/snippet}
 </LabFrame>
 

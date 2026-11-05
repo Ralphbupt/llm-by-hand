@@ -1,6 +1,21 @@
 <script lang="ts">
   /** Character tokenizer (level 12): type text → sorted vocabulary → ids → decoded back. */
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'A character tokenizer': '字符分词器',
+    'Type any text. Point at, tap or tab to a character to see every place it is used.': '随便输入一些文字。把鼠标指向一个字符、点一下或用 Tab 键选中它，就能看到它出现的每一处。',
+    Text: '文本',
+    'Type something to see its tokens.': '输入一些文字，看看它的 token。',
+    'Vocabulary: {n} distinct characters, sorted. The small number is the id.': '词表：{n} 个不同的字符，已排序。小数字是 id。',
+    'Encoded: {n} tokens, each character above its id.': '编码结果：{n} 个 token，每个字符下面是它的 id。',
+    'decoded': '解码',
+    'No text, no tokens.': '没有文本，就没有 token。',
+  })
 
   const START = 'hello'
   let text = $state(START)
@@ -13,16 +28,16 @@
 </script>
 
 <LabFrame
-  title="A character tokenizer"
-  hint="Type any text. Point at, tap or tab to a character to see every place it is used."
+  title={t('A character tokenizer')}
+  hint={t('Type any text. Point at, tap or tab to a character to see every place it is used.')}
   onreset={() => { text = START; hover = null }}
   resetDisabled={text === START}
 >
-  <label class="inp">Text <input bind:value={text} maxlength="60" spellcheck="false" autocomplete="off" /></label>
+  <label class="inp">{t('Text')} <input bind:value={text} maxlength="60" spellcheck="false" autocomplete="off" /></label>
   {#if text.length === 0}
-    <p class="empty">Type something to see its tokens.</p>
+    <p class="empty">{t('Type something to see its tokens.')}</p>
   {:else}
-    <p class="sec">Vocabulary: {chars.length} distinct characters, sorted. The small number is the id.</p>
+    <p class="sec">{t('Vocabulary: {n} distinct characters, sorted. The small number is the id.', { n: chars.length })}</p>
     <div class="chips">
       {#each chars as c, i}
         <button type="button" class="chip" class:on={hover === i} aria-pressed={hover === i}
@@ -30,7 +45,7 @@
           onfocus={() => (hover = i)} onblur={() => (hover = null)}><b>{show(c)}</b><small>{i}</small></button>
       {/each}
     </div>
-    <p class="sec">Encoded: {ids.length} tokens, each character above its id.</p>
+    <p class="sec">{t('Encoded: {n} tokens, each character above its id.', { n: ids.length })}</p>
     <div class="seq">
       {#each [...text] as c, j}
         <span class="cell" class:on={hover === ids[j]} onpointerenter={() => (hover = ids[j])} onpointerleave={() => (hover = null)}
@@ -41,9 +56,9 @@
 
   {#snippet readout()}
     {#if text.length}
-      ids [{ids.join(', ')}] → decoded “{ids.map((i) => chars[i]).join('')}”
+      ids [{ids.join(', ')}] → {t('decoded')} “{ids.map((i) => chars[i]).join('')}”
     {:else}
-      <span class="idle">No text, no tokens.</span>
+      <span class="idle">{t('No text, no tokens.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

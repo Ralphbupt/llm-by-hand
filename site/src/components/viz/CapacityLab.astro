@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './CapacityLab.svelte'
 interface Props { decay?: boolean }
 const { decay = false } = Astro.props
 ---
-<Lab client:visible decay={decay} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible decay={decay} />

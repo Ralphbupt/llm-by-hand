@@ -3,7 +3,10 @@ import mdx from '@astrojs/mdx'
 import svelte from '@astrojs/svelte'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import fs from 'node:fs'
+import GithubSlugger from 'github-slugger'
 import { SITE_URL } from './src/config/site.ts'
+import { headingIds } from './src/lib/search.ts'
 
 const here = (p) => new URL(p, import.meta.url).pathname
 
@@ -72,6 +75,47 @@ const wrapCodeComments = {
   },
 }
 
+// a Chinese lesson (lesson.zh.mdx) links to the Chinese pages: /learn/x/ → /zh/learn/x/ (pages with a Chinese version only)
+const ZH_PAGES = /^\/(learn|glossary|review|start|math|setup)\//
+function rehypeZhLinks() {
+  const walk = (node) => {
+    if (node.type === 'element' && node.tagName === 'a' && typeof node.properties?.href === 'string' && ZH_PAGES.test(node.properties.href))
+      node.properties.href = '/zh' + node.properties.href
+    for (const c of node.children ?? []) walk(c)
+  }
+  return (tree, file) => { if (/\.zh\.mdx$/.test(file.path ?? '')) walk(tree) }
+}
+
+// a translated lesson keeps the English heading ids, so /learn/x/#4-learning-rate-schedules finds its section in
+// every language: the n-th heading of lesson.zh.mdx gets the id of the n-th heading of lesson.en.mdx. Links inside the
+// page written with the translated heading's own slug (#2-整台机器) are pointed at the English id too.
+function rehypeEnglishHeadingIds() {
+  const text = (n) => (n.type === 'text' ? n.value : (n.children ?? []).map(text).join(''))
+  return (tree, file) => {
+    const p = file.path ?? ''
+    if (!/lesson\.zh\.mdx$/.test(p)) return
+    const en = headingIds(fs.readFileSync(p.replace(/lesson\.zh\.mdx$/, 'lesson.en.mdx'), 'utf8').replace(/^---\n[\s\S]*?\n---\n/, ''))
+    const heads = []
+    const walk = (n) => { if (n.type === 'element' && /^h[2-6]$/.test(n.tagName)) heads.push(n); for (const c of n.children ?? []) walk(c) }
+    walk(tree)
+    // same headings at every depth: map one to one; otherwise only the ## sections (check_zh.py keeps those equal)
+    const same = heads.length === en.length && heads.every((h, i) => Number(h.tagName[1]) === en[i].depth)
+    const pairs = same ? heads.map((h, i) => [h, en[i].id])
+      : heads.filter((h) => h.tagName === 'h2').map((h, i) => [h, en.filter((e) => e.depth === 2)[i]?.id])
+    const slugger = new GithubSlugger()
+    const own = new Map()
+    for (const h of heads) own.set(h, slugger.slug(text(h)))
+    const moved = new Map()
+    for (const [h, id] of pairs) if (id) { moved.set('#' + own.get(h), '#' + id); h.properties = { ...h.properties, id } }
+    const fix = (n) => {
+      const h = n.type === 'element' && n.tagName === 'a' && typeof n.properties?.href === 'string' ? decodeURIComponent(n.properties.href) : ''
+      if (moved.has(h)) n.properties.href = moved.get(h)
+      for (const c of n.children ?? []) fix(c)
+    }
+    fix(tree)
+  }
+}
+
 export default defineConfig({
   // the public origin (one place: src/config/site.ts); canonical URLs, the sitemap and llms.txt use it
   site: SITE_URL,
@@ -81,7 +125,7 @@ export default defineConfig({
   integrations: [mdx(), svelte()],
   markdown: {
     remarkPlugins: [remarkMath],
-    rehypePlugins: [rehypeKatex, rehypeNoWrapVectors, rehypeNoWrapShortCode],
+    rehypePlugins: [rehypeKatex, rehypeNoWrapVectors, rehypeNoWrapShortCode, rehypeZhLinks, rehypeEnglishHeadingIds],
     shikiConfig: { transformers: [wrapCodeComments] },
   },
   vite: {

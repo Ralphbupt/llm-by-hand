@@ -8,6 +8,35 @@
   import { maskedSoftmaxRows } from '@lib/num'
   import Heatmap from './Heatmap.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Masks decide which words each word may attend to': '掩码决定每个词可以注意哪些词',
+    'Tap a word to turn it into padding. Point at or tap a weight to see why it is blocked.': '点一个词，把它变成填充。指向或点一下某个权重，看它为什么被挡住。',
+    'padding mask (1, {L}): one row': '填充掩码 (1, {L})：一行',
+    '↓ copied down every row (broadcast)': '↓ 往下复制到每一行（广播）',
+    'causal mask ({L}, {L})': '因果掩码 ({L}, {L})',
+    'combined ({L}, {L})': '合并后 ({L}, {L})',
+    'weights (equal scores, blocked cells set to −∞ before softmax)': '权重（分数都相等，被挡住的格子在 softmax 之前设为 −∞）',
+    'In a batch the padding mask has shape (B, 1, {L}); the 1 is the query axis it gets copied along.': '在一个批里，填充掩码的形状是 (B, 1, {L})；那个 1 是查询轴，掩码沿着它被复制。',
+    'Tokens: tap one to turn it into padding': 'token：点一个，把它变成填充',
+    'the first token stays a word': '第一个 token 始终是词',
+    'tap to toggle PAD': '点一下切换 PAD',
+    'causal (no looking ahead)': '因果（不许往后看）',
+    '(row {i})': '（第 {i} 行）',
+    '(column {j}):': '（第 {j} 列）：',
+    'blocked': '挡住',
+    'allowed': '允许',
+    ', it is in the future': '，它在后面',
+    ', it is padding': '，它是填充',
+    '{open} of {n} cells are open.': '{n} 个格子里有 {open} 个是开着的。',
+    '1 = blocked: this score becomes −∞, its weight 0': '1 = 挡住：这个分数变成 −∞，权重为 0',
+    '0 = allowed': '0 = 允许',
+    '.': '。',
+  })
 
   const words = ['the', 'cat', 'sat', 'on', 'mat']
   const L = words.length
@@ -32,31 +61,31 @@
 </script>
 
 <LabFrame
-  title="Masks decide which words each word may attend to"
-  hint="Tap a word to turn it into padding. Point at or tap a weight to see why it is blocked."
+  title={tx('Masks decide which words each word may attend to')}
+  hint={tx('Tap a word to turn it into padding. Point at or tap a weight to see why it is blocked.')}
   onreset={() => { causal = true; pad = [...START_PAD]; cell = null }}
   resetDisabled={!changed}
 >
   <div class="stack">
   <div class="eq">
     <div class="term">
-      <div class="label">padding mask (1, {L}): one row</div>
+      <div class="label">{tx('padding mask (1, {L}): one row', { L })}</div>
       <table class="m"><tbody><tr>{#each padRow as b}<td class:b>{b ? 1 : 0}</td>{/each}</tr></tbody></table>
-      <div class="arrow">↓ copied down every row (broadcast)</div>
+      <div class="arrow">{tx('↓ copied down every row (broadcast)')}</div>
       <table class="m"><tbody>
         {#each Array(L) as _, i}<tr>{#each padRow as b, j}<td class:b class:hi={isHi(i, j)}>{b ? 1 : 0}</td>{/each}</tr>{/each}
       </tbody></table>
     </div>
     <div class="op">OR</div>
     <div class="term">
-      <div class="label">causal mask ({L}, {L})</div>
+      <div class="label">{tx('causal mask ({L}, {L})', { L })}</div>
       <table class="m"><tbody>
         {#each causalM as row, i}<tr>{#each row as b, j}<td class:b class:hi={isHi(i, j)}>{b ? 1 : 0}</td>{/each}</tr>{/each}
       </tbody></table>
     </div>
     <div class="op">=</div>
     <div class="term">
-      <div class="label">combined ({L}, {L})</div>
+      <div class="label">{tx('combined ({L}, {L})', { L })}</div>
       <table class="m" onpointerleave={() => (cell = null)}><thead><tr><th></th>{#each tokens as t}<th>{t}</th>{/each}</tr></thead><tbody>
         {#each combined as row, i}<tr><th>{tokens[i]}</th>{#each row as b, j}<td class="pick" class:b class:hi={isHi(i, j)} onpointerenter={() => (cell = { i, j })} onclick={() => (cell = { i, j })}>{b ? 1 : 0}</td>{/each}</tr>{/each}
       </tbody></table>
@@ -64,34 +93,34 @@
   </div>
 
   <div class="weights">
-    <Heatmap value={weights} label="weights (equal scores, blocked cells set to −∞ before softmax)" rowLabels={tokens} colLabels={tokens}
+    <Heatmap value={weights} label={tx('weights (equal scores, blocked cells set to −∞ before softmax)')} rowLabels={tokens} colLabels={tokens}
       hiRows={cell ? [cell.i] : []} hiCols={cell ? [cell.j] : []} onhover={(c) => (cell = c)} />
   </div>
-  <p class="cap">In a batch the padding mask has shape (B, 1, {L}); the 1 is the query axis it gets copied along.</p>
+  <p class="cap">{tx('In a batch the padding mask has shape (B, 1, {L}); the 1 is the query axis it gets copied along.', { L })}</p>
   </div>
 
   {#snippet controls()}
-    <span class="toks" role="group" aria-label="Tokens: tap one to turn it into padding">
+    <span class="toks" role="group" aria-label={tx('Tokens: tap one to turn it into padding')}>
       {#each tokens as t, j}
         <button type="button" class="lab-btn tok" class:pad={pad[j]} aria-pressed={pad[j]} onclick={() => toggle(j)} disabled={j === 0}
-          title={j === 0 ? 'the first token stays a word' : 'tap to toggle PAD'}>{t}</button>
+          title={j === 0 ? tx('the first token stays a word') : tx('tap to toggle PAD')}>{t}</button>
       {/each}
     </span>
-    <label class="sw"><input type="checkbox" bind:checked={causal} /> causal (no looking ahead)</label>
+    <label class="sw"><input type="checkbox" bind:checked={causal} /> {tx('causal (no looking ahead)')}</label>
   {/snippet}
 
   {#snippet readout()}
     {#if cell}
-      <b>{tokens[cell.i]}</b> (row {cell.i}) → <b>{tokens[cell.j]}</b> (column {cell.j}):
-      {combined[cell.i][cell.j] ? 'blocked' : 'allowed'}{causalM[cell.i][cell.j] ? ', it is in the future' : ''}{padRow[cell.j] ? ', it is padding' : ''}.
+      <b>{tokens[cell.i]}</b> {tx('(row {i})', { i: cell.i })} → <b>{tokens[cell.j]}</b> {tx('(column {j}):', { j: cell.j })}
+      {combined[cell.i][cell.j] ? tx('blocked') : tx('allowed')}{causalM[cell.i][cell.j] ? tx(', it is in the future') : ''}{padRow[cell.j] ? tx(', it is padding') : ''}{tx('.')}
     {:else}
-      {open} of {L * L} cells are open.
+      {tx('{open} of {n} cells are open.', { open, n: L * L })}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="b"></i>1 = blocked: this score becomes −∞, its weight 0</span>
-    <span class="key"><i></i>0 = allowed</span>
+    <span class="key"><i class="b"></i>{tx('1 = blocked: this score becomes −∞, its weight 0')}</span>
+    <span class="key"><i></i>{tx('0 = allowed')}</span>
   {/snippet}
 </LabFrame>
 

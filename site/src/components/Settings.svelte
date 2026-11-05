@@ -8,6 +8,10 @@
   import { getSettings, setSettings, type Motion, type Scale, type Theme } from '@lib/settings'
   import { exportAll, importAll, reset, revealNeedsConfirm, setReadingMode, setRevealNeedsConfirm } from '@lib/progress'
   import { analyticsEnabled, getConsent, setConsent } from '@lib/analytics'
+  import { translator, type Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  const t = translator(lang)
 
   let open = $state(false)
   let theme = $state<Theme>('auto')
@@ -66,7 +70,7 @@
     a.download = `llm-by-hand-progress-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
-    note = 'Saved a progress file. Open it with Import on another browser or computer.'
+    note = t('Saved a progress file. Open it with Import on another browser or computer.')
   }
   async function importFile(e: Event) {
     const f = (e.currentTarget as HTMLInputElement).files?.[0]
@@ -81,9 +85,9 @@
   async function copy() {
     try {
       await navigator.clipboard.writeText(text)
-      note = 'Copied. Paste it into Import on another browser or computer.'
+      note = t('Copied. Paste it into Import on another browser or computer.')
     } catch {
-      note = 'Select the text and copy it.'
+      note = t('Select the text and copy it.')
     }
   }
   function doImport() {
@@ -91,15 +95,15 @@
       const parsed = JSON.parse(text)
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error()
       importAll(text)
-      note = `Imported ${Object.keys(parsed).filter((k) => !k.startsWith('~')).length} answers.`
+      note = t('Imported {n} answers.', { n: Object.keys(parsed).filter((k) => !k.startsWith('~')).length })
       mode = 'none'
     } catch {
-      note = 'That doesn’t look like exported progress. Paste the whole text from Export.'
+      note = t('That doesn’t look like exported progress. Paste the whole text from Export.')
     }
   }
   function doReset() {
     reset()
-    note = 'Progress cleared.'
+    note = t('Progress cleared.')
     mode = 'none'
   }
 
@@ -108,76 +112,76 @@
 </script>
 
 <div class="settings">
-  <button bind:this={btn} class="gear" class:reading aria-label={reading ? 'Settings (reading mode is on)' : 'Settings'} aria-expanded={open} aria-haspopup="dialog" onclick={() => (open = !open)}>
+  <button bind:this={btn} class="gear" class:reading aria-label={t(reading ? 'Settings (reading mode is on)' : 'Settings')} aria-expanded={open} aria-haspopup="dialog" onclick={() => (open = !open)}>
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
       <path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" />
     </svg>
   </button>
 
   {#if open}
-    <div class="panel" role="dialog" aria-label="Settings" bind:this={panel}>
+    <div class="panel" role="dialog" aria-label={t('Settings')} bind:this={panel}>
       <div class="row">
-        <span class="k">Theme</span>
+        <span class="k">{t('Theme')}</span>
         <div class="seg">
           {#each themes as [v, l]}
-            <button class:on={theme === v} aria-pressed={theme === v} onclick={() => { theme = v; setSettings({ theme: v }) }}>{l}</button>
+            <button class:on={theme === v} aria-pressed={theme === v} onclick={() => { theme = v; setSettings({ theme: v }) }}>{t(l)}</button>
           {/each}
         </div>
       </div>
-      <p class="sub">Auto follows your system.</p>
+      <p class="sub">{t('Auto follows your system.')}</p>
 
       <div class="row">
-        <span class="k">Text size</span>
+        <span class="k">{t('Text size')}</span>
         <div class="seg">
           {#each scales as [v, l]}
-            <button class:on={scale === v} aria-pressed={scale === v} onclick={() => { scale = v; setSettings({ scale: v }) }}>{l}</button>
+            <button class:on={scale === v} aria-pressed={scale === v} onclick={() => { scale = v; setSettings({ scale: v }) }}>{t(l)}</button>
           {/each}
         </div>
       </div>
 
       <label class="check">
         <input type="checkbox" checked={motion === 'reduce'} onchange={(e) => { motion = e.currentTarget.checked ? 'reduce' : 'full'; setSettings({ motion }) }} />
-        Reduce motion
+        {t('Reduce motion')}
       </label>
       <label class="check">
         <input type="checkbox" checked={askReveal} onchange={(e) => { askReveal = e.currentTarget.checked; setRevealNeedsConfirm(askReveal) }} />
-        Ask before showing an answer
+        {t('Ask before showing an answer')}
       </label>
       <label class="check">
         <input type="checkbox" checked={reading} onchange={(e) => { reading = e.currentTarget.checked; setReadingMode(reading) }} />
-        Reading mode: open every part, no stars
+        {t('Reading mode: open every part, no stars')}
       </label>
-      <p class="sub">Your answers and stars stay as they are. Nothing new is saved while it is on.</p>
+      <p class="sub">{t('Your answers and stars stay as they are. Nothing new is saved while it is on.')}</p>
       {#if hasAnalytics}
         <label class="check">
           <input type="checkbox" checked={counting} onchange={(e) => { counting = e.currentTarget.checked; setConsent(counting ? 'granted' : 'denied') }} />
-          Share anonymous usage stats
+          {t('Share anonymous usage stats')}
         </label>
-        <p class="sub">Google Analytics, no ads. Nothing you type is sent.</p>
+        <p class="sub">{t('Google Analytics, no ads. Nothing you type is sent.')}</p>
       {/if}
 
       <div class="hr"></div>
       <div class="row">
-        <span class="k">Progress</span>
+        <span class="k">{t('Progress')}</span>
         <div class="acts">
-          <button class="act" onclick={startExport}>Export</button>
-          <button class="act" onclick={() => { mode = 'import'; text = ''; note = '' }}>Import</button>
-          <button class="act danger" onclick={() => { mode = 'reset'; note = '' }}>Reset…</button>
+          <button class="act" onclick={startExport}>{t('Export')}</button>
+          <button class="act" onclick={() => { mode = 'import'; text = ''; note = '' }}>{t('Import')}</button>
+          <button class="act danger" onclick={() => { mode = 'reset'; note = '' }}>{t('Reset…')}</button>
         </div>
       </div>
-      <p class="sub">Saved in this browser only.</p>
+      <p class="sub">{t('Saved in this browser only.')}</p>
 
       {#if mode === 'export'}
-        <button class="link" onclick={copy}>Or copy it as text</button>
+        <button class="link" onclick={copy}>{t('Or copy it as text')}</button>
       {:else if mode === 'import'}
-        <label class="file">Choose a progress file <input type="file" accept="application/json,.json" onchange={importFile} /></label>
-        <textarea rows="3" bind:value={text} placeholder="…or paste exported progress here"></textarea>
-        <button class="act" onclick={doImport} disabled={!text.trim()}>Import the pasted text</button>
+        <label class="file">{t('Choose a progress file')} <input type="file" accept="application/json,.json" onchange={importFile} /></label>
+        <textarea rows="3" bind:value={text} placeholder={t('…or paste exported progress here')}></textarea>
+        <button class="act" onclick={doImport} disabled={!text.trim()}>{t('Import the pasted text')}</button>
       {:else if mode === 'reset'}
-        <p class="warn">This clears every answer on every level in this browser. It can’t be undone.</p>
+        <p class="warn">{t('This clears every answer on every level in this browser. It can’t be undone.')}</p>
         <div class="seg">
-          <button class="danger" onclick={doReset}>Clear all progress</button>
-          <button onclick={() => (mode = 'none')}>Cancel</button>
+          <button class="danger" onclick={doReset}>{t('Clear all progress')}</button>
+          <button onclick={() => (mode = 'none')}>{t('Cancel')}</button>
         </div>
       {/if}
       {#if note}<p class="note">{note}</p>{/if}

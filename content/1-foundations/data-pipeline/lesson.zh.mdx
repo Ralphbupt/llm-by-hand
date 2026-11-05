@@ -1,0 +1,251 @@
+---
+glossarySkip: [padding]
+recap:
+  can:
+    - "数出一轮里有几批、几步，包括最后那个不满的批。"
+    - "用设了种子的随机数生成器打乱样本，并且只划分一次留出集。"
+    - "把长短不一的序列填充成一个矩形，并构造它的填充掩码。"
+  keys:
+    - "每轮的批数 = ⌈N / 批大小⌉；步数 = 轮数 × 批数"
+    - "`idx = rng.permutation(n)`，然后取 `idx[i:i + batch_size]`"
+    - "同样的种子、同样的代码、同样的机器 → 同样的数"
+    - "`X` 和 `mask` 的形状都是 `(B, L_max)`；`True` = PAD = 挡住"
+  mistakes:
+    - "输入和标签各用一个不同的随机顺序打乱。"
+    - "让 PAD 参与损失或注意力的计算。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import EpochLab from '@viz/EpochLab.astro'
+import PadLab from '@viz/PadLab.astro'
+
+这一关要用到第 7 关的轮（epoch）和第 9 关的 PyTorch。建议在第 21 关之前学。
+
+到目前为止，每个训练循环一开始，数据就已经放在一个数组里了。真实的数据是一长串大小不一的样本。
+在模型看到任何东西之前，得有一段代码来挑选样本、把它们分成批，
+并让每一批都成为一个完整的数字矩形（每一行一样长）。这段代码就是**数据管道**（data pipeline）。
+
+在 PyTorch 里，它分成两部分。**`Dataset`** 知道一共有多少个样本，也知道怎样取出第 `i` 个样本。
+**`DataLoader`** 向数据集要样本，把它们分成批，每次交给训练循环一批。
+这一关先用 NumPy 亲手把两者都写出来，再告诉你 PyTorch 里它们叫什么。
+
+## 1. 数据集和它的批
+
+只要有两个方法，就是一个数据集。`__len__` 说明一共有多少个样本；`len(ds)` 会调用它。
+`__getitem__` 返回第 `i` 个样本；`ds[i]` 会调用它。
+
+```python
+class Dataset:
+    def __init__(self, xs, ys):
+        self.xs, self.ys = xs, ys
+    def __len__(self):
+        return len(self.xs)
+    def __getitem__(self, i):
+        return self.xs[i], self.ys[i]      # 一个输入和它的标签，放在一起
+```
+
+拿 10 个样本，批大小是 4。加载器把这个列表切成 4 个一段，分别从 0、4 和 8 开始。
+最后一段拿走剩下的所有样本。把全部样本过一遍，就是一**轮**（epoch，第 7 关）。
+
+<EpochLab hide={{ batches: "n-batches" }} />
+
+<Blank id="n-batches" />
+
+<Gate requires="n-batches">
+
+<Blank id="last-batch" />
+
+最后一批不满是正常的。它的损失仍然是平均值，所以和其他批的尺度一样，
+但它的噪声更大，因为参与的样本更少。如果你不想要它，PyTorch 可以跳过它：`drop_last=True` 只留下 2 批，每批 4 个。
+
+每一批就是一**步**：一次前向传播，一次反向传播，一次权重更新。
+所以步数是轮数 × 每轮的批数。
+
+<Blank id="steps-epochs" />
+
+</Gate>
+
+<Gate requires="steps-epochs">
+
+## 2. 每轮都打乱
+
+这 10 个样本是**按类别排好序**存的：样本 0–4 是类别 0，样本 5–9 是类别 1。
+这种情况经常发生：每个类别一个文件，或者数据是一个来源接一个来源收集的。
+
+<Predict id="pred-sorted" />
+
+</Gate>
+
+<Gate requires="pred-sorted">
+
+解决办法是打乱：**每一轮**都给样本一个新的随机顺序。每个样本在每轮里仍然恰好用一次，
+但现在每一批都是混合的，所以它的梯度是整个数据集的一个公平样本。
+在实验台上勾选**每轮打乱**，然后按几次**下一轮**。
+
+NumPy 用 `rng.permutation(n)` 给出 `0, 1, …, n−1` 的一个随机顺序。这里的 `rng = np.random.default_rng(0)` 是一个
+**随机数生成器**（random generator）：一个产生随机数的对象，从一个叫**随机种子**（seed）的数开始（这里是 0）。
+例如，`np.random.default_rng(0).permutation(10)` 是 `[4, 6, 2, 7, 3, 5, 9, 0, 8, 1]`。
+
+然后你用切片把这个顺序切成批。`idx[4:8]` 是 `idx` 的第 4、5、6、7 项。超出末尾的切片
+会在末尾停下：10 项的 `idx[8:12]` 给出最后 2 项。
+
+<CodeBlank id="code-batches" />
+
+<Stuck q="我先打乱输入，再打乱标签。为什么模型什么都学不到？">
+
+调用两次随机数生成器，会得到两个**不同的**顺序。这样一来，输入 4 旁边放的是另一个样本的标签，
+标签就成了噪声。只打乱一次**下标**，然后两者用同一个 `idx`：
+`xs[idx]`、`ys[idx]`。像上面那样把输入和标签一起返回的 `Dataset`，不会犯这个错。
+
+</Stuck>
+
+<TryIt>
+
+在实验台上把批大小设成 5，关掉打乱。按几次**下一轮**。每一批都是同一种颜色。
+现在打开打乱。你多久会看到一批仍然全是同一个类别？
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="code-batches">
+
+## 3. 留出集和随机种子
+
+第 8 关把一些样本留在一边，从不用来训练，用来衡量模型在没见过的数据上表现得怎样。
+这个**留出集**（held-out set）在任何训练开始之前划分，**只划分一次**，之后再也不变。
+
+<Blank id="heldout-steps" />
+
+</Gate>
+
+<Gate requires="heldout-steps">
+
+一位队友提议改一下：每一轮开始时重新随机划分一次，“这样留出集上的分数更公平”。
+
+<Predict id="pred-resplit" />
+
+</Gate>
+
+<Gate requires="pred-resplit">
+
+### 为什么两次运行给出不同的数
+
+把同一个训练脚本跑两次，损失曲线通常会有一点不同。随机性从好几个地方进来：
+
+1. 初始权重（第 7 关），
+2. 批的顺序，
+3. 留出集的划分，
+4. dropout（第 8 关）。
+
+它们都来自随机数生成器，而从同一个种子开始的生成器每次都给出同样的数。
+`np.random.default_rng(0).permutation(10)` 今天、明天、在你朋友的电脑上，都是 `[4, 6, 2, 7, 3, 5, 9, 0, 8, 1]`。
+种子 1 给出 `[8, 4, 7, 0, 1, 2, 5, 9, 6, 3]`。在 PyTorch 里，在脚本开头写 `torch.manual_seed(0)`，就同时固定了
+权重、dropout 和打乱用的种子（第 21 关会用到）。
+
+<Predict id="pred-seed" />
+
+</Gate>
+
+<Gate requires="pred-seed">
+
+## 4. 填充和整理函数
+
+文本样本的长度各不相同。一个批必须是一个矩形，一个形状为 `(B, L)` 的数组。
+所以较短的序列要在末尾加上额外的 **PAD** token（这里是数字 0），直到和最长的一样长。
+把一列样本变成一个批数组的函数，叫作**整理函数**（collate function）。
+
+取三个序列：`[5, 3, 8]`、`[2, 9]` 和 `[7]`。
+
+<PadLab hide={{ shape: "pad-shape", count: "pad-count" }} />
+
+<Blank id="pad-shape" />
+
+</Gate>
+
+<Gate requires="pad-shape">
+
+<Blank id="pad-count" />
+
+PAD token 没有任何意义。有两个地方必须忽略它们，而且都需要知道它们在哪里：
+
+- **注意力**：任何词都不能去看 PAD token。这就是第 15 关的填充掩码。
+- **损失**：从不要求模型预测 PAD。这就是第 17 关的 `ignore_index`。
+
+所以整理函数在批旁边再返回一个数组：**填充掩码**，形状相同，某一格是 PAD 的地方为 `True`。
+`True` 表示挡住，和整个课程里一样。
+
+</Gate>
+
+<Gate requires="pad-count">
+
+一个批里有多少填充，取决于哪些序列被放进了同一批。
+
+<Blank id="pad-cells" />
+
+<Deeper title="按长度排序，浪费更少">
+
+那一批有一半是填充，而模型仍然要计算每一个 PAD 格。改成把长度相近的序列放在一起。
+把四个长度排好序：1、2、3、6，两个一批：`[1, 2]` 填充到长度 2（4 格），`[3, 6]` 填充到 6（12 格）。
+一共 16 格，而不是 24 格，其中只有 4 格是 PAD。
+
+真实的加载器用**桶**（bucket）来做这件事：先大致按长度排序，切出批，再打乱批的顺序，
+这样训练看到的仍然是随机顺序的批。对大模型来说，这能省下实实在在的训练时间。
+
+</Deeper>
+
+现在来写整理函数。你需要这些 NumPy 用法：
+
+- `np.full((2, 3), 0)` 是一个全 0 的 `(2, 3)` 数组；`np.ones((2, 3), dtype=bool)` 全是 `True`。
+- `X[i, :k] = s` 把列表 `s`（长度为 `k`）写进第 `i` 行的前 `k` 格。
+- `for i, s in enumerate(seqs)` 依次给出每个序列 `s` 和它的行号 `i`。
+
+<CodeBlank id="collate-code" />
+
+<Stuck q="为什么把 PAD 放在末尾，而不是开头？">
+
+PAD 放在末尾时，位置 0 总是一个真正的 token，而且位置 `t` 在每一行里的意思都一样。
+这让位置和因果掩码都保持简单。有些生成代码反而在开头填充，这样最后一列
+总是最新的那个真正的 token。两种都行，只要掩码说明了 PAD 格在哪里。
+
+</Stuck>
+
+<Deeper title="在 PyTorch 里的同一件事">
+
+```python
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split
+
+class Pairs(Dataset):                       # __len__ 和 __getitem__，和第 1 节一样
+    def __init__(self, seqs): self.seqs = seqs
+    def __len__(self): return len(self.seqs)
+    def __getitem__(self, i): return self.seqs[i]
+
+def collate(seqs, pad=0):                   # 你在第 4 节写的函数，用 torch 写
+    L = max(len(s) for s in seqs)
+    X = torch.full((len(seqs), L), pad)
+    for i, s in enumerate(seqs):
+        X[i, :len(s)] = torch.tensor(s)
+    return X, X == pad                      # 填充掩码（假设 0 从来不是真正的 token）
+
+g = torch.Generator().manual_seed(0)        # 设了种子的随机数生成器
+# 只划分一次
+train_set, held_set = random_split(Pairs(data), [0.8, 0.2], generator=g)
+loader = DataLoader(train_set, batch_size=4, shuffle=True,
+                    collate_fn=collate, generator=g)
+for epoch in range(3):
+    for X, mask in loader:                  # 每轮一个新顺序
+        ...                                 # 前向、损失、反向、更新
+```
+
+`shuffle=True` 在每一轮开始时生成一个新的排列，和你写的 `batches` 函数完全一样。
+`num_workers=4` 会在模型训练当前这一批的同时，用其他进程准备接下来的批。
+
+</Deeper>
+
+</Gate>

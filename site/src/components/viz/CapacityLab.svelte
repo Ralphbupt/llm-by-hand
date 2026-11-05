@@ -7,8 +7,31 @@
   import { polyEval, polyFit, truth } from '@lib/training'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { decay: withDecay = false }: { decay?: boolean } = $props()
+  let { decay: withDecay = false, lang = 'en' }: { decay?: boolean; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Weight decay makes a degree-9 fit smooth': '权重衰减让 9 阶拟合变得平滑',
+    'Too few, just right, too many parameters': '参数太少、正好、太多',
+    'Raise the weight decay and watch the up-and-down swings and the held-out loss.': '调大权重衰减，看上下摆动和留出集损失怎样变化。',
+    'Slide the degree. Watch the training loss and the held-out loss.': '拖动阶数。看训练损失和留出集损失。',
+    'Training points, held-out points and the fitted polynomial': '训练点、留出点和拟合出的多项式',
+    'Train and held-out loss for every degree, log scale': '每个阶数的训练损失和留出集损失，对数刻度',
+    'loss': '损失',
+    'degree': '阶数',
+    '({n} parameters)': '（{n} 个参数）',
+    'weight decay': '权重衰减',
+    'Degree {d}: train loss': '{d} 阶：训练损失',
+    'held-out loss': '留出集损失',
+    '10 training points': '10 个训练点',
+    '40 held-out points': '40 个留出点',
+    'the fit': '拟合结果',
+    'the true curve sin(πx)': '真实曲线 sin(πx)',
+    'train loss': '训练损失',
+    'lowest held-out loss (degree {k})': '最低的留出集损失（{k} 阶）',
+  })
 
   const D0 = 3
   const DECAYS = [0, 1e-4, 1e-3, 1e-2, 1e-1]
@@ -42,12 +65,12 @@
 </script>
 
 <LabFrame
-  title={withDecay ? 'Weight decay makes a degree-9 fit smooth' : 'Too few, just right, too many parameters'}
-  hint={withDecay ? 'Raise the weight decay and watch the up-and-down swings and the held-out loss.' : 'Slide the degree. Watch the training loss and the held-out loss.'}
+  title={withDecay ? t('Weight decay makes a degree-9 fit smooth') : t('Too few, just right, too many parameters')}
+  hint={withDecay ? t('Raise the weight decay and watch the up-and-down swings and the held-out loss.') : t('Slide the degree. Watch the training loss and the held-out loss.')}
   onreset={reset}
   resetDisabled={!changed}
 >
-  <svg viewBox="0 0 100 47" class="fitplot" use:readable aria-label="Training points, held-out points and the fitted polynomial">
+  <svg viewBox="0 0 100 47" class="fitplot" use:readable aria-label={t('Training points, held-out points and the fitted polynomial')}>
     <rect x="0" y="0" width="100" height="42" class="plot" />
     <line x1="0" x2="100" y1={sy(0)} y2={sy(0)} class="axis" />
     <defs><clipPath id="cap-plot-{withDecay ? 'd' : 'p'}"><rect x="0" y="0" width="100" height="42" /></clipPath></defs>
@@ -61,12 +84,12 @@
     <text x={sx(0.5)} y="46" class="tick mid name">x</text>
   </svg>
 
-  <svg viewBox="0 0 100 30" class="bars" use:readable aria-label="Train and held-out loss for every degree, log scale">
+  <svg viewBox="0 0 100 30" class="bars" use:readable aria-label={t('Train and held-out loss for every degree, log scale')}>
     {#each [-4, -2, 0] as e}
       <line x1="10" x2="98" y1={ly(10 ** e) + 2} y2={ly(10 ** e) + 2} class="grid" />
       <text x="8.5" y={ly(10 ** e) + 2.8} class="tick end">{e === 0 ? '1' : pow10(e)}</text>
     {/each}
-    <text x="1" y="2.6" class="tick name">loss</text>
+    <text x="1" y="2.6" class="tick name">{t('loss')}</text>
     <g transform="translate(0 2)">
       <line x1={lx(d)} x2={lx(d)} y1="0" y2="23" class="cur" />
       <polyline points={all.map((r, k) => `${lx(k)},${ly(r.train)}`).join(' ')} class="l-train" />
@@ -77,27 +100,27 @@
         <text x={lx(k)} y="26.8" class="tick mid" class:curt={k === d}>{k}</text>
       {/each}
       <circle cx={lx(bestK)} cy={ly(all[bestK].held)} r="1.8" class="best" />
-      <text x="8.5" y="26.8" class="tick end name">degree</text>
+      <text x="8.5" y="26.8" class="tick end name">{t('degree')}</text>
     </g>
   </svg>
 
   {#snippet controls()}
-    <label class="knob">degree <input type="range" min="0" max="9" step="1" bind:value={d} /> <b>{d}</b> <span class="dim">({d + 1} parameters)</span></label>
+    <label class="knob">{t('degree')} <input type="range" min="0" max="9" step="1" bind:value={d} /> <b>{d}</b> <span class="dim">{t('({n} parameters)', { n: d + 1 })}</span></label>
     {#if withDecay}
-      <label class="knob">weight decay <input type="range" min="0" max={DECAYS.length - 1} step="1" bind:value={di} /> <b>{lam === 0 ? '0' : pow10(Math.round(Math.log10(lam)))}</b></label>
+      <label class="knob">{t('weight decay')} <input type="range" min="0" max={DECAYS.length - 1} step="1" bind:value={di} /> <b>{lam === 0 ? '0' : pow10(Math.round(Math.log10(lam)))}</b></label>
     {/if}
   {/snippet}
 
-  {#snippet readout()}Degree {d}: train loss <b>{f4(fit.train)}</b> · held-out loss <b>{f4(fit.held)}</b>{/snippet}
+  {#snippet readout()}{t('Degree {d}: train loss', { d })} <b>{f4(fit.train)}</b> · {t('held-out loss')} <b>{f4(fit.held)}</b>{/snippet}
 
   {#snippet legend()}
-    <span><i class="dot train"></i>10 training points</span>
-    <span><i class="dot held"></i>40 held-out points</span>
-    <span><i class="ln fit"></i>the fit</span>
-    <span><i class="ln truth"></i>the true curve sin(πx)</span>
-    <span><i class="ln train"></i>train loss</span>
-    <span><i class="ln held"></i>held-out loss</span>
-    <span><i class="ring"></i>lowest held-out loss (degree {bestK})</span>
+    <span><i class="dot train"></i>{t('10 training points')}</span>
+    <span><i class="dot held"></i>{t('40 held-out points')}</span>
+    <span><i class="ln fit"></i>{t('the fit')}</span>
+    <span><i class="ln truth"></i>{t('the true curve sin(πx)')}</span>
+    <span><i class="ln train"></i>{t('train loss')}</span>
+    <span><i class="ln held"></i>{t('held-out loss')}</span>
+    <span><i class="ring"></i>{t('lowest held-out loss (degree {k})', { k: bestK })}</span>
   {/snippet}
 </LabFrame>
 

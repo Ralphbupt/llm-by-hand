@@ -6,9 +6,11 @@
   import NoWrapText from './NoWrapText.svelte'
   import { py, type PyStatus } from '@lib/pyodide/client'
   import type { CodeEx } from '@lib/quiz'
+  import { translator, type Lang } from '@lib/i18n'
 
   // practice: start fresh even if already solved (the mistake book's "redo"); solving never un-solves anything
-  let { id, ex, practice = false }: { id: string; ex: CodeEx; practice?: boolean } = $props()
+  let { id, ex, practice = false, lang = 'en' }: { id: string; ex: CodeEx; practice?: boolean; lang?: Lang } = $props()
+  const tt = translator(lang)
 
   let code = $state(ex.template)
   let status = $state<PyStatus>('idle')
@@ -21,12 +23,14 @@
   let showAnswer = $state(false)
   const solution = (ex as CodeEx & { solution?: string }).solution
 
+  // solved earlier (the learner's own code is not saved): show the reference line in place of ____, as Blank shows the answer
+  const fillSolved = () => { if (solution !== undefined && code === ex.template) code = ex.template.replace('____', solution) }
   onMount(() => {
-    if (!practice && hasReal(id)) done = true
+    if (!practice && hasReal(id)) { done = true; fillSolved() }
     if (!practice && wasShown(id)) shown = true
     const syncDbg = () => {
       showAnswer = debugOn('answers')
-      if (!practice && !done && hasReal(id)) { done = true; shown = wasShown(id) }
+      if (!practice && !done && hasReal(id)) { done = true; shown = wasShown(id); fillSolved() }
     }
     syncDbg()
     const unsubDbg = subscribe(syncDbg)
@@ -132,26 +136,26 @@
   }
 
   const label = $derived(
-    status === 'loading' ? 'Loading Python (about 10 MB, only once)…'
+    tt(status === 'loading' ? 'Loading Python (about 10 MB, only once)…'
       : status === 'running' ? 'Running…'
-      : '▶ Run',
+      : '▶ Run'),
   )
 </script>
 
 <div class="code" class:done>
-  <div class="prompt"><span class="tag">Code</span><NoWrapText text={ex.prompt} /></div>
+  <div class="prompt"><span class="tag">{tt('Code')}</span><NoWrapText text={ex.prompt} /></div>
   <textarea bind:this={box} bind:value={code} spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"
-    rows={rows} aria-label={`Code: ${ex.prompt.replaceAll('`', '')}`} onpointerup={firstClick} onkeydown={keydown} oninput={measure}></textarea>
-  {#if wide}<p class="swipe">← The code is wider than the box. Swipe sideways to see the rest. →</p>{/if}
-  <p class="keys">Enter keeps the indent · Tab indents · Esc then Tab leaves the editor · ⌘/Ctrl + Enter runs</p>
+    rows={rows} aria-label={tt('Code: {p}', { p: ex.prompt.replaceAll('`', '') })} onpointerup={firstClick} onkeydown={keydown} oninput={measure}></textarea>
+  {#if wide}<p class="swipe">{tt('← The code is wider than the box. Swipe sideways to see the rest. →')}</p>{/if}
+  <p class="keys">{tt('Enter keeps the indent · Tab indents · Esc then Tab leaves the editor · ⌘/Ctrl + Enter runs')}</p>
   <div class="row">
     <button onclick={run} disabled={status === 'loading' || status === 'running'}>{label}</button>
-    <button class="ghost" onclick={() => (code = ex.template)}>Reset</button>
-    {#if done}<span class="ok">{shown ? 'Answer shown' : '✓ All tests pass'}</span>{/if}
+    <button class="ghost" onclick={() => (code = ex.template)}>{tt('Reset')}</button>
+    {#if done}<span class="ok">{tt(shown ? 'Answer shown' : '✓ All tests pass')}</span>{/if}
   </div>
 
   {#if !done && misses > 0 && solution !== undefined}
-    <RevealAnswer onreveal={reveal} />
+    <RevealAnswer onreveal={reveal} {lang} />
   {/if}
 
   {#if showAnswer && solution !== undefined}
@@ -160,40 +164,40 @@
   {/if}
 
   {#if firstLoad}
-    <div class="loadbar" role="progressbar" aria-label="Loading Python"><i></i></div>
-    {#if slow}<p class="slow">The network seems slow. You can go on with the questions below and come back to run this.</p>{/if}
+    <div class="loadbar" role="progressbar" aria-label={tt('Loading Python')}><i></i></div>
+    {#if slow}<p class="slow">{tt('The network seems slow. You can go on with the questions below and come back to run this.')}</p>{/if}
   {/if}
 
   {#if failed}
     <pre class="err">{failed}</pre>
-    <button class="ghost retry" onclick={run}>Try again</button>
+    <button class="ghost retry" onclick={run}>{tt('Try again')}</button>
   {/if}
 
   {#if result}
     {#if result.stdout}
-      <div class="label">Output</div>
+      <div class="label">{tt('Output')}</div>
       <pre class="out">{result.stdout}</pre>
     {/if}
     {#if result.error}
-      <div class="label">Error</div>
+      <div class="label">{tt('Error')}</div>
       <pre class="err">{result.error}</pre>
     {/if}
     {#if result.tests}
-      <div class="label">Tests</div>
+      <div class="label">{tt('Tests')}</div>
       <ul class="tests">
         {#each result.tests as t, i}
           <li class:bad={!t.ok}>
-            {t.ok ? '✓' : '✗'} test {i + 1}
+            {t.ok ? '✓' : '✗'} {tt('test {n}', { n: i + 1 })}
             {#if !t.ok}
               <span class="dim">
-                {#if t.error}{t.error}{:else if t.hashed}the code does not match{:else}expected {JSON.stringify(t.expect)}, got {JSON.stringify(t.got)}{/if}
+                {#if t.error}{t.error}{:else if t.hashed}{tt('the code does not match')}{:else}{tt('expected {a}, got {b}', { a: JSON.stringify(t.expect), b: JSON.stringify(t.got) })}{/if}
               </span>
             {/if}
           </li>
         {/each}
       </ul>
     {/if}
-    {#if result.hint}<p class="hint"><NoWrapText text={result.hint} /></p>{/if}
+    {#if result.hint}<p class="hint"><NoWrapText text={tt(result.hint)} /></p>{/if}
   {/if}
 
   {#if done && ex.after}

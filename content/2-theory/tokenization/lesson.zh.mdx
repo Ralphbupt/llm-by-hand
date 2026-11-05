@@ -1,0 +1,212 @@
+---
+recap:
+  can:
+    - "建立一个字符词表，给每个字符一个 id，并把一个字符串编码成一列 id。"
+    - "数出带权重的相邻对，并手算几次 BPE 合并。"
+    - "按学到的顺序应用合并，编码一个新词。"
+  keys:
+    - "词表 = 不同的字符，排好序；id 从 0 开始数"
+    - "BPE：数出每一个相邻对（按词出现的次数加权），合并最常见的一对，重复"
+    - "每次合并给词表加一个 token，并让序列变短"
+    - "嵌入表：每个 token 一行，所以是词表大小 × 宽度个数（1,000 个 token × 64 = 64,000）"
+  mistakes:
+    - "每个词只数一次，而不是按它出现的次数数（a + t 是 4 + 2 + 3 + 1 = 10，不是 4）。"
+    - "随意打乱合并的顺序，或者跳过一个能用的合并：“that”应该变成 t·hat，而不是 t·h·at。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import CharTokenLab from '@viz/CharTokenLab.astro'
+import BpeLab from '@viz/BpeLab.astro'
+
+第 11 关的模型预测的是下一个**词**。但“词”只是一种选择。模型读的是一列 **token**，
+总得有人决定一个 token 在哪里结束、下一个从哪里开始。这个选择决定了词表的大小、
+每个序列的长度，以及模型到底能读哪些文本。
+
+每个不同的 token 都有一个 **id**，是从 0 到词表大小减 1 之间的一个数。第 13 关会把 id 变成向量。
+
+## 1. 切成字符
+
+最简单的切法：每个字符是一个 token。拿单词 `hello` 来说。**词表**（vocabulary）就是它里面
+不同字符的列表，按字母顺序排好。每个字符的 id 就是它在这个列表里的位置，从 0 开始数。
+先自己算一下，再去看：
+
+<Blank id="vocab-size" />
+
+<Blank id="id-l" />
+
+<Gate requires="id-l">
+
+现在在实验台里检查一下，也可以随便输入别的文字。
+
+<CharTokenLab />
+
+词表给出两个字典：`stoi`（字符串到 id）和 `itos`（id 到字符串）。
+构造它们的代码用到两个 Python 工具：
+
+```python
+list(enumerate(["e", "h", "l"]))          # [(0, 'e'), (1, 'h'), (2, 'l')]   每一项带上它的位置
+{c: i for i, c in enumerate(["e", "h"])}  # {'e': 0, 'h': 1}                 一行建好一个字典
+```
+
+这种一行的写法叫字典推导式。用 `[ ]` 的同样写法会建一个列表（列表推导式）。
+
+<CodeBlank id="stoi-code" />
+
+<Gate requires="stoi-code">
+
+编码就是查出每个字符。解码是反过来。中间什么都不会丢。
+
+<CodeBlank id="encode" />
+
+<Stuck q="为什么要给字符排序？哪个字符得到哪个 id 有关系吗？">
+
+完全没关系。任何固定的顺序都行，只要编码和解码用的是同一个。
+排序只是一个简单的办法，让你每次运行代码都得到同样的顺序。
+
+id 是名字，不是数量：“l”是 2，并不代表它是“h”的两倍。第 13 关会讲模型怎样避免把它们当成数量来读。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="encode">
+
+## 2. 切成词
+
+字符给出的词表很小，但序列很长："hello" 就是 5 个 token。另一个极端是每个词一个 token。
+第 11 关就是这么做的，它的故事的词表是：the、a、cat、dog、sat、ran、on、mat、rug 和 "."。
+
+<Predict id="unk-word" />
+
+整词有两个问题。一个词的每种形式都要有自己的条目（cat、cats、catlike……），所以真实的词表
+需要几百万个条目。而且不在列表里的词根本没法读。
+
+</Gate>
+
+<Gate requires="unk-word">
+
+## 3. 字节对编码：让数据来决定
+
+**BPE**（byte-pair encoding，字节对编码）从字符开始，把经常一起出现的片段拼成更大的 token：
+
+1. 把每个词切成字符。
+2. 在所有词上数出每一个相邻 token 对，按每个词出现的次数加权。
+3. 把最常见的一对合并成一个新 token，加进词表。
+4. 从第 2 步开始重复，想重复几次都行。
+
+下面是一个很小的单词列表：**cat** 出现 4 次，**cats** 2 次，**hat** 3 次，**hats** 1 次。
+
+<Blank id="pair-at" />
+
+<Gate requires="pair-at">
+
+所以第一次合并是 a + t → "at"。现在这些词是 c·at、c·at·s、h·at、h·at·s。
+
+<Blank id="merge2-count" />
+
+</Gate>
+
+<Gate requires="merge2-count">
+
+这一对胜出，所以第 2 次合并是 c + at → "cat"。第 3 次合并是 h + at → "hat"。
+有了这 3 次合并，编码一个词就是：把它切成字符，再**按学到的顺序**应用这些合并。
+
+<Blank id="tokens-cats" />
+
+<Blank id="tokens-that" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="tokens-that">
+
+现在自己一步一步来。实验台一开始用的是同样的四个词。然后切换到 40 个生成的词
+（8 个基本词，叫词干，比如 *play*、*walk*、*cook*，加上词尾 -s、-ed、-ing、-er，每个词的次数由一条固定的规则给出）。
+开始合并之前，先回答一个问题：
+
+<Predict id="more-merges" />
+
+<Gate requires="more-merges">
+
+<BpeLab />
+
+<TryIt>
+
+用生成的词时，看前几次合并：k + e、a + l、o + o、i + n，然后是 in + g。BPE 找到了
+“ke”（来自 walked、cooker……）和“ing”这样的片段，没人告诉它什么是词尾。然后输入一个不在列表里的词，
+比如 `jumping` 或 `parker`，看它被切成已知的片段。
+
+</TryIt>
+
+对一个词应用一次合并，是一个小循环。写出条件：
+
+<CodeBlank id="merge-fn" />
+
+</Gate>
+
+<Gate requires="merge-fn">
+
+BPE 的第 2 步是数相邻对。两个 Python 工具就能做到：
+
+```python
+seg = ["c", "a", "t", "s"]
+list(zip(seg, seg[1:]))      # [('c', 'a'), ('a', 't'), ('t', 's')]   每一个相邻对
+d = {}
+d["x"] = d.get("x", 0) + 4   # {'x': 4}   键还不存在时，get 给出 0
+```
+
+一个出现 n 次的词，给它的每一对都加 n，就像上面数 a + t 那样。
+
+<CodeBlank id="pair-counts" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pair-counts">
+
+## 4. 合并多少次？
+
+每次合并给词表加一个 token，并让序列变短。在 40 个生成的词上：
+合并之前有 19 个字符、1,068 个 token；合并 40 次之后，词表有 59 个条目，这些词只占 263 个 token。
+token 越少，每段文本要做的计算就越少。这也意味着模型的**上下文窗口**（context window）能装下更多文本：
+模型一次最多读固定数量的 token，所以每段文本越短，模型能看到的就越多。
+
+大词表也有代价。模型有一张**嵌入表**（embedding table）：一张普通的表，每个 token 一行数字
+（第 13 关会讲它怎么用）。每个 token 在那里都要有自己的一行，在给下一个 token 打分的最后一层里也要有自己的一列。
+
+<Blank id="emb-params" />
+
+<Deeper title="真实的分词器有什么不同">
+
+- **它们从字节开始，而不是从字符开始。** 每段文本都是一列字节，取值 0 到 255，所以起始词表
+  是 256，并且永远不会有未知的东西：一个表情符号或一种少见的文字只是变成几个字节 token。
+- **空格粘在词上。** 文本先被切开，让空格跟着它后面的词走，所以 "␣cat" 和 "cat"
+  是不同的 token。这样解码时空格能完全还原。
+- **几万次合并。** 真实的词表大约有 30,000 到 200,000 个 token。常见的词变成一个 token；
+  少见的词变成两到五个片段。
+
+思路和实验台一样：数相邻对，合并最常见的，重复。
+
+</Deeper>
+
+<Stuck q="为什么模型不擅长拼写、数字母，或者对很长的数做算术？">
+
+因为它们从来看不到字母。像 "chatting" 这样的词可能以两个 token 的形式到来，比如 "chat" 和 "ting"。
+模型拿到的是两个 id，而不是八个字符。要数出有几个 t，它必须学会每个 token 里面有什么。
+
+数字也是用同样随意的方式切的："12345" 可能变成 "123" 和 "45"，而 "12346" 的切法又不一样。
+从一个数到另一个数，各位数字不在同样的列上，这让逐列做算术变得很难。
+有些模型的解决办法是总把数字切成单个的数字。
+
+</Stuck>
+
+</Gate>

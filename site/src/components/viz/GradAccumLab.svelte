@@ -5,6 +5,33 @@
    */
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'loss.backward(): adds {g} → w.grad = {grad}': 'loss.backward()：加上 {g} → w.grad = {grad}',
+    '{n} steps with zero_grad → w = {w}': '{n} 步，有 zero_grad → w = {w}',
+    '{n} steps WITHOUT zero_grad → w = {w}': '{n} 步，没有 zero_grad → w = {w}',
+    'Gradients are added together until you clear them': '梯度会一直累加，直到你把它清零',
+    'Press the three calls in order, then press 1 twice in a row and see w.grad grow.': '按顺序按下这三个调用，再连按两次 1，看 w.grad 变大。',
+    'gradient of this loss': '这个损失的梯度',
+    'w.grad (what step() uses)': 'w.grad（step() 用的值）',
+    'one backward': '一次 backward',
+    'too large to draw →': '太大，画不下 →',
+    'w after each step': '每一步之后的 w',
+    'best w = 3': '最好的 w = 3',
+    'step() calls → ({n} so far)': 'step() 调用次数 →（目前 {n} 次）',
+    'PyTorch calls': 'PyTorch 调用',
+    'Shortcuts': '快捷按钮',
+    'or run 10 steps:': '或者一次跑 10 步：',
+    '10 steps with zero_grad': '10 步，有 zero_grad',
+    '10 steps without': '10 步，没有 zero_grad',
+    'w.grad starts at 0. Press 1, 2, 3 for one clean training step.': 'w.grad 从 0 开始。依次按 1、2、3，完成干净的一步训练。',
+    'w.grad, the sum step() uses': 'w.grad，step() 用的总和',
+    'the gradient of one backward': '一次 backward 算出的梯度',
+  })
 
   const X = 2, Y = 6, LR = 0.05, W0 = 1
   let w = $state(W0)
@@ -20,7 +47,7 @@
   function backward() {
     const g = thisGrad
     grad += g
-    say(`loss.backward(): adds ${f(g)} → w.grad = ${f(grad)}`)
+    say(t('loss.backward(): adds {g} → w.grad = {grad}', { g: f(g), grad: f(grad) }))
   }
   function step() {
     const before = w
@@ -36,7 +63,7 @@
       w = w - LR * grad
       hist = [...hist, w]
     }
-    say(`${n} steps ${clear ? 'with' : 'WITHOUT'} zero_grad → w = ${f(w)}`)
+    say(t(clear ? '{n} steps with zero_grad → w = {w}' : '{n} steps WITHOUT zero_grad → w = {w}', { n, w: f(w) }))
   }
   function reset() { w = W0; grad = 0; hist = [W0]; log = [] }
 
@@ -49,8 +76,8 @@
 </script>
 
 <LabFrame
-  title="Gradients are added together until you clear them"
-  hint="Press the three calls in order, then press 1 twice in a row and see w.grad grow."
+  title={t('Gradients are added together until you clear them')}
+  hint={t('Press the three calls in order, then press 1 twice in a row and see w.grad grow.')}
   onreset={reset}
   resetDisabled={hist.length === 1 && grad === 0 && log.length === 0}
 >
@@ -58,21 +85,21 @@
   <div class="cols">
     <div class="left">
       <div class="state">
-        <div><span class="k">gradient of this loss</span><span class="v">{f(thisGrad)}</span></div>
-        <div><span class="k">w.grad (what step() uses)</span><span class="v g">{f(grad)}</span></div>
+        <div><span class="k">{t('gradient of this loss')}</span><span class="v">{f(thisGrad)}</span></div>
+        <div><span class="k">{t('w.grad (what step() uses)')}</span><span class="v g">{f(grad)}</span></div>
       </div>
       <!-- the pile: w.grad as a bar, next to one backward's worth, so piling up is visible -->
       <div class="pile" aria-hidden="true">
-        <div class="pr"><span class="k">one backward</span><span class="track"><i class="one" style="width:{Math.min(100, (Math.abs(thisGrad) / GMAX) * 100)}%"></i></span></div>
-        <div class="pr"><span class="k">w.grad</span><span class="track"><i class="acc" style="width:{Math.min(100, (Math.abs(grad) / GMAX) * 100)}%"></i>{#if Math.abs(grad) > GMAX}<b class="over">too large to draw →</b>{/if}</span></div>
+        <div class="pr"><span class="k">{t('one backward')}</span><span class="track"><i class="one" style="width:{Math.min(100, (Math.abs(thisGrad) / GMAX) * 100)}%"></i></span></div>
+        <div class="pr"><span class="k">w.grad</span><span class="track"><i class="acc" style="width:{Math.min(100, (Math.abs(grad) / GMAX) * 100)}%"></i>{#if Math.abs(grad) > GMAX}<b class="over">{t('too large to draw →')}</b>{/if}</span></div>
       </div>
       {#if log.length}<ol class="log">{#each log as l}<li>{l}</li>{/each}</ol>{/if}
     </div>
-    <svg viewBox="-26 -12 336 156" class="plot" use:readable aria-label="w after each step">
+    <svg viewBox="-26 -12 336 156" class="plot" use:readable aria-label={t('w after each step')}>
       <line x1="0" y1={Hd} x2={Wd} y2={Hd} class="axis" />
       <line x1="0" y1="0" x2="0" y2={Hd} class="axis" />
       <line x1="0" y1={sy(3)} x2={Wd} y2={sy(3)} class="best" />
-      <text x={Wd} y={sy(3) - 3} class="tick ok" text-anchor="end">best w = 3</text>
+      <text x={Wd} y={sy(3) - 3} class="tick ok" text-anchor="end">{t('best w = 3')}</text>
       {#each [0, 2, 4, 6] as v}
         <line x1="0" x2={Wd} y1={sy(v)} y2={sy(v)} class="grid" />
         <text x="-6" y={sy(v) + 3.5} class="tick" text-anchor="end">{v}</text>
@@ -80,32 +107,32 @@
       <text x="-24" y="-3" class="tick name">w</text>
       <polyline points={path} class="curve" />
       {#each hist as v, i}<circle cx={sx(i, Math.max(hist.length, 2))} cy={sy(v)} r="2.2" class="dot" />{/each}
-      <text x={Wd / 2} y={Hd + 16} class="tick" text-anchor="middle">step() calls → ({hist.length - 1} so far)</text>
+      <text x={Wd / 2} y={Hd + 16} class="tick" text-anchor="middle">{t('step() calls → ({n} so far)', { n: hist.length - 1 })}</text>
     </svg>
   </div>
 
   {#snippet controls()}
-    <div class="api" role="group" aria-label="PyTorch calls">
+    <div class="api" role="group" aria-label={t('PyTorch calls')}>
       <button class="lab-btn code" onclick={backward}><span class="n">1</span>loss.backward()</button>
       <button class="lab-btn code" onclick={step}><span class="n">2</span>opt.step()</button>
       <button class="lab-btn code" onclick={zero}><span class="n">3</span>opt.zero_grad()</button>
     </div>
-    <div class="demo" role="group" aria-label="Shortcuts">
-      <span class="lbl">or run 10 steps:</span>
-      <button class="lab-btn small" onclick={() => train(10, true)}>10 steps with zero_grad</button>
-      <button class="lab-btn small" onclick={() => train(10, false)}>10 steps without</button>
+    <div class="demo" role="group" aria-label={t('Shortcuts')}>
+      <span class="lbl">{t('or run 10 steps:')}</span>
+      <button class="lab-btn small" onclick={() => train(10, true)}>{t('10 steps with zero_grad')}</button>
+      <button class="lab-btn small" onclick={() => train(10, false)}>{t('10 steps without')}</button>
     </div>
   {/snippet}
 
   {#snippet readout()}
-    {#if log.length}{log.at(-1)}{:else}<span class="idle">w.grad starts at 0. Press 1, 2, 3 for one clean training step.</span>{/if}
+    {#if log.length}{log.at(-1)}{:else}<span class="idle">{t('w.grad starts at 0. Press 1, 2, 3 for one clean training step.')}</span>{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw gr"></i>w.grad, the sum step() uses</span>
-    <span><i class="sw gr1"></i>the gradient of one backward</span>
-    <span><i class="sw wln"></i>w after each step</span>
-    <span><i class="sw okd"></i>best w = 3</span>
+    <span><i class="sw gr"></i>{t('w.grad, the sum step() uses')}</span>
+    <span><i class="sw gr1"></i>{t('the gradient of one backward')}</span>
+    <span><i class="sw wln"></i>{t('w after each step')}</span>
+    <span><i class="sw okd"></i>{t('best w = 3')}</span>
   {/snippet}
 </LabFrame>
 

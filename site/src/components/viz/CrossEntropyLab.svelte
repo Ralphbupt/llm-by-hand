@@ -7,9 +7,30 @@
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'cat': '猫',
+    'dog': '狗',
+    'car': '车',
+    'Cross-entropy: the surprise at the correct answer': '交叉熵：对正确答案的惊讶度',
+    'Pick the correct answer with the round buttons. Drag the sliders to change the scores.': '用圆形按钮选出正确答案。拖动滑块改变分数。',
+    'correct?': '正确？',
+    'score': '分数',
+    'score for {n}': '{n} 的分数',
+    'The loss number appears once you answer the two questions below.': '回答下面两道题之后，损失的数值才会显示出来。',
+    'The loss −log p as a curve over p, with the current p marked': '损失 −log p 随 p 变化的曲线，标出了当前的 p',
+    'loss': '损失',
+    'p of the correct answer': '正确答案的 p',
+    'correct answer:': '正确答案：',
+    'p of the other answers': '其他答案的 p',
+    'loss = −log p': '损失 = −log p',
+    'where you are now': '你现在的位置',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -52,27 +73,27 @@
 </script>
 
 <LabFrame
-  title="Cross-entropy: the surprise at the correct answer"
-  hint="Pick the correct answer with the round buttons. Drag the sliders to change the scores."
+  title={t('Cross-entropy: the surprise at the correct answer')}
+  hint={t('Pick the correct answer with the round buttons. Drag the sliders to change the scores.')}
   onreset={() => { scores = [2.0, 1.0, 0.1]; target = 0 }}
   resetDisabled={target === 0 && scores[0] === 2 && scores[1] === 1 && scores[2] === 0.1}
 >
   <div class="cols">
     <div class="left">
-      <div class="row head"><span>correct?</span><span>score</span><span></span><span>p</span></div>
+      <div class="row head"><span>{t('correct?')}</span><span>{t('score')}</span><span></span><span>p</span></div>
       {#each NAMES as n, i}
         <div class="row" class:tgt={target === i}>
-          <label class="radio"><input type="radio" name="ce-target" checked={target === i} onchange={() => (target = i)} /> {n}</label>
+          <label class="radio"><input type="radio" name="ce-target" checked={target === i} onchange={() => (target = i)} /> {t(n)}</label>
           <input type="range" min="-3" max="5" step="0.1" value={scores[i]}
-            aria-label={`score for ${n}`}
+            aria-label={t('score for {n}', { n: t(n) })}
             oninput={(e) => setScore(i, +(e.currentTarget as HTMLInputElement).value)} />
           <span class="num">{scores[i].toFixed(1)}</span>
           <span class="bar"><i class:t={target === i} style="width:{probs[i] * 100}%"></i><em>{probs[i].toFixed(3)}</em></span>
         </div>
       {/each}
-      {#if locked('loss')}<p class="note">The loss number appears once you answer the two questions below.</p>{/if}
+      {#if locked('loss')}<p class="note">{t('The loss number appears once you answer the two questions below.')}</p>{/if}
     </div>
-    <svg viewBox="-30 -12 244 170" class="plot" use:readable aria-label="The loss −log p as a curve over p, with the current p marked">
+    <svg viewBox="-30 -12 244 170" class="plot" use:readable aria-label={t('The loss −log p as a curve over p, with the current p marked')}>
       <line x1="0" y1={H} x2={W} y2={H} class="axis" />
       <line x1="0" y1="0" x2="0" y2={H} class="axis" />
       {#if !locked('loss')}
@@ -81,7 +102,7 @@
           <text x="-6" y={py(y) + 3} class="tick" text-anchor="end">{y}</text>
         {/each}
       {/if}
-      <text x="5" y="2" class="tick name" text-anchor="start">loss</text>
+      <text x="5" y="2" class="tick name" text-anchor="start">{t('loss')}</text>
       {#each [0, 0.5, 1] as q}
         <text x={px(q)} y={H + 13} class="tick" text-anchor="middle">{q}</text>
       {/each}
@@ -89,20 +110,20 @@
       <line x1={px(p)} x2={px(p)} y1={py(loss)} y2={H} class="guide" />
       <line x1="0" x2={px(p)} y1={py(loss)} y2={py(loss)} class="guide" />
       <circle cx={px(p)} cy={py(loss)} r="4.5" class="dot" />
-      {#if !locked('loss')}<text x={Math.min(px(p) + 7, W - 4)} y={py(loss) - 7} class="tick val" text-anchor={px(p) > W - 60 ? 'end' : 'start'}>loss {loss.toFixed(2)}</text>{/if}
-      <text x={W / 2} y={H + 28} class="tick name" text-anchor="middle">p of the correct answer</text>
+      {#if !locked('loss')}<text x={Math.min(px(p) + 7, W - 4)} y={py(loss) - 7} class="tick val" text-anchor={px(p) > W - 60 ? 'end' : 'start'}>{t('loss')} {loss.toFixed(2)}</text>{/if}
+      <text x={W / 2} y={H + 28} class="tick name" text-anchor="middle">{t('p of the correct answer')}</text>
     </svg>
   </div>
 
   {#snippet readout()}
-    correct answer: <b>{NAMES[target]}</b> · p = {p.toFixed(3)} · loss = −log({p.toFixed(3)}) = <b class:ask={locked('loss')}>{locked('loss') ? '?' : loss.toFixed(3)}</b>
+    {t('correct answer:')} <b>{t(NAMES[target])}</b> · p = {p.toFixed(3)} · {t('loss')} = −log({p.toFixed(3)}) = <b class:ask={locked('loss')}>{locked('loss') ? '?' : loss.toFixed(3)}</b>
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw okb"></i>p of the correct answer</span>
-    <span><i class="sw oth"></i>p of the other answers</span>
-    <span><i class="sw crv"></i>loss = −log p</span>
-    <span><i class="sw dt"></i>where you are now</span>
+    <span><i class="sw okb"></i>{t('p of the correct answer')}</span>
+    <span><i class="sw oth"></i>{t('p of the other answers')}</span>
+    <span><i class="sw crv"></i>{t('loss = −log p')}</span>
+    <span><i class="sw dt"></i>{t('where you are now')}</span>
   {/snippet}
 </LabFrame>
 

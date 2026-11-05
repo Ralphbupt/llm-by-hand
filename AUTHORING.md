@@ -442,3 +442,12 @@ appears by itself; scroll boxes inside a lab get the same right-edge fade). Refe
   wheel); one finger scrolls the page until the view is active; two fingers always turn/zoom; arrow keys turn a
   focused view. Don't override this.
 - Touch targets on phones are ≥ 40px tall. Never move keyboard focus on mount.
+
+## Chinese
+
+The site has a Chinese version under `/zh/`. How it is organized and the words to use: `content/TRANSLATING.zh.md`.
+When you change a level that already has `lesson.zh.mdx` / `exercises.zh.yaml`, change the Chinese files too:
+`scripts/check_zh.py` catches structural drift (a new question id, a changed component, code or formula), but not
+changed wording. UI text in components goes through `t('English text')` (lib/i18n.ts, lib/i18nSvelte.ts); add the
+Chinese to `site/src/i18n/zh.ts` or to the component's own table.
+

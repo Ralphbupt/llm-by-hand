@@ -11,10 +11,65 @@
   import MatrixGrid from './MatrixGrid.svelte'
   import Tensors3D from '../viz3d/Tensors3D.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // hide: the toy output stays "?" until that question is answered (one cell would be enough,
   // but the stroke makes several cells equal, so every cell is hidden)
-  let { hide }: { hide?: { id: string; i: number; j: number } } = $props()
+  let { hide, lang = 'en' }: { hide?: { id: string; i: number; j: number }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'vertical edge': '竖直边缘',
+    'horizontal edge': '水平边缘',
+    blur: '模糊',
+    'do nothing': '不变',
+    channel: '通道',
+    row: '行',
+    col: '列',
+    'picture ({c}, {h}, {w})': '图片 ({c}, {h}, {w})',
+    'filter {k} of 4 ({c}, 3, 3)': '卷积核 {k}/4 ({c}, 3, 3)',
+    'feature maps (4, {h}, {w})': '特征图 (4, {h}, {w})',
+    'A 3×3 filter sliding over a picture': '一个 3×3 卷积核在图片上滑动',
+    'Select a pixel to flip it. Point at, tap or focus an output cell to see the window it reads.': '选中一个像素可以翻转它。把鼠标指向、点一下或聚焦一个输出格，就能看到它读的窗口。',
+    'Pick a digit and a filter: the whole feature map is computed live.': '选一个数字和一个卷积核：整张特征图会实时算出来。',
+    '5×5 picture': '5×5 图片',
+    'Real digits': '手写数字',
+    picture: '图片',
+    ' (with padding)': '（含边缘填充）',
+    padding: '边缘填充',
+    'pixel row {r}, column {c}: {v}': '像素第 {r} 行、第 {c} 列：{v}',
+    'filter (editable)': '卷积核（可编辑）',
+    'output {h}×{w}': '输出 {h}×{w}',
+    'output feature map': '输出特征图',
+    'output row {i}, column {j}': '输出第 {i} 行、第 {j} 列',
+    'Could not load the digits: {e}': '无法加载数字：{e}',
+    'picture: a handwritten {d}': '图片：一个手写的 {d}',
+    'input digit': '输入的数字',
+    Digit: '数字',
+    'feature map': '特征图',
+    'Loading digits…': '正在加载数字…',
+    'Input channels': '输入通道',
+    'input channels:': '输入通道：',
+    '1 (a picture)': '1（一张图片）',
+    '3 (a later layer)': '3（后面的某一层）',
+    'A convolution layer in 3D: the picture, one filter, and four stacked feature maps': '3D 视图中的一个卷积层：图片、一个卷积核，以及叠起来的四张特征图',
+    'one channel deep': '深一个通道',
+    'all 3 channels deep, so one filter is a 3×3×3 block': '深全部 3 个通道，所以一个卷积核是一个 3×3×3 的方块',
+    'The window and the filter that reads it ({depth}) are highlighted, and so is the one output number it makes, in channel {k}. Four filters make four feature maps, stacked as channels{pad}. Point at an output cell above to move the window; pick a filter to change the channel.':
+      '窗口和读它的卷积核（{depth}）被高亮了，它生成的那一个输出数也被高亮了，在通道 {k} 里。四个卷积核生成四张特征图，作为通道叠在一起{pad}。指向上面的一个输出格可以移动窗口；选一个卷积核可以换通道。',
+    '; pale cells are padding': '；浅色的格是边缘填充',
+    Filter: '卷积核',
+    stride: '步幅',
+    'Hide the layer in 3D': '隐藏 3D 层',
+    'Show the layer in 3D': '在 3D 中显示这一层',
+    '? (answer the question below)': '?（先回答下面的问题）',
+    '(pixels that are 0 add nothing)': '（为 0 的像素不贡献任何东西）',
+    'output side': '输出边长',
+    'positive output': '正的输出',
+    'negative output': '负的输出',
+    'background = 0': '背景 = 0',
+    'the 3×3 window': '3×3 窗口',
+  })
   let solved = $state(false)
   onMount(() => {
     if (hide) {
@@ -109,19 +164,19 @@
       : []
     return [
       {
-        shape: [cin, H, W], axes: ['channel', 'row', 'col'],
-        title: `picture (${cin}, ${H}, ${W})`,
+        shape: [cin, H, W], axes: ['channel', 'row', 'col'].map((s) => t(s)),
+        title: t('picture ({c}, {h}, {w})', { c: cin, h: H, w: W }),
         highlight: [{ from: [0, r0, c0], to: [cin - 1, r0 + 2, c0 + 2], tone: 'accent' }],
         ghost: border,
       },
       '∗',
       {
-        shape: [cin, 3, 3], title: `filter ${filterIdx + 1} of 4 (${cin}, 3, 3)`,
+        shape: [cin, 3, 3], title: t('filter {k} of 4 ({c}, 3, 3)', { k: filterIdx + 1, c: cin }),
         highlight: [{ from: [0, 0, 0], to: [cin - 1, 2, 2], tone: 'accent' }],
       },
       '=',
       {
-        shape: [4, h, w], axes: ['channel', 'row', 'col'], title: `feature maps (4, ${h}, ${w})`,
+        shape: [4, h, w], axes: ['channel', 'row', 'col'].map((s) => t(s)), title: t('feature maps (4, {h}, {w})', { h, w }),
         highlight: [
           { from: [filterIdx, c.i, c.j], to: [filterIdx, c.i, c.j], tone: 'ok' },
           { from: [filterIdx, 0, 0], to: [filterIdx, h - 1, w - 1], tone: 'dim' },
@@ -174,9 +229,9 @@
 </script>
 
 <LabFrame
-  title="A 3×3 filter sliding over a picture"
-  hint={mode === 'toy' ? 'Select a pixel to flip it. Point at, tap or focus an output cell to see the window it reads.' : 'Pick a digit and a filter: the whole feature map is computed live.'}
-  views={[{ id: 'toy', label: '5×5 picture' }, { id: 'digit', label: 'Real digits' }]}
+  title={t('A 3×3 filter sliding over a picture')}
+  hint={mode === 'toy' ? t('Select a pixel to flip it. Point at, tap or focus an output cell to see the window it reads.') : t('Pick a digit and a filter: the whole feature map is computed live.')}
+  views={[{ id: 'toy', label: t('5×5 picture') }, { id: 'digit', label: t('Real digits') }]}
   bind:view={mode}
   onreset={resetAll}
   resetDisabled={!changed}
@@ -184,7 +239,7 @@
   <div class="row">
     {#if mode === 'toy' && padded && out}
       <div>
-        <div class="label">picture{padding ? ' (with padding)' : ''}</div>
+        <div class="label">{t('picture')}{padding ? t(' (with padding)') : ''}</div>
         <div class="cells" style="grid-template-columns: repeat({padded[0].length}, 1.9rem)">
           {#each padded as row, r}
             {#each row as v, c}
@@ -193,18 +248,18 @@
                 class="px" class:ink={v === 1} class:pad={isPad} class:win={inWindow(r, c)}
                 disabled={isPad}
                 onclick={() => { const n = copy(img); n[r - padding][c - padding] = v ? 0 : 1; img = n }}
-                aria-label={isPad ? 'padding' : `pixel row ${r - padding}, column ${c - padding}: ${v}`}
+                aria-label={isPad ? t('padding') : t('pixel row {r}, column {c}: {v}', { r: r - padding, c: c - padding, v })}
               >{v}</button>
             {/each}
           {/each}
         </div>
       </div>
       <span class="op">∗</span>
-      <MatrixGrid value={kernel} label="filter (editable)" editable decimals={2} onchange={(v) => (kernel = v)} />
+      <MatrixGrid value={kernel} label={t('filter (editable)')} editable decimals={2} onchange={(v) => (kernel = v)} />
       <span class="op">=</span>
       <div>
-        <div class="label">output {out.length}×{out[0].length}</div>
-        <div class="cells" style="grid-template-columns: repeat({out[0].length}, 2.4rem)" role="group" aria-label="output feature map" onpointerleave={() => (cell = null)}>
+        <div class="label">{t('output {h}×{w}', { h: out.length, w: out[0].length })}</div>
+        <div class="cells" style="grid-template-columns: repeat({out[0].length}, 2.4rem)" role="group" aria-label={t('output feature map')} onpointerleave={() => (cell = null)}>
           {#each out as row, i}
             {#each row as v, j}
               <div
@@ -214,84 +269,82 @@
                 onfocus={() => (cell = { i, j })}
                 onclick={() => (cell = { i, j })}
                 onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), (cell = { i, j }))}
-                role="button" tabindex="0" aria-label={`output row ${i}, column ${j}`}
+                role="button" tabindex="0" aria-label={t('output row {i}, column {j}', { i, j })}
               >{isMasked(i, j) ? '?' : fmt(v)}</div>
             {/each}
           {/each}
         </div>
       </div>
     {:else if mode === 'digit'}
-      {#if error}<p class="bad">Could not load the digits: {error}</p>{/if}
+      {#if error}<p class="bad">{t('Could not load the digits: {e}', { e: error })}</p>{/if}
       {#if digits}
         <div class="digits">
           <div>
-            <div class="label">picture: a handwritten {digits.labels[pick]}</div>
-            <canvas bind:this={cvIn} class="px28" aria-label="input digit"></canvas>
-            <div class="chips pick" role="group" aria-label="Digit">
+            <div class="label">{t('picture: a handwritten {d}', { d: digits.labels[pick] })}</div>
+            <canvas bind:this={cvIn} class="px28" aria-label={t('input digit')}></canvas>
+            <div class="chips pick" role="group" aria-label={t('Digit')}>
               {#each digits.labels as d, k}<button class:on={pick === k} aria-pressed={pick === k} onclick={() => (pick = k)}>{d}</button>{/each}
             </div>
           </div>
-          <MatrixGrid value={kernel} label="filter (editable)" editable decimals={2} onchange={(v) => (kernel = v)} />
+          <MatrixGrid value={kernel} label={t('filter (editable)')} editable decimals={2} onchange={(v) => (kernel = v)} />
           <div>
-            <div class="label">output {out?.length}×{out?.[0].length}</div>
-            <canvas bind:this={cvOut} class="px28" aria-label="feature map"></canvas>
+            <div class="label">{t('output {h}×{w}', { h: out?.length ?? '', w: out?.[0].length ?? '' })}</div>
+            <canvas bind:this={cvOut} class="px28" aria-label={t('feature map')}></canvas>
           </div>
         </div>
       {:else if !error}
-        <p class="dim">Loading digits…</p>
+        <p class="dim">{t('Loading digits…')}</p>
       {/if}
     {/if}
   </div>
 
   {#if mode === 'toy' && padded && out && show3d}
     <div class="layer">
-      <div class="chips cin" role="group" aria-label="Input channels">
-        <span class="dim">input channels:</span>
-        <button class:on={cin === 1} aria-pressed={cin === 1} onclick={() => (cin = 1)}>1 (a picture)</button>
-        <button class:on={cin === 3} aria-pressed={cin === 3} onclick={() => (cin = 3)}>3 (a later layer)</button>
+      <div class="chips cin" role="group" aria-label={t('Input channels')}>
+        <span class="dim">{t('input channels:')}</span>
+        <button class:on={cin === 1} aria-pressed={cin === 1} onclick={() => (cin = 1)}>{t('1 (a picture)')}</button>
+        <button class:on={cin === 3} aria-pressed={cin === 3} onclick={() => (cin = 3)}>{t('3 (a later layer)')}</button>
       </div>
-      <Tensors3D tensors={layer} keepView height="300px" ariaLabel="A convolution layer in 3D: the picture, one filter, and four stacked feature maps" />
+      <Tensors3D tensors={layer} keepView height="300px" ariaLabel={t('A convolution layer in 3D: the picture, one filter, and four stacked feature maps')} />
       <p class="cap">
-        The window and the filter that reads it ({cin === 1 ? 'one channel deep' : 'all 3 channels deep, so one filter is a 3×3×3 block'}) are highlighted,
-        and so is the one output number it makes, in channel {filterIdx + 1}. Four filters make four feature maps, stacked as channels{padding ? '; pale cells are padding' : ''}.
-        Point at an output cell above to move the window; pick a filter to change the channel.
+        {t('The window and the filter that reads it ({depth}) are highlighted, and so is the one output number it makes, in channel {k}. Four filters make four feature maps, stacked as channels{pad}. Point at an output cell above to move the window; pick a filter to change the channel.', { depth: cin === 1 ? t('one channel deep') : t('all 3 channels deep, so one filter is a 3×3×3 block'), k: filterIdx + 1, pad: padding ? t('; pale cells are padding') : '' })}
       </p>
     </div>
   {/if}
 
   {#snippet controls()}
-    <div class="chips" role="group" aria-label="Filter">
-      <span class="dim">Filter</span>
+    <div class="chips" role="group" aria-label={t('Filter')}>
+      <span class="dim">{t('Filter')}</span>
       {#each Object.keys(PRESETS) as name}
-        <button class:on={JSON.stringify(kernel) === JSON.stringify(PRESETS[name])} aria-pressed={JSON.stringify(kernel) === JSON.stringify(PRESETS[name])} onclick={() => (kernel = copy(PRESETS[name]))}>{name}</button>
+        <button class:on={JSON.stringify(kernel) === JSON.stringify(PRESETS[name])} aria-pressed={JSON.stringify(kernel) === JSON.stringify(PRESETS[name])} onclick={() => (kernel = copy(PRESETS[name]))}>{t(name)}</button>
       {/each}
     </div>
-    <label class="sel">stride
+    <label class="sel">{t('stride')}
       <select bind:value={stride}><option value={1}>1</option><option value={2}>2</option></select>
     </label>
-    <label class="sel">padding
+    <label class="sel">{t('padding')}
       <select bind:value={padding}><option value={0}>0</option><option value={1}>1</option></select>
     </label>
     {#if mode === 'toy'}
-      <button class="lab-btn" aria-pressed={show3d} onclick={() => (show3d = !show3d)}>{show3d ? 'Hide' : 'Show'} the layer in 3D</button>
+      <button class="lab-btn" aria-pressed={show3d} onclick={() => (show3d = !show3d)}>{show3d ? t('Hide the layer in 3D') : t('Show the layer in 3D')}</button>
     {/if}
   {/snippet}
 
   {#snippet readout()}
     {#if mode === 'toy' && cell && out}
       out[{cell.i}][{cell.j}] = {terms.filter(([p]) => p !== 0).map(([p, k]) => `${fmt(p)}×${fmt(k)}`).join(' + ') || '0'}
-      = <b>{isMasked(cell.i, cell.j) ? '? (answer the question below)' : fmt(out[cell.i][cell.j])}</b>
-      <span class="dim">(pixels that are 0 add nothing)</span>
+      = <b>{isMasked(cell.i, cell.j) ? t('? (answer the question below)') : fmt(out[cell.i][cell.j])}</b>
+      <span class="dim">{t('(pixels that are 0 add nothing)')}</span>
     {:else}
-      output side = ⌊({src?.length ?? 5} − 3 + 2×{padding}) / {stride}⌋ + 1 = <b>{convOut(src?.length ?? 5, 3, stride, padding)}</b>
+      {t('output side')} = ⌊({src?.length ?? 5} − 3 + 2×{padding}) / {stride}⌋ + 1 = <b>{convOut(src?.length ?? 5, 3, stride, padding)}</b>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw pos"></i>positive output</span>
-    <span><i class="sw neg"></i>negative output</span>
-    <span>background = 0</span>
-    {#if mode === 'toy'}<span><i class="sw win"></i>the 3×3 window</span>{/if}
+    <span><i class="sw pos"></i>{t('positive output')}</span>
+    <span><i class="sw neg"></i>{t('negative output')}</span>
+    <span>{t('background = 0')}</span>
+    {#if mode === 'toy'}<span><i class="sw win"></i>{t('the 3×3 window')}</span>{/if}
   {/snippet}
 </LabFrame>
 

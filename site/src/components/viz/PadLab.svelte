@@ -6,8 +6,29 @@
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Padding: three sequences, one rectangle': '填充：三个序列，一个矩形',
+    'Make a sequence longer or shorter and watch the batch and its mask change.': '把某个序列变长或变短，看批和它的掩码怎样变化。',
+    'Sequences': '序列',
+    'Make sequence {i} shorter': '把序列 {i} 变短',
+    'Make sequence {i} longer': '把序列 {i} 变长',
+    'Answer the shape question below to see the padded batch.': '回答下面关于形状的问题，就能看到填充后的批。',
+    'Batch': '批',
+    'shape': '形状',
+    '(True = PAD, blocked)': '（True = PAD，挡住）',
+    'Show the padding mask': '显示填充掩码',
+    'Batch shape': '批的形状',
+    'PAD cells:': 'PAD 格：',
+    '{p} of {n}': '{n} 格里有 {p} 格',
+    '({pct}% of the batch is padding)': '（批的 {pct}% 是填充）',
+    'real token': '真正的 token',
+    'PAD = 0 (mask T)': 'PAD = 0（掩码为 T）',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -42,30 +63,30 @@
 </script>
 
 <LabFrame
-  title="Padding: three sequences, one rectangle"
-  hint="Make a sequence longer or shorter and watch the batch and its mask change."
+  title={tx('Padding: three sequences, one rectangle')}
+  hint={tx('Make a sequence longer or shorter and watch the batch and its mask change.')}
   onreset={reset}
   resetDisabled={isStart}
 >
   <div class="panes">
     <div class="pane">
-      <p class="cap">Sequences</p>
+      <p class="cap">{tx('Sequences')}</p>
       {#each seqs as s, i}
         <div class="seqrow">
           <span class="toks">[{s.join(', ')}]</span>
           <span class="btns">
-            <button class="lab-btn step" aria-label={`Make sequence ${i} shorter`} disabled={s.length <= 1} onclick={() => shrink(i)}>−</button>
-            <button class="lab-btn step" aria-label={`Make sequence ${i} longer`} disabled={s.length >= MAX} onclick={() => grow(i)}>+</button>
+            <button class="lab-btn step" aria-label={tx('Make sequence {i} shorter', { i })} disabled={s.length <= 1} onclick={() => shrink(i)}>−</button>
+            <button class="lab-btn step" aria-label={tx('Make sequence {i} longer', { i })} disabled={s.length >= MAX} onclick={() => grow(i)}>+</button>
           </span>
         </div>
       {/each}
     </div>
 
     {#if hideShape}
-      <div class="pane hidden"><p class="q"><b>?</b> Answer the shape question below to see the padded batch.</p></div>
+      <div class="pane hidden"><p class="q"><b>?</b> {tx('Answer the shape question below to see the padded batch.')}</p></div>
     {:else}
       <div class="pane">
-        <p class="cap">Batch <code>X</code>, shape ({seqs.length}, {L})</p>
+        <p class="cap">{tx('Batch')} <code>X</code>, {tx('shape')} ({seqs.length}, {L})</p>
         <table class="grid">
           <tbody>
             {#each seqs as s, i}
@@ -78,7 +99,7 @@
       </div>
       {#if showMask}
         <div class="pane">
-          <p class="cap"><code>mask</code> (True = PAD, blocked)</p>
+          <p class="cap"><code>mask</code> {tx('(True = PAD, blocked)')}</p>
           <table class="grid mask">
             <tbody>
               {#each seqs as s}
@@ -94,17 +115,17 @@
   </div>
 
   {#snippet controls()}
-    <label class="tog"><input type="checkbox" bind:checked={showMask} /> Show the padding mask</label>
+    <label class="tog"><input type="checkbox" bind:checked={showMask} /> {tx('Show the padding mask')}</label>
   {/snippet}
 
   {#snippet readout()}
-    Batch shape {hideShape ? '?' : `(${seqs.length}, ${L})`} · PAD cells: {hideShape || hideCount ? '?' : `${pads} of ${seqs.length * L}`}
-    {#if !hideShape && !hideCount} ({Math.round((100 * pads) / (seqs.length * L))}% of the batch is padding){/if}
+    {tx('Batch shape')} {hideShape ? '?' : `(${seqs.length}, ${L})`} · {tx('PAD cells:')} {hideShape || hideCount ? '?' : tx('{p} of {n}', { p: pads, n: seqs.length * L })}
+    {#if !hideShape && !hideCount} {tx('({pct}% of the batch is padding)', { pct: Math.round((100 * pads) / (seqs.length * L)) })}{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><span class="sw"></span>real token</span>
-    <span class="lg"><span class="sw pad"></span>PAD = 0 (mask T)</span>
+    <span class="lg"><span class="sw"></span>{tx('real token')}</span>
+    <span class="lg"><span class="sw pad"></span>{tx('PAD = 0 (mask T)')}</span>
   {/snippet}
 </LabFrame>
 

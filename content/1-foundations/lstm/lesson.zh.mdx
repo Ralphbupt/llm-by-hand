@@ -1,0 +1,275 @@
+---
+recap:
+  can:
+    - "手算 LSTM 的一步：先用 f、i 和 g 算出新的细胞 c，再用 o 和 tanh(c) 算出 h。"
+    - "解释细胞为什么能保住它的值：从 c 到 c 的通路只有“乘以 f，再加上一点”。"
+    - "照着公式用 NumPy 写出 GRU 的一步，再用 PyTorch 写出一个 LSTM 单元。"
+  keys:
+    - "$c_t = f \\cdot c_{t-1} + i \\cdot g$，$h_t = o \\cdot \\tanh(c_t)$"
+    - "不加入新东西时（i = 0），n 步之后 c 还剩原来的 $f^n$"
+    - "GRU：$h_t = (1 - z)\\, h_{t-1} + z\\, \\tilde h$，其中 $\\tilde h = \\tanh(x_t W_h + (r \\cdot h_{t-1}) U_h + b_h)$"
+    - "LSTM 只做一次乘法 `x @ W + h @ U + b`，得到 4H 个数：依次是 f、i、g、o 四块"
+  mistakes:
+    - "把遗忘门的偏置初始化为 0：f 一开始是 0.5，前面几步的信号在训练能用上它之前就消失了。"
+    - "在 GRU 的更新里把 (1 − z) 和 z 弄反，或者在候选值里用 $U_h$ 乘 h，而不是乘 $r \\cdot h$。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import LstmCellLab from '@viz/LstmCellLab.astro'
+import MemoryLab from '@viz/MemoryLab.astro'
+import LstmSamplesLab from '@viz/LstmSamplesLab.astro'
+import GruLab from '@viz/GruLab.astro'
+import BiRnnLab from '@viz/BiRnnLab.astro'
+
+在支线 N3 里，普通的 RNN 记不住 40 步之前的第一个符号。每一步都把隐藏状态送进 tanh，再乘以 $w_h$，
+所以早先加进去的东西越来越小。**LSTM**（全称是“长短期记忆”，long short-term memory）加了第二条通路：
+**细胞状态**（cell state）c。在这条通路上，默认的做法是保留已有的东西。
+
+最后的 Boss 有一部分要在你的电脑上运行。如果你还没配置好，请看
+[在你的电脑上运行代码](/setup/)。
+
+## 1. 细胞状态：一条传送带
+
+把 c 想成传送带上的一件东西：它一步一步往前走，
+每一步都可以从它上面拿走一点，或者往上面加一点。
+
+每一步，由三个**门**（gate）决定 c 会怎样。每个门都是 0 到 1 之间的一个数：
+
+- **遗忘门** f：旧的 c 保留多少。
+- **输入门** i：新的候选值 g 加进来多少。
+- **输出门** o：c 拿出多少作为输出 h。
+
+$$
+c_t = f \cdot c_{t-1} + i \cdot g
+$$
+
+$$
+h_t = o \cdot \tanh(c_t)
+$$
+
+<LstmCellLab hide={{ c: "lstm-c", h: "lstm-h", keep: "keep-10" }} />
+
+<Blank id="lstm-c" />
+
+<Gate requires="lstm-c">
+
+<Blank id="lstm-h" />
+
+这些门从哪里来？每个门都是一个带 sigmoid 的小层，所以输出落在 0 和 1 之间。
+它读入新的输入和上一步的 h，和 RNN 一样。
+
+<Blank id="gate-value" />
+
+</Gate>
+
+## 2. 细胞为什么能保住它的值
+
+<Gate requires="gate-value">
+
+看 c 从一步走到下一步的通路：乘以 f，再加上一点东西。这条通路上没有 tanh，也没有权重矩阵。
+如果不加入新东西，细胞每一步都保留原来的 f 那么多。在实验台里拖动 f 滑块，看 LSTM 那条曲线。
+
+<Blank id="keep-10" />
+
+<Predict id="f-half" />
+
+后面某一步的损失沿着细胞把信号传回第 1 步时，每经过一步都要乘以 f。
+f 接近 1 时，信号能传到。在普通 RNN 里，每一步大约要乘以 0.5。
+
+有一个细节决定了训练能不能起步。训练之前，门的输出大约是 sigmoid(它的偏置)，
+因为权重一开始都很小。遗忘门的偏置为 0 时，f 一开始是 sigmoid(0) = 0.5。遗忘门的偏置为 2 时，
+f 一开始是 sigmoid(2) ≈ 0.88。下面的实验台训练了两个 LSTM，它们只有这个初始偏置不同。
+
+<Predict id="k80" />
+
+<MemoryLab kinds={["rnn", "lstm0", "lstm"]} />
+
+<Stuck q="遗忘门偏置的初始值为什么这么重要？">
+
+训练之前，门的输出大约是 sigmoid(偏置)。偏置为 0 时，f 一开始是 0.5，走过 79 步后，细胞通路只留下
+0.5⁷⁹ ≈ 1.65e-24 的信号。网络甚至察觉不到第 1 步有用，所以永远学不会把 f 调大。
+
+偏置为 2 时，f 一开始是 0.8808，0.8808⁷⁹ ≈ 4.42e-5。这很小，但足够让训练看出其中的联系。
+然后训练会自己把 f 推得更接近 1。把遗忘门的偏置初始化为 1 或 2 是标准做法。
+
+</Stuck>
+
+</Gate>
+
+## 3. GRU：同样的想法，只用两个门
+
+<Gate requires="k80">
+
+LSTM 带着两个向量 h 和 c，用三个门。**GRU**（gated recurrent unit，门控循环单元）保留同样的“默认保留”思路，
+但部件更少：一个状态 h，两个门。
+
+两个门都是 sigmoid，在 0 和 1 之间。和 LSTM 的门一样，每个门都由 $x_t$ 和 $h_{t-1}$ 算出，各有各的权重：
+
+$$
+z = \sigma(x_t W_z + h_{t-1} U_z + b_z) \qquad r = \sigma(x_t W_r + h_{t-1} U_r + b_r)
+$$
+
+- **更新门** z 决定新的候选值 $\tilde h$ 取多少。剩下的 1 − z 是旧的 h，原样保留：
+
+$$
+h_t = (1 - z)\, h_{t-1} + z\, \tilde h
+$$
+
+- **重置门** r 决定生成候选值时用多少旧的 h。候选值有自己的权重 $W_h$、$U_h$、$b_h$：
+
+$$
+\tilde h = \tanh\bigl(x_t W_h + (r \cdot h_{t-1})\, U_h + b_h\bigr)
+$$
+
+这里的 $r \cdot h_{t-1}$ 是逐个数相乘，就像 NumPy 里的 `r * h`。r 接近 0 时，候选值会忽略旧的 h。
+
+<Blank id="gru-h" />
+
+<Gate requires="gru-h">
+
+<GruLab />
+
+z 接近 0 时，旧的 h 几乎原样通过，就像 LSTM 里的 c，所以梯度也能沿着它传回去。
+GRU 没有单独的输出门，也没有单独的细胞，所以权重更少。
+
+<Blank id="gru-params" />
+
+</Gate>
+
+</Gate>
+
+## 4. 从两头读
+
+<Gate requires="gru-params">
+
+到目前为止，每个 RNN 都是从左往右读，所以某个词处的状态只知道它前面的词。有时后面的词更重要。
+在 “he sat by the bank of the river” 这句话里，是四个词之后的 “river” 说明了这是哪种 bank（存钱的银行，还是河岸）。
+
+**双向** RNN 在同一个句子上跑两个 RNN：一个从左往右，一个从右往左。每个位置的输出
+是两个状态并排拼在一起，所以每个词都能从两头看到整个句子。
+
+<Blank id="bi-read" />
+
+<Gate requires="bi-read">
+
+<BiRnnLab />
+
+<Blank id="bi-size" />
+
+<Predict id="bi-generate" />
+
+<Gate requires="bi-generate">
+
+<Stuck q="既然从两头读更好，为什么生成文本的模型不这么做？">
+
+生成器一次写一个词。它挑第 5 个词时，第 6、7、8 个词还不存在，所以从右往左的那一遍没有东西可读。
+双向模型适合在回答之前就拿到全部输入的任务：
+给每个词打标签，给句子分类，或者支线 N5 里的编码器：它先读完整个输入，
+解码器才开始写。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+## 5. 符合规则的句子
+
+<Gate requires="bi-generate">
+
+我们自己的生成器会写出这样的句子：
+
+```
+the gray bee wants the gray cup.
+the blue fox sees the blue box.
+```
+
+规则是：`the <color> <animal> <verb> the <same color> <thing>.` 共有 6 种颜色、6 种动物、6 个动词和 6 种东西。
+字符级模型一次读一个字母，学着预测下一个字母。要遵守最后一条规则，它必须把第一个颜色
+记住 17 个字符，跨过动物和动词。
+
+<Blank id="chance" />
+
+<Predict id="rnn-color" />
+
+<LstmSamplesLab />
+
+LSTM 先学会语法：到第 450 步，它写的句子有 98% 符合语法。这时两个颜色仍然对不上，大约是 1/6 的随机水平。
+然后在第 900 步到第 1,200 步之间，它突然学会了把颜色带过去。普通 RNN 也学会了语法，但始终学不会颜色。
+
+<Stuck q="跳上去之前为什么有一大段平的？">
+
+语法对每个字符都有帮助，所以先学会。颜色规则每句只对一个字符有帮助，
+而且只有当网络找到办法把颜色往后带时才有用。在某个门开始记住它之前，这条规则的梯度很弱。
+一旦有个门开始记住颜色，收益就涨得很快，好句子的比例在 300 步内从 17% 跳到 94%。
+
+</Stuck>
+
+门也有极限。我们把规则变难：第二个颜色出现在 40 个字符之后
+（例如 `the big <thing> and the <same color> <thing>`）。我们的 LSTM 训练 6,000 步也没学会这个版本。在第 14 关，注意力会直接解决这种远距离的规则。
+
+## 6. 自己写一遍
+
+下面是用向量写的 LSTM 的一步。和课程里其他地方一样，向量是行：输入 x 有 D 个数，h 和 c 有 H 个数。
+四个门都来自同一次矩阵乘法 `x @ W + h @ U + b`，它给出 4H 个数。
+前 H 个属于遗忘门，接下来 H 个属于输入门，再接下来 H 个是候选值 g，最后 H 个属于输出门。
+所以 W 是 (D, 4H)，U 是 (H, 4H)。`z[:H]` 取前 H 个数，`z[H:2 * H]` 取接下来的 H 个，依此类推。
+
+写出更新细胞的那一行。
+
+<CodeBlank id="lstm-step" />
+
+<Deeper title="PyTorch 里门的顺序不一样">
+
+这一页和 `boss.py` 把四块按 f、i、g、o 排列。PyTorch 自带的 `nn.LSTM` 按 i、f、g、o 排列。
+如果你要在两者之间复制权重，就把 W、U 和 b 的前两块对调。数学完全一样，只是大矩阵里
+各块的顺序不同。
+
+</Deeper>
+
+<Gate requires="lstm-step">
+
+### Boss 第 1 部分：GRU 的一步
+
+现在写一个你还没见过代码的单元。照着第 3 节的公式写出 GRU 的一步：更新门 z、重置门 r、
+候选值 $\tilde h$ 和新的 h。权重放在一个字典里，所以 `P["Wz"]` 就是 $W_z$。
+
+<CodeBlank id="gru-boss" />
+
+<Gate requires="gru-boss">
+
+### Boss 第 2 部分：在你的电脑上跑你的 LSTM 单元
+
+把 [boss.py](/files/lstm/boss.py) 下载到一个单独的文件夹里，在那里打开它（[配置](/setup/)）。训练需要的东西它都有，只缺
+一部分：`LSTMCell.forward`。用 PyTorch 写出它，照着第 6 节的那一步来（`torch.sigmoid` 和 `torch.tanh` 的用法和 NumPy 的一样；
+现在 `x` 装的是一整批，每个样本一行，所以要按列切片：`z[:, :H]`）。
+
+然后运行 `python boss.py`。它先按这一页的公式检查你的单元，然后用它训练一个字符级模型，
+训练几分钟后采样 200 行。好句子有 180 行或更多时，它会打印一行以 `N4 PASS` 开头的文字。把那一行粘贴到这里。
+行末的代码只能说明你原样粘贴了它；这一部分靠你的诚实。
+
+第 1 部分（GRU 的一步）和这一行都通过后，这一关就算通关。
+
+<CodeBlank id="boss-line" />
+
+<TryIt title="接着试试">
+
+把你的单元改成普通 RNN，再训练一次。在 `forward` 里，紧接着计算 `z` 的那一行之后，加上
+`return torch.tanh(z[:, :self.H]), c`。然后在 `main` 里的 `check_cell()` 前面加一个 `#`，因为这个单元是故意通不过那项检查的。
+在我们的运行中，LSTM 单元写出的 200 行里有 199 行是好句子，普通 RNN 只有 6 行。读一读它打印的三行，
+看看它们违反了哪些规则。
+
+</TryIt>
+
+</Gate>
+
+</Gate>
+
+</Gate>

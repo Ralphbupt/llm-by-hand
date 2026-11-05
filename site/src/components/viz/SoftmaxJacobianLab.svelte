@@ -10,9 +10,22 @@
   import { softmaxRows } from '@lib/num'
   import MatrixGrid from './MatrixGrid.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   /** keys: j11 (J[1][1]), j01 (J[0][1]), rows (the row sums), dz2 (dz) → exercise ids */
-  let { hide = {} }: { hide?: Record<string, string> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Softmax backward: one Jacobian, or one short formula': 'softmax 的反向传播：一个雅可比矩阵，或一个简短公式',
+    'Type new scores z or a new incoming gradient dp. Both ways of computing dz always give the same numbers.': '输入新的分数 z，或新的传入梯度 dp。两种算 dz 的方法给出的数总是一样。',
+    'scores z': '分数 z',
+    'dp (from the layer after)': 'dp（来自后一层）',
+    'row sum': '行和',
+    ', so each dzᵢ is pᵢ × (dpᵢ − {x}).': '，所以每个 dzᵢ 都是 pᵢ × (dpᵢ − {x})。',
+    'row i of J: how pᵢ moves when each score moves': 'J 的第 i 行：每个分数变动时，pᵢ 怎么变',
+    'answer a question below to see this number': '答对下面的题，就能看到这个数',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -53,21 +66,21 @@
 </script>
 
 <LabFrame
-  title="Softmax backward: one Jacobian, or one short formula"
-  hint="Type new scores z or a new incoming gradient dp. Both ways of computing dz always give the same numbers."
+  title={t('Softmax backward: one Jacobian, or one short formula')}
+  hint={t('Type new scores z or a new incoming gradient dp. Both ways of computing dz always give the same numbers.')}
   onreset={() => { z = [...Z0]; dp = [...DP0] }}
   resetDisabled={!changed}
 >
   <div class="cols">
     <div class="col">
-      <MatrixGrid value={[z]} label="scores z" editable onchange={(v) => (z = v[0])} />
+      <MatrixGrid value={[z]} label={t('scores z')} editable onchange={(v) => (z = v[0])} />
       <MatrixGrid value={[p]} label="p = softmax(z)" />
-      <MatrixGrid value={[dp]} label="dp (from the layer after)" editable onchange={(v) => (dp = v[0])} />
+      <MatrixGrid value={[dp]} label={t('dp (from the layer after)')} editable onchange={(v) => (dp = v[0])} />
     </div>
     <div class="col">
       <div class="row">
         <MatrixGrid value={J} label="J = diag(p) − pᵀp" decimals={4} rowLabels={['p0', 'p1', 'p2']} colLabels={labels} masked={jMask} />
-        <MatrixGrid value={rowSums} label="row sum" decimals={4} masked={sumMask} />
+        <MatrixGrid value={rowSums} label={t('row sum')} decimals={4} masked={sumMask} />
       </div>
       <MatrixGrid value={[dzJac]} label="dz = dp @ J" decimals={4} masked={dzMask} />
       <MatrixGrid value={[dzFast]} label="dz = p ⊙ (dp − dp·p)" decimals={4} masked={dzMask} />
@@ -76,15 +89,15 @@
 
   {#snippet readout()}
     {#if masked('dz2')}
-      dp · p = <b class="q">?</b>, so each dzᵢ is pᵢ × (dpᵢ − dp · p).
+      dp · p = <b class="q">?</b>{t(', so each dzᵢ is pᵢ × (dpᵢ − {x}).', { x: 'dp · p' })}
     {:else}
-      dp · p = {f(dot)}, so each dzᵢ is pᵢ × (dpᵢ − {f(dot)}).
+      dp · p = {f(dot)}{t(', so each dzᵢ is pᵢ × (dpᵢ − {x}).', { x: f(dot) })}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key">row i of J: how pᵢ moves when each score moves</span>
-    <span class="key"><b class="q">?</b> answer a question below to see this number</span>
+    <span class="key">{t('row i of J: how pᵢ moves when each score moves')}</span>
+    <span class="key"><b class="q">?</b> {t('answer a question below to see this number')}</span>
   {/snippet}
 </LabFrame>
 

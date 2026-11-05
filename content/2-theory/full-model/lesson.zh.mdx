@@ -1,0 +1,273 @@
+---
+recap:
+  can:
+    - "跟着形状走完一个完整的仅解码器模型，从 token id 一直到 `(B, L, V)` 的 logits。"
+    - "写出贪心解码的循环：运行模型，取最后一行，追加分数最高的 id，遇到 `<eos>` 就停。"
+    - "错开一位构造 x 和 y，并算出只计入答案部分的损失。"
+  keys:
+    - "一个序列：`4 2 7 = four hundred twenty seven <eos>`；提示词就是序列的开头"
+    - "logits：`(B, L, d_model)` → `(B, L, V)`；算损失时用 `reshape(-1, V)`"
+    - "`x = seq[:-1]`，`y = seq[1:]`：位置 t 猜第 t + 1 个 token"
+    - "贪心的一步：`np.argmax(scores[-1])`，只看最后一行"
+  mistakes:
+    - "把跳过的行也算进损失的平均：`(nll * keep).mean()` 仍然除以所有行数。"
+    - "数行数时只数了单词：数字和 `=` 也在同一个序列里。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import FullModelLab from '@viz/FullModelLab.astro'
+import DecodeLab from '@viz/DecodeLab.astro'
+import MicroscopeLab from '@viz/MicroscopeLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+现在你手里有了所有部件：嵌入、注意力、掩码、FFN、残差和 LayerNorm，第 16 关又把它们组装成了
+一个解码器块。这一关你要把这些块堆成一个完整的模型，看它在一个真实的任务上工作。
+
+任务是：**把一个数用英文读出来。** 输入是一串数字，输出是英文单词。
+模型把两者看成**一个序列**：先是数字，然后是 `=`，然后是单词，最后是 `<eos>`（“结束”）。
+
+```
+4 2 7 = four hundred twenty seven <eos>
+```
+
+模型从头到尾只做一件事：猜下一个 token。给它 `4 2 7 =`，它就接着这个序列往下写，一次一个词，
+直到写出 `<eos>`。你给它的那部分是**提示词**（prompt）；它写出的那部分是答案。
+
+一共有 1,000 个数，从 0 到 999。模型在其中 900 个上训练。另外 100 个留出来（模型从不在它们上面训练），
+所以要答对它们，唯一的办法是学会规则，而不是记住答案。
+
+<Blank id="seq-len" />
+
+<Gate requires="seq-len">
+
+## 1. 整台机器
+
+按从输入到输出的顺序：一张 token 表把每个 id 变成一个向量。然后加上第 16 关的位置数值。
+然后是一叠解码器块、一个最终的 LayerNorm，以及一个给每个 token 打一个分数的输出层。
+选一个块，看它的输入、输出，以及它有多少参数。
+这些形状对应一个 8 个 token 的序列，也就是这个任务里最长的输入。
+
+<FullModelLab />
+
+<Blank id="logits-shape" />
+
+<Gate requires="logits-shape">
+
+<Predict id="heads-params" />
+
+大部分参数都在块里，而在每个块里，大部分参数又集中在两个地方：
+注意力的矩阵和 FFN。一个 FFN 的参数你可以手算出来。
+
+<Blank id="ffn-params" />
+
+<Deeper title="72,106 个参数都在哪里">
+
+默认大小下（`d_model` 64，4 个头，2 个块，`d_ff` 128）：
+
+| 部分 | 参数 |
+|---|---|
+| token 表：42 × 64 | 2,688 |
+| 一个注意力块：`W_Q`、`W_K`、`W_V`（各 64 × 64）+ `W_O`（64 × 64 + 64） | 16,448 |
+| 一个 FFN | 16,576 |
+| 一个块：注意力 + FFN + 2 个 LayerNorm（各 128） | 33,280 |
+| 最终的 LayerNorm | 128 |
+| 输出层：64 × 42 + 42 | 2,730 |
+| **合计：2 个块 + token 表 + 最终的 LayerNorm + 输出层** | **72,106** |
+
+位置数值是加上去的，不是学出来的，所以没有参数。
+头的数量在这张表里哪儿也没出现。它只决定 64 列怎样切成若干片。
+42 个 token 是 `<pad>`、`<eos>`、十个数字、`=`，以及 29 个单词：zero 到 nineteen、八个整十的词，还有“hundred”。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="ffn-params">
+
+## 2. 放到显微镜下
+
+结构图展示的是一个个块。现在看看它们的内部。下面是这个模型的一个迷你版（1 个块，1 个头，
+`d_model` = 6，`d_ff` = 12），它读入 `8 9 =`，写出下一个词。每个大小都和其他大小不同，
+所以每个数都能告诉你它是哪个轴。每一步都显示张量的形状（轴带名字）、它的数，
+以及同一个张量在本页完整模型里的形状。
+
+<MicroscopeLab data="full-model" />
+
+下面是同一个迷你模型的块画成的图，用的是显微镜里的数。下面那条线是
+残差通路：每个子层读 x 的一份归一化副本，再把结果加到 x 上。
+
+<ArchLab which="full" />
+
+<Stuck q="为什么加位置之前，嵌入要先乘一个数？">
+
+看显微镜里的第 3 步和第 4 步。每个位置数值都在 −1 和 1 之间，所以这个系数决定了 token
+相对于它的位置有多强。
+
+这个模型的 token 表一开始的数大约是 1/√`d_model` 的大小。乘以 √`d_model` 让它们变成大约 1，
+和位置数值差不多，这样谁也不会盖住谁。在完整模型里，一个 token 的那一行有 64 个数，
+每个大小是 1/8，所以它的长度大约是 √64 × 1/8 = 1。乘以 √64 = 8 之后，长度大约是 8，而一个位置的那一行大约是 5.7。
+
+这是有影响的。假设 token 表一开始的大小是 1。那么一个 token 的那一行长度大约是 √64 × 1 × 8 = 64，是它的位置那一行的 11 倍，
+模型几乎看不出 token 在哪里。它会把 82 读成“eight hundred twenty two”。三次训练下来，
+它在没见过的数上只答对 55% 到 79%，而本页的模型能答对 99% 到 100%。
+在第 21 关，位置表也是学出来的，两张表一开始的大小相同，所以那个模型不需要这个系数。
+
+</Stuck>
+
+有多个头时，注意力分数的形状是 `(B, h, L_q, L_k)`：批、头，然后是 Q 的长度和
+K 的长度。在仅解码器模型里，Q 和 K 来自同一个序列。
+
+<Blank id="scores-shape" />
+
+</Gate>
+
+<Gate requires="scores-shape">
+
+## 3. 一次一个词
+
+第 14 关把它叫作**推理**（inference）：运行一个训练好的模型来得到答案。它就是整个前向传播，从 token id 到
+logits，所有权重都固定不变。训练运行同样的前向传播，然后做反向传播，再改动权重。
+
+<Predict id="infer-vs-train" />
+
+模型从不一次写出整个答案。它写**一个词，然后再运行一次**：
+
+1. 从提示词开始：数字和 `=`。
+2. 在目前为止的所有内容上运行模型。输出每个 token 一行。
+3. 只有**最后一行**有用。输出层把它的 64 个数变成 42 个分数，每个 token 一个。
+   这些原始分数通常叫作 **logits**。
+4. 选分数最高的那个（这叫贪心解码），把那个 token 加到末尾。
+5. 重复，直到模型选出 `<eos>`。
+
+下面是一个真实的模型，就是在这一页的任务上训练的。按 **下一步**，看每个阶段。
+token 上方的柱子显示：最后一行在选下一个词时，注意力看向了哪里。
+
+<DecodeLab />
+
+<Blank id="step-rows" />
+
+</Gate>
+
+<Gate requires="step-rows">
+
+只有第 4 步是新代码。NumPy 的 `np.argmax` 给出最大值所在的位置，而不是最大值本身：
+`np.argmax(np.array([0.2, 1.5, -0.3]))` 是 `1`。
+
+<CodeBlank id="greedy-pick" />
+
+现在把上面列表里的整个循环写出来。模型每个 token 返回一行分数，所以 `scores[-1]` 是最后一行。
+`ids.append(nxt)` 把选出的 id 加到末尾，模型一选出 `<eos>`，`break` 就退出循环。
+新 token 的数量有一个固定上限，用来停住一个永远不选 `<eos>` 的模型。
+
+<CodeBlank id="greedy-loop" />
+
+一**轮**（epoch）就是把全部 900 个训练用的数过一遍。实验台里把同一个模型存了两份：训练 2 轮之后的和 60 轮之后的。
+
+<TryIt>
+
+把模型切换到**训练 2 轮后**，让它读 14。它说“six hundred twenty nine”。
+它已经学会了长答案的样子：一个数字，“hundred”，一个整十的词，一个数字。
+但它还没学会哪个数字放在哪里，连这个数有多长都不知道。
+
+然后切换回**训练 60 轮后**，让它读 896。看那些柱子：说“eight”时最后一行看向 8，
+说“ninety”时主要看向 9，说“six”时看向 6。没有人告诉过它哪个数字对应哪个词。这个模型
+在全部 100 个没见过的数上都答对了。
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="greedy-loop">
+
+## 4. 它是怎么学会的
+
+训练时，模型**不是**一次一个词地运行。它拿到整个序列，一次前向传播就做出所有的猜测。
+输入 x 是去掉最后一个 token 的序列，目标 y 是去掉第一个 token 的序列：
+
+```
+427:    x   4  2  7  =     four     hundred  twenty  seven
+        y   2  7  =  four  hundred  twenty   seven   <eos>
+```
+
+因果掩码让每个位置看不到它要猜的那个 token。像这样用正确的前文来训练，
+而不是用模型自己猜出来的前文，叫作**教师强制**（teacher forcing）。
+
+<Stuck q="为什么 x 和 y 是同样的 token，只是错开了一位？">
+
+因为位置 t 要猜的是下一个 token。把它们上下对齐写出来：`=` 下面的答案是“four”；
+“four”下面的答案是“hundred”。y 就是 x 往左挪一步，末尾加上 `<eos>`。
+
+如果你把同一行既当输入又当目标，位置 t 就可以直接抄它自己的输入，
+损失会降到零，而模型什么都没学到。
+
+</Stuck>
+
+不是每个猜测都值得学。4 下面的目标是 2，2 下面的目标是 7：模型是在猜题目里的
+数字，而这些数字是随机的。只有是单词或 `<eos>` 的目标才是答案。
+它们前面的每个目标，包括 `=`，都是题目的一部分。损失只计入答案的目标，跳过其余的：做法是把要跳过的目标设成 PAD。
+
+<Blank id="count-427" />
+
+<Gate requires="count-427">
+
+训练在每批 64 个数上重复四步：
+
+```python
+for x, y in batches:              # 1. 一批数据；跳过的目标是 PAD
+    logits = model(x)             # 2. 前向传播：(64, L, 42)
+    # 3. 损失，ignore_index=PAD
+    loss = loss_fn(logits.reshape(-1, 42), y.reshape(-1))
+    # 4. 反向传播，然后更新
+    opt.zero_grad(); loss.backward(); opt.step()
+```
+
+短的数，序列也短。在一批 0 到 63 的数里，最长的 x 是 5 个 token（比如
+`2 3 = twenty three`），所以 logits 是 (64, 5, 42)，一共有 320 个目标。其中只有 167 个计入：118 个是数字
+或 `=`，35 个是短序列后面的 PAD。
+
+<Blank id="reshape-rows" />
+
+<Stuck q="为什么非要 reshape 成 (B × L, V)？">
+
+损失函数要的是一个简单的猜测列表：每个猜测一行分数，每个猜测一个正确的 id。
+它不关心一个猜测来自哪个序列、哪个位置。
+每个序列的每个位置都是一个独立的猜测，所以 (64, 5, 42) 被存成 320 行，每行 42 个数。
+
+</Stuck>
+
+<Predict id="no-causal" />
+
+<Deeper title="一个调试习惯：复制任务">
+
+模型什么都学不会时，问题可能出在任务上，也可能是代码里有 bug。你会先检查什么？
+
+<Predict id="copy-first" />
+
+**复制任务**就是 `1 2 3 = 1 2 3`。任何正确的模型大约训练一分钟就能学会。
+所以如果你的模型学不会，bug 就在掩码、错开一位或者损失里。
+
+</Deeper>
+
+最后一步。写出跳过 PAD 目标的损失。在 NumPy 里，一个由 True 和 False 组成的数组可以挑出元素：
+`np.array([5, 6, 7])[np.array([True, False, True])]` 是 `array([5, 7])`。
+浏览器里给你准备了 `softmax(x)`，它对 x 的每一行分别计算。
+
+<CodeBlank id="masked-loss" />
+
+<Gate requires="masked-loss">
+
+**推荐下一步：支线 [N7](/learn/encoder-decoder/)。** 如果你想读懂 2017 年最早的 Transformer
+设计，现在正是时候。N7 在同一个任务上搭出两个堆叠的编码器–解码器。第 18 关继续主线。
+
+</Gate>
+
+</Gate>
+
+</Gate>

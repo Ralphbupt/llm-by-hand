@@ -11,8 +11,41 @@
   import { has, subscribe } from '@lib/progress'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: Record<string, string> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Compute e = a·b': '计算 e = a·b',
+    'Compute f = e + c': '计算 f = e + c',
+    'Compute L = f·d': '计算 L = f·d',
+    'Start backward: L.grad = 1': '开始反向传播：L.grad = 1',
+    'Send gradient from L to f and d': '把梯度从 L 传给 f 和 d',
+    'Send gradient from f to e and c': '把梯度从 f 传给 e 和 c',
+    'Send gradient from e to a and b': '把梯度从 e 传给 a 和 b',
+    'All gradients are computed': '所有梯度都算完了',
+    'L.grad = 1   (L moves exactly as fast as L)': 'L.grad = 1   （L 变化的速度和 L 自己完全一样）',
+    'sends:': '传出：',
+    'Autograd, one node at a time: L = (a·b + c)·d': '自动求导，一次一个节点：L = (a·b + c)·d',
+    'Press the main button to compute forward, one node at a time, then send gradients back. Change an input to try other numbers.': '按主按钮，一次算一个节点地做前向计算，然后把梯度传回去。改一个输入，试试别的数。',
+    'progress': '进度',
+    'Forward': '前向',
+    'Backward': '反向',
+    'Computation graph of L = (a·b + c)·d, flowing {dir}': 'L = (a·b + c)·d 的计算图，{dir}',
+    'top to bottom': '从上往下',
+    'left to right': '从左往右',
+    'What each step computed': '每一步算了什么',
+    'Done': '完成',
+    'Run all': '全部运行',
+    'Clear': '清空',
+    'Inputs': '输入',
+    'All gradients are computed. Press Clear to watch it again, or change an input.': '所有梯度都算完了。按“清空”再看一遍，或者改一个输入。',
+    'Nothing computed yet. Press “Compute e = a·b” to compute the first node.': '还什么都没算。按“计算 e = a·b”算出第一个节点。',
+    'The forward pass is running.': '前向传播正在进行。',
+    'values flow forward': '值向前流动',
+    'gradients flow back, times the factor on each edge': '梯度向后流动，每经过一条边就乘上边上的因子',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -53,10 +86,10 @@
   const G = (n: N) => (masked(n) ? '?' : fmt(grad[n]!))
 
   // ---- the steps -------------------------------------------------------------
-  const FWD_LABEL = ['Compute e = a·b', 'Compute f = e + c', 'Compute L = f·d']
-  const BWD_LABEL = ['Start backward: L.grad = 1', 'Send gradient from L to f and d', 'Send gradient from f to e and c', 'Send gradient from e to a and b']
+  const FWD_LABEL = [t('Compute e = a·b'), t('Compute f = e + c'), t('Compute L = f·d')]
+  const BWD_LABEL = [t('Start backward: L.grad = 1'), t('Send gradient from L to f and d'), t('Send gradient from f to e and c'), t('Send gradient from e to a and b')]
   const done = $derived(bwd >= 4)
-  const nextLabel = $derived(fwd < 3 ? FWD_LABEL[fwd] : bwd < 4 ? BWD_LABEL[bwd] : 'All gradients are computed')
+  const nextLabel = $derived(fwd < 3 ? FWD_LABEL[fwd] : bwd < 4 ? BWD_LABEL[bwd] : t('All gradients are computed'))
 
   function next() {
     const v = val
@@ -73,10 +106,10 @@
     bwd += 1
     const ge = fmt(v.d)
     log = [...log, [
-      'L.grad = 1   (L moves exactly as fast as L)',
-      `L = f·d sends:  f.grad += d × 1 = ${fmt(v.d)}    d.grad += f × 1 = ${masked('d') ? '?' : fmt(v.f)}`,
-      `f = e + c sends:  e.grad += 1 × ${ge} = ${ge}    c.grad += 1 × ${ge} = ${ge}`,
-      `e = a·b sends:  a.grad += b × ${ge} = ${masked('a') ? '?' : fmt(v.b * v.d)}    b.grad += a × ${ge} = ${fmt(v.a * v.d)}`,
+      t('L.grad = 1   (L moves exactly as fast as L)'),
+      `L = f·d ${t('sends:')}  f.grad += d × 1 = ${fmt(v.d)}    d.grad += f × 1 = ${masked('d') ? '?' : fmt(v.f)}`,
+      `f = e + c ${t('sends:')}  e.grad += 1 × ${ge} = ${ge}    c.grad += 1 × ${ge} = ${ge}`,
+      `e = a·b ${t('sends:')}  a.grad += b × ${ge} = ${masked('a') ? '?' : fmt(v.b * v.d)}    b.grad += a × ${ge} = ${fmt(v.a * v.d)}`,
     ][bwd - 1]]
   }
   function runAll() { while (!done) next() }
@@ -164,21 +197,21 @@
 </script>
 
 <LabFrame
-  title="Autograd, one node at a time: L = (a·b + c)·d"
-  hint="Press the main button to compute forward, one node at a time, then send gradients back. Change an input to try other numbers."
+  title={t('Autograd, one node at a time: L = (a·b + c)·d')}
+  hint={t('Press the main button to compute forward, one node at a time, then send gradients back. Change an input to try other numbers.')}
   onreset={reset}
   resetDisabled={!changed}
 >
-  <div class="phase" aria-label="progress">
-    <span class="ph" class:on={fwd < 3}>Forward</span>
+  <div class="phase" aria-label={t('progress')}>
+    <span class="ph" class:on={fwd < 3}>{t('Forward')}</span>
     {#each [0, 1, 2] as i}<i class="dot" class:fill={fwd > i} class:cur={fwd === i}></i>{/each}
     <span class="arrow">▸</span>
-    <span class="ph" class:on={fwd >= 3 && !done}>Backward</span>
+    <span class="ph" class:on={fwd >= 3 && !done}>{t('Backward')}</span>
     {#each [0, 1, 2, 3] as i}<i class="dot back" class:fill={bwd > i} class:cur={fwd >= 3 && bwd === i}></i>{/each}
   </div>
 
   <div class="scroll" bind:clientWidth={labW}>
-    <svg use:readable {viewBox} class="graph" class:narrow role="img" aria-label="Computation graph of L = (a·b + c)·d, flowing {narrow ? 'top to bottom' : 'left to right'}">
+    <svg use:readable {viewBox} class="graph" class:narrow role="img" aria-label={t('Computation graph of L = (a·b + c)·d, flowing {dir}', { dir: narrow ? t('top to bottom') : t('left to right') })}>
       <defs>
         <marker id="ag-fwd" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" class="ah" />
@@ -216,14 +249,14 @@
       {/each}
     </svg>
   </div>
-  {#if log.length}<ol class="log" aria-label="What each step computed">{#each log as l}<li>{l}</li>{/each}</ol>{/if}
+  {#if log.length}<ol class="log" aria-label={t('What each step computed')}>{#each log as l}<li>{l}</li>{/each}</ol>{/if}
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={next} disabled={done}>{done ? 'Done' : nextLabel}</button>
-    <button class="lab-btn" onclick={runAll} disabled={done}>Run all</button>
-    <button class="lab-btn" onclick={clear} disabled={fwd === 0}>Clear</button>
+    <button class="lab-btn primary" onclick={next} disabled={done}>{done ? t('Done') : nextLabel}</button>
+    <button class="lab-btn" onclick={runAll} disabled={done}>{t('Run all')}</button>
+    <button class="lab-btn" onclick={clear} disabled={fwd === 0}>{t('Clear')}</button>
     <span class="leaves">
-      <span class="lh">Inputs</span>
+      <span class="lh">{t('Inputs')}</span>
       {#each ['a', 'b', 'c', 'd'] as k}
         {@const kk = k as Leaf}
         <label>{k} = <input type="number" step="1" value={leaf[kk]} onchange={(e) => setLeaf(kk, (e.currentTarget as HTMLInputElement).value)} /></label>
@@ -231,13 +264,13 @@
     </span>
   {/snippet}
   {#snippet readout()}
-    {#if done}All gradients are computed. Press Clear to watch it again, or change an input.
-    {:else if fwd === 0}Nothing computed yet. Press “Compute e = a·b” to compute the first node.
-    {:else}{log.at(-1) ?? 'The forward pass is running.'}{/if}
+    {#if done}{t('All gradients are computed. Press Clear to watch it again, or change an input.')}
+    {:else if fwd === 0}{t('Nothing computed yet. Press “Compute e = a·b” to compute the first node.')}
+    {:else}{log.at(-1) ?? t('The forward pass is running.')}{/if}
   {/snippet}
   {#snippet legend()}
-    <span><i class="sw f"></i>values flow forward</span>
-    <span><i class="sw b"></i>gradients flow back, times the factor on each edge</span>
+    <span><i class="sw f"></i>{t('values flow forward')}</span>
+    <span><i class="sw b"></i>{t('gradients flow back, times the factor on each edge')}</span>
   {/snippet}
 </LabFrame>
 

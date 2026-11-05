@@ -4,6 +4,7 @@
  */
 import { SITE_NAME, SITE_URL, SITE_DESCRIPTION, AUTHOR, LICENSE_URL, abs } from '../config/site'
 import { BRANCH_NAME, PART_NAME, type Level } from './levels'
+import { tr, type Lang } from './i18n'
 
 /** Inline Markdown and math to plain text, for meta descriptions and JSON-LD ("`(n, k)`" → "(n, k)"). */
 export function plain(s: string): string {
@@ -19,14 +20,16 @@ export function plain(s: string): string {
 }
 
 /** "Level 14", "Side trip U3 (Under the hood)" */
-export function levelLabel(l: Level): string {
-  return l.data.branch ? `Side trip ${l.data.level} (${BRANCH_NAME[l.data.branch]})` : `Level ${l.data.level}`
+export function levelLabel(l: Level, lang: Lang = 'en'): string {
+  return l.data.branch
+    ? tr(lang, 'Side trip {n} ({branch})', { n: l.data.level, branch: tr(lang, BRANCH_NAME[l.data.branch]) })
+    : tr(lang, 'Level {n}', { n: l.data.level })
 }
 
 /** The meta description of a level: its question, then what it covers. Kept near 160 characters. */
-export function levelDescription(l: Level): string {
+export function levelDescription(l: Level, lang: Lang = 'en'): string {
   const q = plain(l.data.question)
-  const tail = ` ${levelLabel(l)} of ${SITE_NAME}: work it out by hand with small numbers, in an interactive lesson.`
+  const tail = tr(lang, ' {label} of {site}: work it out by hand with small numbers, in an interactive lesson.', { label: levelLabel(l, lang), site: SITE_NAME })
   const s = q + tail
   return s.length <= 200 ? s : q
 }
@@ -71,22 +74,23 @@ export function courseLd(levels: Level[]) {
 }
 
 /** One level: a LearningResource that is part of the course, at its place in reading order. */
-export function levelLd(l: Level, position: number) {
-  const part = PART_NAME[l.data.part]
+export function levelLd(l: Level, position: number, lang: Lang = 'en') {
+  const part = tr(lang, PART_NAME[l.data.part])
+  const path = lang === 'zh' ? `/zh/learn/${l.id}/` : `/learn/${l.id}/`
   return {
     '@context': 'https://schema.org',
     '@type': 'LearningResource',
     name: `${l.data.level}. ${l.data.title}`,
-    url: abs(`/learn/${l.id}/`),
+    url: abs(path),
     description: plain(l.data.question),
     learningResourceType: 'Interactive lesson',
     interactivityType: 'active',
     educationalLevel: l.data.part === 'foundations' ? 'Beginner' : 'Intermediate',
-    inLanguage: 'en',
+    inLanguage: lang === 'zh' ? 'zh-CN' : 'en',
     isAccessibleForFree: true,
     license: LICENSE_URL,
     position,
-    about: l.data.branch ? `${part}: ${BRANCH_NAME[l.data.branch]}` : part,
+    about: l.data.branch ? `${part}: ${tr(lang, BRANCH_NAME[l.data.branch])}` : part,
     ...(l.data.recap?.can?.length ? { teaches: l.data.recap.can.map(plain) } : {}),
     isPartOf: { '@type': 'Course', '@id': courseId, name: SITE_NAME, url: `${SITE_URL}/` },
     provider,

@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './BottleneckLab.svelte'
 interface Props { models?: ('plain' | 'attn')[] }
 const { models } = Astro.props
 ---
-<Lab client:visible models={models} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible models={models} />

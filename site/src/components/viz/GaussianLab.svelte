@@ -1,6 +1,30 @@
 <script lang="ts">
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Gaussian noise: x = mean + std × z': '高斯噪声：x = mean + std × z',
+    'Move the mean and the std. Every point keeps its own z, so the whole cloud shifts and stretches together.': '移动均值和标准差。每个点都保留自己的 z，所以整团点一起平移、一起伸缩。',
+    'Cloud of sampled points': '采样得到的点云',
+    '{n} samples (x, y). The ring is one std from the mean.': '{n} 个样本 (x, y)。圆圈离均值一个标准差。',
+    'Histogram of the x values with the bell curve on top': 'x 值的直方图，上面叠着钟形曲线',
+    'how many land at each x': '落在每个 x 上的有多少',
+    '{n}% within one std': '{n}% 在一个标准差以内',
+    'The same points, counted by x only. The curve is the Gaussian’s bell shape for this mean and std.': '同样的点，只按 x 来数。曲线是这个均值和标准差下高斯分布的钟形。',
+    'mean x': '均值 x',
+    'mean y': '均值 y',
+    'Draw new noise': '换一批噪声',
+    'highlighted point:': '高亮的点：',
+    '· measured over {n} points: mean of x = {m}, std of x = {s}, within one std of the mean (in x): {f}%': '· 在 {n} 个点上量出：x 的均值 = {m}，x 的标准差 = {s}，离均值不超过一个标准差（按 x）的：{f}%',
+    'the highlighted point, computed in the line above': '高亮的点，就是上面那一行算出来的',
+    'the other samples': '其他样本',
+    'one std from the mean': '离均值一个标准差',
+    'fraction of points per x': '每个 x 上的点的比例',
+  })
   /**
    * Gaussian lab: every point is x = mean + std * z, where z comes from a standard normal.
    * The z values are drawn once (fixed seed), so moving a slider moves the same cloud.
@@ -65,14 +89,14 @@
   const changed = $derived(mx !== 0 || my !== 0 || sd !== 1 || seed !== 1)
 </script>
 <LabFrame
-  title="Gaussian noise: x = mean + std × z"
-  hint="Move the mean and the std. Every point keeps its own z, so the whole cloud shifts and stretches together."
+  title={tx('Gaussian noise: x = mean + std × z')}
+  hint={tx('Move the mean and the std. Every point keeps its own z, so the whole cloud shifts and stretches together.')}
   onreset={() => { mx = 0; my = 0; sd = 1; seed = 1 }}
   resetDisabled={!changed}
 >
   <div class="pics">
     <figure>
-      <svg viewBox="-1 -1 102 106" use:readable aria-label="Cloud of sampled points">
+      <svg viewBox="-1 -1 102 106" use:readable aria-label={tx('Cloud of sampled points')}>
         <rect x="0" y="0" width="100" height="100" class="box" />
         {#each [-4, -2, 0, 2, 4] as t}
           <line x1={sx(t)} y1="0" x2={sx(t)} y2="100" class="grid" class:axis={t === 0} />
@@ -86,10 +110,10 @@
         <circle cx={sx(mx)} cy={sy(my)} r="1.4" class="mean" />
         <circle cx={sx(pts[0][0])} cy={sy(pts[0][1])} r="2" class="pt first" />
       </svg>
-      <figcaption>{N} samples (x, y). The ring is one std from the mean.</figcaption>
+      <figcaption>{tx('{n} samples (x, y). The ring is one std from the mean.', { n: N })}</figcaption>
     </figure>
     <figure>
-      <svg viewBox="-1 -6 102 72" use:readable aria-label="Histogram of the x values with the bell curve on top">
+      <svg viewBox="-1 -6 102 72" use:readable aria-label={tx('Histogram of the x values with the bell curve on top')}>
         <defs><clipPath id="gauss-plot"><rect x="0" y="0" width="100" height="60" /></clipPath></defs>
         <rect x="0" y="0" width="100" height="60" class="box" />
         <rect x={sx(mx - sd)} y="0" width={sx(mx + sd) - sx(mx - sd)} height="60" class="band" clip-path="url(#gauss-plot)" />
@@ -101,32 +125,32 @@
         </g>
         <line x1={sx(pts[0][0])} x2={sx(pts[0][0])} y1="0" y2="60" class="me" />
         {#each [-4, -2, 0, 2, 4] as t}<text x={sx(t)} y="65.5" class="tick">{String(t).replace('-', '−')}</text>{/each}
-        <text x="1.5" y="-1.5" class="tick name start">how many land at each x</text>
-        <text x={Math.max(14, Math.min(86, sx(mx)))} y="5" class="tick band-t">{(stats.in1 * 100).toFixed(0)}% within one std</text>
+        <text x="1.5" y="-1.5" class="tick name start">{tx('how many land at each x')}</text>
+        <text x={Math.max(14, Math.min(86, sx(mx)))} y="5" class="tick band-t">{tx('{n}% within one std', { n: (stats.in1 * 100).toFixed(0) })}</text>
       </svg>
-      <figcaption>The same points, counted by x only. The curve is the Gaussian’s bell shape for this mean and std.</figcaption>
+      <figcaption>{tx('The same points, counted by x only. The curve is the Gaussian’s bell shape for this mean and std.')}</figcaption>
     </figure>
   </div>
 
   {#snippet controls()}
     <div class="knobs">
-      <label><span>mean x</span> <input type="range" min="-3" max="3" step="0.1" value={mx} oninput={(e) => (mx = +(e.currentTarget as HTMLInputElement).value)} /> <b>{mx.toFixed(1)}</b></label>
-      <label><span>mean y</span> <input type="range" min="-3" max="3" step="0.1" value={my} oninput={(e) => (my = +(e.currentTarget as HTMLInputElement).value)} /> <b>{my.toFixed(1)}</b></label>
+      <label><span>{tx('mean x')}</span> <input type="range" min="-3" max="3" step="0.1" value={mx} oninput={(e) => (mx = +(e.currentTarget as HTMLInputElement).value)} /> <b>{mx.toFixed(1)}</b></label>
+      <label><span>{tx('mean y')}</span> <input type="range" min="-3" max="3" step="0.1" value={my} oninput={(e) => (my = +(e.currentTarget as HTMLInputElement).value)} /> <b>{my.toFixed(1)}</b></label>
       <label><span>std</span> <input type="range" min="0" max="3" step="0.1" value={sd} oninput={(e) => (sd = +(e.currentTarget as HTMLInputElement).value)} /> <b>{sd.toFixed(1)}</b></label>
     </div>
-    <button class="lab-btn" onclick={() => (seed = seed + 1)}>Draw new noise</button>
+    <button class="lab-btn" onclick={() => (seed = seed + 1)}>{tx('Draw new noise')}</button>
   {/snippet}
 
   {#snippet readout()}
-    highlighted point: z = ({first[0].toFixed(2)}, {first[1].toFixed(2)}) → x = {mx.toFixed(1)} + {sd.toFixed(1)} × {first[0].toFixed(2)} = <b>{(mx + sd * first[0]).toFixed(2)}</b>
-    <span class="dim">· measured over {N} points: mean of x = {stats.mean.toFixed(2)}, std of x = {stats.std.toFixed(2)}, within one std of the mean (in x): {(stats.in1 * 100).toFixed(0)}%</span>
+    {tx('highlighted point:')} z = ({first[0].toFixed(2)}, {first[1].toFixed(2)}) → x = {mx.toFixed(1)} + {sd.toFixed(1)} × {first[0].toFixed(2)} = <b>{(mx + sd * first[0]).toFixed(2)}</b>
+    <span class="dim">{tx('· measured over {n} points: mean of x = {m}, std of x = {s}, within one std of the mean (in x): {f}%', { n: N, m: stats.mean.toFixed(2), s: stats.std.toFixed(2), f: (stats.in1 * 100).toFixed(0) })}</span>
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw hl"></i>the highlighted point, computed in the line above</span>
-    <span><i class="sw pt-sw"></i>the other samples</span>
-    <span><i class="sw ring-sw"></i>one std from the mean</span>
-    <span><i class="sw bar-sw"></i>fraction of points per x</span>
+    <span><i class="sw hl"></i>{tx('the highlighted point, computed in the line above')}</span>
+    <span><i class="sw pt-sw"></i>{tx('the other samples')}</span>
+    <span><i class="sw ring-sw"></i>{tx('one std from the mean')}</span>
+    <span><i class="sw bar-sw"></i>{tx('fraction of points per x')}</span>
   {/snippet}
 </LabFrame>
 

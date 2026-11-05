@@ -10,6 +10,8 @@
   import Net3D from '../viz3d/Net3D.svelte'
   import Net2D from '../viz3d/Net2D.svelte'
   import { flat, fmtNum, fmtShape, groupTones, paramsOf, stateAt, type Net3DSpec, type NetValues } from '@lib/three/net'
+  import { langCtx, useT } from '@lib/i18nSvelte'
+  import { zhSpec } from './NetLab.zh'
 
   type Props = {
     spec: Net3DSpec
@@ -34,13 +36,53 @@
     /** the view to start in: 'flat' (the exact-reading view, default) or '3d' when size and depth are the point */
     initialView?: 'flat' | '3d'
   }
-  let { spec, title, hint, caption, ariaLabel, hideParams = false, idle = 'Press Next to start.', extra, start = -1, numbers, height, onreset, changed = false, initialView = 'flat' }: Props = $props()
+  let { spec: specIn, title, hint, caption, ariaLabel, hideParams = false, idle, extra, start = -1, numbers, height, onreset, changed = false, initialView = 'flat' }: Props = $props()
+  // the language comes from the lab that renders this one (ArchLab calls provideLang)
+  const lang = langCtx()
+  const t = useT({
+    'Press Next to start.': '按“下一步”开始。',
+    'Back to the start': '回到开头',
+    '◀ Back': '◀ 上一步',
+    '⏸ Pause': '⏸ 暂停',
+    '▶ Play': '▶ 播放',
+    'Next ▶': '下一步 ▶',
+    'Layers ({n})': '层（{n}）',
+    'Layers, from input to output': '各层，从输入到输出',
+    ' · axes: {axes}': ' · 轴：{axes}',
+    ' · parameters: {n}': ' · 参数：{n}',
+    'values': '值',
+    'values (the first rows)': '值（前几行）',
+    'gradient ∂L/∂(value)': '梯度 ∂L/∂(值)',
+    'No numbers yet at this step.': '这一步还没有数。',
+    'Step {k} of {n}': '第 {k} 步（共 {n} 步）',
+    'backward': '反向',
+    'forward': '前向',
+    ' · {n} parameters in all': ' · 一共 {n} 个参数',
+    'positive weight or value': '正的权重或值',
+    'negative weight or value': '负的权重或值',
+    'positive weight': '正的权重',
+    'negative weight': '负的权重',
+    'positive value': '正的值',
+    'negative value': '负的值',
+    'A disc’s fill is its value: the stronger the color, the further from 0.': '圆盘的填充色就是它的值：颜色越深，离 0 越远。',
+    'Gray disc = done; hollow disc = not reached yet.': '灰色圆盘 = 已完成；空心圆盘 = 还没到。',
+    'the same weights, used again': '同样的权重，再用一次',
+    'forward (this step)': '前向（这一步）',
+    'backward: gradient': '反向：梯度',
+    '“∂ −0.5” = the gradient ∂L/∂(that value).': '“∂ −0.5” = 梯度 ∂L/∂(那个值)。',
+    'Thicker arc = more attention weight.': '弧线越粗 = 注意力权重越大。',
+    'Thicker line = larger |w|. ': '线越粗 = |w| 越大。',
+    'Select a layer to see its numbers.': '选一层，查看它的数。',
+  })
+  // the spec's own words (layer titles, notes, step texts) in the page's language
+  const spec = $derived(lang === 'zh' ? zhSpec(specIn) : specIn)
+  const idleText = $derived(idle ?? t('Press Next to start.'))
 
   // svelte-ignore state_referenced_locally
   let view = $state<string>(initialView)
   let has3d = $state(true)
   // a hint about turning the view only makes sense while the 3D view is showing
-  const shownHint = $derived(view === '3d' && has3d ? hint : hint?.replace(/\s*Turn the view[^.]*\./, ''))
+  const shownHint = $derived(view === '3d' && has3d ? hint : hint?.replace(/\s*Turn the view[^.]*\./, '').replace(/转动视图[^。]*。/, ''))
   // svelte-ignore state_referenced_locally
   let step = $state(start)
   let selected = $state<string | null>(null)
@@ -127,7 +169,7 @@
   const layers = $derived(spec.nodes.filter((n) => n.kind !== 'op'))
 </script>
 
-<LabFrame {title} hint={shownHint} bind:has3d views={[{ id: 'flat', label: 'Flat' }, { id: '3d', label: '3D' }]} bind:view onreset={reset} resetDisabled={!changed && step === start && !selected}>
+<LabFrame {title} hint={shownHint} bind:has3d views={[{ id: 'flat', label: t('Flat') }, { id: '3d', label: '3D' }]} bind:view onreset={reset} resetDisabled={!changed && step === start && !selected}>
   {#snippet children()}
     {#if view === '3d'}
       <Net3D {spec} {step} {selected} onselect={pick} {ariaLabel} {numbers} {height}>
@@ -141,19 +183,19 @@
     <!-- choices (which network) on their own row, the step buttons as a group below them -->
     {#if extra}<div class="nl-extra">{@render extra()}</div>{/if}
     {#if steps.length}
-      <button type="button" class="lab-btn" onclick={() => { stop(); go(-1) }} disabled={step < 0} aria-label="Back to the start">⏮</button>
-      <button type="button" class="lab-btn" onclick={() => { stop(); go(step - 1) }} disabled={step < 0}>◀ Back</button>
-      <button type="button" class="lab-btn" onclick={play} aria-pressed={playing}>{playing ? '⏸ Pause' : '▶ Play'}</button>
-      <button type="button" class="lab-btn primary" onclick={() => { stop(); go(step + 1) }} disabled={step >= steps.length - 1}>Next ▶</button>
+      <button type="button" class="lab-btn" onclick={() => { stop(); go(-1) }} disabled={step < 0} aria-label={t('Back to the start')}>⏮</button>
+      <button type="button" class="lab-btn" onclick={() => { stop(); go(step - 1) }} disabled={step < 0}>{t('◀ Back')}</button>
+      <button type="button" class="lab-btn" onclick={play} aria-pressed={playing}>{playing ? t('⏸ Pause') : t('▶ Play')}</button>
+      <button type="button" class="lab-btn primary" onclick={() => { stop(); go(step + 1) }} disabled={step >= steps.length - 1}>{t('Next ▶')}</button>
     {/if}
   {/snippet}
   {#snippet after()}
     <div class="nl-below">
       <!-- the layer list: the keyboard and screen-reader way into the picture. Folded, so the controls stay next to it -->
       <details class="nl-list" open={layers.length <= 5}>
-      <summary>Layers ({layers.length})</summary>
+      <summary>{t('Layers ({n})', { n: layers.length })}</summary>
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <ol class="nl-layers" aria-label="Layers, from input to output" onkeydown={listKey}>
+      <ol class="nl-layers" aria-label={t('Layers, from input to output')} onkeydown={listKey}>
         {#each layers as n (n.id)}
           {@const on = st.active.has(n.id)}
           <li>
@@ -168,28 +210,28 @@
       {#if node}
         <div class="nl-panel" aria-live="polite">
           <p class="nl-head"><b>{node.title ?? node.label}</b> <span class="nl-shape">{fmtShape(node.shape)}</span>
-            {#if node.axes}<span class="nl-dim"> · axes: {node.axes.join(', ')}</span>{/if}
-            {#if nodeParams !== undefined}<span class="nl-dim"> · parameters: {hideParams ? '?' : nodeParams.toLocaleString('en')}</span>{/if}
+            {#if node.axes}<span class="nl-dim">{t(' · axes: {axes}', { axes: node.axes.join(lang === 'zh' ? '、' : ', ') })}</span>{/if}
+            {#if nodeParams !== undefined}<span class="nl-dim">{t(' · parameters: {n}', { n: hideParams ? '?' : nodeParams.toLocaleString('en') })}</span>{/if}
           </p>
           {#if node.note}<p class="nl-note">{node.note}</p>{/if}
           {#if st.values[node.id]}
-            <p class="nl-k">values{flat(st.values[node.id]).length > 48 ? ' (the first rows)' : ''}</p>
+            <p class="nl-k">{flat(st.values[node.id]).length > 48 ? t('values (the first rows)') : t('values')}</p>
             <table class="nl-vals"><tbody>{#each rows(st.values[node.id]) as r}<tr>{#each r as c}<td>{c}</td>{/each}</tr>{/each}</tbody></table>
           {/if}
           {#if st.dir === 'backward' && st.grads[node.id]}
-            <p class="nl-k grad">gradient ∂L/∂(value)</p>
+            <p class="nl-k grad">{t('gradient ∂L/∂(value)')}</p>
             <table class="nl-vals grad"><tbody>{#each rows(st.grads[node.id]) as r}<tr>{#each r as c}<td>{c}</td>{/each}</tr>{/each}</tbody></table>
           {/if}
-          {#if !st.values[node.id] && !(st.dir === 'backward' && st.grads[node.id])}<p class="nl-dim">No numbers yet at this step.</p>{/if}
+          {#if !st.values[node.id] && !(st.dir === 'backward' && st.grads[node.id])}<p class="nl-dim">{t('No numbers yet at this step.')}</p>{/if}
         </div>
       {/if}
     </div>
   {/snippet}
   {#snippet readout()}
     {#if st.step}
-      <span class:nl-back={st.dir === 'backward'}>Step {step + 1} of {steps.length} · {st.dir === 'backward' ? 'backward' : 'forward'} · <b>{st.step.title}</b></span>{#if st.step.text}: {st.step.text}{/if}
+      <span class:nl-back={st.dir === 'backward'}>{t('Step {k} of {n}', { k: step + 1, n: steps.length })} · {st.dir === 'backward' ? t('backward') : t('forward')} · <b>{st.step.title}</b></span>{#if st.step.text}{lang === 'zh' ? '：' : ': '}{st.step.text}{/if}
     {:else}
-      {idle}{#if !hideParams && totalParams}<span class="nl-dim">{' · '}{totalParams.toLocaleString('en')} parameters in all</span>{/if}
+      {idleText}{#if !hideParams && totalParams}<span class="nl-dim">{t(' · {n} parameters in all', { n: totalParams.toLocaleString('en') })}</span>{/if}
     {/if}
   {/snippet}
   {#snippet legend()}
@@ -197,16 +239,16 @@
     <p class="nl-key">
       {#if key.signed || key.values}
         {@const what = key.signed && key.values ? 'weight or value' : key.signed ? 'weight' : 'value'}
-        <span><i class="sw pos"></i>positive {what}</span><span><i class="sw neg"></i>negative {what}</span>
+        <span><i class="sw pos"></i>{t(`positive ${what}`)}</span><span><i class="sw neg"></i>{t(`negative ${what}`)}</span>
       {/if}
-      {#if key.values}<span class="nl-dim">A disc’s fill is its value: the stronger the color, the further from 0.</span>{/if}
-      {#if key.progress}<span class="nl-dim">Gray disc = done; hollow disc = not reached yet.</span>{/if}
-      {#if key.shared}<span><i class="sw" style="background: var(--{key.shared})"></i>the same weights, used again</span>{/if}
-      {#if key.forward}<span><i class="sw accent"></i>forward (this step)</span>{/if}
-      {#if key.backward}<span><i class="sw grad"></i>backward: gradient</span>{/if}
-      {#if key.backward}<span class="nl-dim">“∂ −0.5” = the gradient ∂L/∂(that value).</span>{/if}
-      {#if key.attention}<span class="nl-dim">Thicker arc = more attention weight.</span>{/if}
-      <span class="nl-dim">{key.signed ? 'Thicker line = larger |w|. ' : ''}Select a layer to see its numbers.</span>
+      {#if key.values}<span class="nl-dim">{t('A disc’s fill is its value: the stronger the color, the further from 0.')}</span>{/if}
+      {#if key.progress}<span class="nl-dim">{t('Gray disc = done; hollow disc = not reached yet.')}</span>{/if}
+      {#if key.shared}<span><i class="sw" style="background: var(--{key.shared})"></i>{t('the same weights, used again')}</span>{/if}
+      {#if key.forward}<span><i class="sw accent"></i>{t('forward (this step)')}</span>{/if}
+      {#if key.backward}<span><i class="sw grad"></i>{t('backward: gradient')}</span>{/if}
+      {#if key.backward}<span class="nl-dim">{t('“∂ −0.5” = the gradient ∂L/∂(that value).')}</span>{/if}
+      {#if key.attention}<span class="nl-dim">{t('Thicker arc = more attention weight.')}</span>{/if}
+      <span class="nl-dim">{key.signed ? t('Thicker line = larger |w|. ') : ''}{t('Select a layer to see its numbers.')}</span>
     </p>
   {/snippet}
 </LabFrame>

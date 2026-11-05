@@ -1,0 +1,264 @@
+---
+glossarySkip: [exponent]
+recap:
+  can:
+    - "算出一个模型的 KV 缓存有多大，并看出分组查询注意力怎样让它变小。"
+    - "数出一个 token 的 FLOPs：权重部分是 2N，再加上一个随上下文增长的注意力部分。"
+    - "算出 B 个用户一步解码要多久，并分清预填充（提示词很长时受算术限制）和解码（受显存限制）。"
+  keys:
+    - "$\\text{KV bytes per token} = 2 \\times \\text{K/V heads} \\times d_k \\times \\text{layers} \\times 2$"
+    - "$\\text{FLOPs per token} \\approx 2N$；一个块：$2(4d^2 + 2\\,d\\,d_{ff}) + 4Ld$"
+    - "$\\text{read} = \\dfrac{\\text{weight bytes} + B \\times \\text{cache bytes}}{\\text{bandwidth}}$"
+    - "$\\text{step} = \\max\\left(\\text{read},\\ \\dfrac{B \\times 2N}{\\text{FLOPs per second}}\\right)$"
+    - "预填充用一次前向传播读完整个提示词。提示词超过大约 100 个 token 时，它等的是算术。解码每一步写一个 token，等的是显存。"
+  mistakes:
+    - "算 KV 缓存大小时，漏掉 K 和 V 的那个 2，或者每个数 2 字节的那个 2。"
+    - "每个权重只算了一次 FLOP，而不是两次（一次乘法和一次加法）。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import GqaLab from '@viz/GqaLab.astro'
+import ServeLab from '@viz/ServeLab.astro'
+
+第 16 关到第 19 关搭出了一个能给出正确答案的模型。这一关问的是：运行它要花多少代价。模型写东西时，有两样东西限制它。
+一样是它在 GPU 上需要的**显存**，另一样是每个新 token 要花的**时间**。两者都只取决于模型的几个数，完全不需要训练。
+下面的每个数你都可以手算验证。
+
+## 1. KV 缓存：模型写东西时要留着什么
+
+模型写东西时，每个新 token 都要关注它之前的每个 token，所以需要它们的 K 和 V。
+这些一旦算出来就不会再变，因为一个 token 永远看不到它后面的东西。所以模型把它们留在 GPU 显存里。
+对每个新 token，它只算这一个 token 的 q、k 和 v：
+
+| 交给模型的 token（从 0 开始数） | 现在计算 | 从 KV 缓存里读 |
+|---|---|---|
+| token 3 | token 3 的 q、k、v | token 0–2 的 k、v |
+| token 4 | token 4 的 q、k、v | token 0–3 的 k、v |
+
+这就是第 18 关第 7 节里的那个缓存。现在来数它有多大。在每一层、每个注意力头里，每个 token 都留着一个 k 向量和一个 v 向量，
+各有 $d_k$ 个数。模型用 16 位存每个数，也就是 **2 字节**。显存用 KiB（1 KiB = 1,024 字节）和 GiB（1 GiB = 1,024 × 1,024 KiB）来计：
+
+$$
+\text{bytes per token} = 2 \times \text{heads} \times d_k \times \text{layers} \times 2
+$$
+
+第一个 2 是 k 和 v 两份；最后一个 2 是每个数的字节数。举个小例子：1 个头、$d_k = 4$、2 层，
+每个 token 就是 2 × 1 × 4 × 2 × 2 = 32 字节。
+
+<Blank id="kv-full" />
+
+<Stuck q="为什么缓存随对话变大，而不只随模型变大？">
+
+到目前为止写出的每个 token 都在每一层留着自己的 k 和 v。回答里的第 100 个 token 要关注它前面的
+99 个 token（还有整个提示词）。所以它们都要留在显存里，直到对话结束。
+对话长一倍，缓存就大一倍。相比之下，不管对话是 10 个 token 还是 10,000 个，权重的大小都一样。
+
+</Stuck>
+
+## 2. 分组查询注意力：共用 K 和 V
+
+这个缓存随每个 token、每一层、每个 K/V 头增长。一块 GPU 能服务多少用户，常常就卡在它上面。
+**分组查询注意力**（grouped-query attention）让它变小：几个查询头共用一个 K/V 头。
+
+<Gate requires="kv-full">
+
+<GqaLab />
+
+K/V 头变少以后，几个查询头用同一份键和值。每个查询头仍然有自己的 q，所以每个头仍然可以找不同的东西。
+但它们都在同一份键里找。
+
+<Blank id="gqa-head" />
+
+<Predict id="gqa-quality" />
+
+<Gate requires="gqa-quality">
+
+<TryIt>
+
+在实验台里，把 K/V 头从 8 个调到 1 个。每个 token 的显存降到 12.5%。再试试 4 和 2。
+如果占满 GPU 的是缓存而不是权重，你会选哪个？查询头又会失去什么？
+
+</TryIt>
+
+<Blank id="kv-context" />
+
+这些都只是写东西时的显存。训练时每个权重需要多得多的显存，还要把前向传播的值留给反向传播。
+支线 [U6](/learn/attention-backward/) 会数这部分显存。
+
+</Gate>
+
+</Gate>
+
+## 3. FLOPs：一个 token 要花多少算术
+
+计算量用 **FLOPs** 来计：浮点运算次数，每次是一个乘法或一个加法。矩阵乘积
+(1, a) @ (a, b) 得到 b 个数。每个数需要 a 次乘法和大约 a 次加法。
+所以这个乘积要花 2 × a × b 个 FLOPs。对 (1, 3) @ (3, 4) 来说就是 24。
+
+一个 token 经过模型的每个权重矩阵一次，每个权重做一次乘法和一次加法。
+所以有 N 个权重的模型，前向传播大约每个 token 花 **2N 个 FLOPs**。在嵌入表里查一个 token 的那一行不是乘法，
+所以严格地说，N 只算矩阵乘积里用到的权重。
+
+这一关的数都很大，所以写成 10 的幂。10 的幂相除，就把指数相减：10¹⁴ / 10¹⁰ = 10⁴。
+[数学页](/math/#scientific)里有更多例子。
+
+<Gate requires="kv-context">
+
+<Blank id="flops-token" />
+
+<Gate requires="flops-token">
+
+2N 里还少了一部分：注意力本身。在一个块里，向量大小为 $d$（模型宽度）的新 token 要做下面这些步骤。
+它关注 L 个 token，所有头加起来每个 token 用 $d$ 个数。
+
+| 步骤 | 乘积 | 每个 token 的 FLOPs |
+|---|---|---|
+| q、k、v 和输出：四个 $(d, d)$ 矩阵（每个查询头一个 K/V 头） | $(1, d)\,@\,(d, d)$，四次 | $2 \times 4d^2$ |
+| FFN：先 $(d, d_{ff})$，再 $(d_{ff}, d)$ | 先 $(1, d)\,@\,(d, d_{ff})$，再 $(1, d_{ff})\,@\,(d_{ff}, d)$ | $2 \times 2\,d\,d_{ff}$ |
+| 分数：q 和 L 个 token 的 k | $(1, d)\,@\,(d, L)$ | ? |
+| L 个值向量的加权和 | $(1, L)\,@\,(L, d)$ | ? |
+
+前两行就是块里权重的 2N 规则。用分组查询注意力时，k 和 v 矩阵比 $(d, d)$ 小，2N 仍然能正确地数出它们的权重。
+后两行完全不用权重。对它们的形状用 2 × a × b 规则。
+
+<Blank id="flops-block" />
+
+<Gate requires="flops-block">
+
+每个注意力乘积花 2Ld 个 FLOPs，所以注意力部分是 4Ld。它随 L 增长，L 是新 token 要关注的 token 数。
+权重部分保持不变。
+
+<Blank id="flops-even" />
+
+</Gate>
+
+<Deeper title="训练每个 token 大约花 6N">
+
+训练要跑前向传播（2N）和反向传播，后者大约是前者的两倍。对每个权重，
+反向传播既要算这个权重的梯度，也要算它的输入（上一层的输出）的梯度。所以训练大约
+**每个 token 花 6N 个 FLOPs**。第 21 关的参考 GPT 有 N = 102,415 个权重：前向传播每个 token 大约 0.2 百万个 FLOPs。
+它的两张嵌入表大约占权重的 2%，所以把它们算进去，估计几乎不变。
+一轮是 8,500 道题，每道 10 个 token。所以一轮大约花 6 × 102,415 × 85,000 ≈ 5.2 × 10¹⁰ 个 FLOPs。
+笔记本电脑几秒钟就能做完这些算术。真实的训练会更久，因为有 Python 的开销，而且矩阵很小。
+第 21 关的上下文只有 10 个 token，所以那里的注意力部分很小。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 4. 解码：每一步一个 token
+
+GPU 把权重存在它的显存里，运算单元必须从那里把它们读出来。读的速度就是
+**显存带宽**，单位是字节每秒。带宽用十进制单位给出，所以这一关接下来 1 GB = 10⁹ 字节。
+（1 GiB 是 1,024³ 字节，大约 1.07 GB。）
+
+一次一个 token 地写出答案叫作**解码**（decode）。每一步解码产生一个新 token。
+
+<Gate requires="flops-even">
+
+<Predict id="decode-predict" />
+
+<Gate requires="decode-predict">
+
+每一步解码都要把每个权重读一遍。下一个 token 要用这一个作为输入。所以这一个没写完，下一个就不能开始，
+权重也要再读一遍。
+
+对一个用户来说，这给出一个简单的上限：
+
+$$
+\text{tokens per second} \le \frac{\text{bandwidth}}{\text{weight bytes}}
+$$
+
+<Blank id="decode-bound" />
+
+<Gate requires="decode-bound">
+
+服务器不会一次只给一个用户写。它在一步里把权重读一遍，再用它们一起写 B 个用户的下一个 token：
+读一次的代价，换来 B 个 token。但算术仍然随 B 增长。所以 B 足够大时，限制就变成算术，而不是读取。
+一步的时间取两者中较长的那个。
+
+<Blank id="batch-even" />
+
+<Gate requires="batch-even">
+
+两个时间相等时的 B 叫作**交叉点**（crossover）。低于它，读权重是瓶颈；高于它，算术是瓶颈。
+
+每一步还要读每个用户的 KV 缓存。假设有 8 个用户，每人 4,000 个 token，每个 token 128 KiB。
+他们的缓存共 4,096,000 KiB。乘以 1,024，大约是 4.2 × 10⁹ 字节，也就是 4.2 GB。所以一步要读 14 + 4.2 ≈ 18.2 GB，花 18.2 ms，
+而不是 14 ms。每个用户现在每秒大约得到 55 个 token，而不是 71 个。
+
+缓存还必须和权重一起放进 GPU 的显存。第 2 节用 GiB 计显存。这里和带宽一样，1 GB = 10⁹ 字节。
+
+<Blank id="serve-fit" />
+
+<Gate requires="serve-fit">
+
+<ServeLab />
+
+<Stuck q="既然多一个用户几乎不花代价，为什么不同时服务 1,000 个？">
+
+有两个原因。B 超过 100 以后，每多一个用户，每一步都要多一份算术，所以每个用户拿到 token 的速度都变慢。
+有 256 个用户时，一步要花 256 × 0.14 ms ≈ 36 ms，而不是 14 ms。另外，每个用户都带着一份 KV 缓存，
+它必须和权重一起放进显存。每个用户 4,000 个 token 时，一块 80 GB 的 GPU 只放得下 125 个用户。
+所以一块 GPU 能服务多少用户，常常是由 KV 缓存决定的，而不是算术。
+
+</Stuck>
+
+权重只为所有 B 个用户读一次。相比之下，每个用户的缓存只为这个用户自己读，所以这部分读取没法在用户之间共享。
+对话很长时，多一个用户就不再是几乎不花代价了。在实验台里，给每个用户 4,000 个 token：两条线永远不会相交。
+K/V 头更少，缓存就更小，既省显存，也省时间。
+
+另一种少读一些的办法，是用更少的字节存每个权重。
+
+<Blank id="batch-byte" />
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+## 5. 预填充：用一次前向传播读完提示词
+
+解码开始之前，模型必须先读提示词。提示词的所有 token 一开始就都知道了。所以它们用一次前向传播穿过模型，
+就像训练时整个序列那样（第 17 关第 4 节）。
+这一次前向传播叫作**预填充**（prefill）。它还会把每个提示词 token 的 k 和 v 填进 KV 缓存。
+
+预填充时，权重为全部 L 个提示词 token 只读一次。这和一批 L 个用户是同一个道理。
+
+<Gate requires="batch-even">
+
+<Blank id="prefill-time" />
+
+<Gate requires="prefill-time">
+
+<Blank id="prefill-short" />
+
+<Gate requires="prefill-short">
+
+所以一次聊天回答分成两部分，受的限制不同。第一个新 token 要等预填充。提示词超过大约 100 个 token 时
+（就是第 4 节的 B = 100），预填充受算术限制。更短的提示词仍然在等读权重。
+第一个 token 之后的每个 token 都来自解码，而解码受显存限制。
+
+现在把整个解码步骤写成一个函数。它就是你在运行任何模型之前都能做的那个估计。
+
+<CodeBlank id="cost-code" />
+
+第 21 关把各部分拼起来：你会写出并训练你自己的 GPT。它的上下文只有 10 个 token，所以它的注意力部分和 KV 缓存都很小。
+
+</Gate>
+
+</Gate>
+
+</Gate>

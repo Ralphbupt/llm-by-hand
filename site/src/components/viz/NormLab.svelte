@@ -10,9 +10,46 @@
   import { readable } from '@lib/readable'
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'LayerNorm: each word’s numbers rescaled to mean 0, std 1': 'LayerNorm：把每个词的数缩放到均值 0、标准差 1',
+    'Edit the word’s numbers. Then switch the axis to see why it is done per word.': '改一改这个词的数。再切换轴，看看为什么要按词来做。',
+    'one word’s 4 numbers (edit them)': '一个词的 4 个数（可以改）',
+    'before: mean {m}, std {s}': '之前：均值 {m}，标准差 {s}',
+    'after: mean {m}, std {s}': '之后：均值 {m}，标准差 {s}',
+    '3 words × 4 numbers': '3 个词 × 4 个数',
+    'normalized per word': '按词归一化',
+    'normalized per column': '按列归一化',
+    'Normalize along': '归一化的方向',
+    'each row, one word (LayerNorm)': '每一行，即一个词（LayerNorm）',
+    'each column (wrong axis)': '每一列（轴错了）',
+    'Each word is normalized with its own mean and std. Change one word and the others don’t move.': '每个词用它自己的均值和标准差归一化。改动一个词，其他词不会变。',
+    'Per column, every word’s result depends on the other words in the batch. Word w1 is 10s everywhere, so it is still large in every column.': '按列归一化时，每个词的结果都取决于批里的其他词。词 w1 的数都在 10 左右，所以它在每一列里仍然很大。',
+    'positive': '正',
+    'negative': '负',
+    'Stack {n} layers: does the signal survive?': '堆叠 {n} 层：信号还在吗？',
+    'Pick how each layer updates x, then slide the gain and the number of layers.': '选择每一层怎样更新 x，再拖动增益和层数。',
+    'size of x after each layer (log scale)': '每一层之后 x 的大小（对数坐标）',
+    'Size of x after each of {n} layers, on a log scale: {v}.': '{n} 层中每一层之后 x 的大小，对数坐标：{v}。',
+    'layer {n}': '第 {n} 层',
+    'final values of x (bar height = size; a flat row means they all vanished)': 'x 的最终值（柱高 = 大小；一排都是平的，说明全都消失了）',
+    'Each layer does': '每一层做的事',
+    'layers': '层数',
+    'gain of f': 'f 的增益',
+    'size after {n} layers:': '{n} 层之后的大小：',
+    'the signal vanished': '信号消失了',
+    'the numbers grew very large': '数变得非常大',
+    'steady': '稳定',
+    'size of x (vector length), stable': 'x 的大小（向量长度），稳定',
+    'vanished or grew very large': '消失了，或者变得非常大',
+    'size 1': '大小为 1',
+    'final values: positive / negative': '最终值：正 / 负',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -59,23 +96,23 @@
 </script>
 
 <LabFrame
-  title="LayerNorm: each word’s numbers rescaled to mean 0, std 1"
-  hint="Edit the word’s numbers. Then switch the axis to see why it is done per word."
+  title={t('LayerNorm: each word’s numbers rescaled to mean 0, std 1')}
+  hint={t('Edit the word’s numbers. Then switch the axis to see why it is done per word.')}
   onreset={() => { v = [[1, 2, 3, 6]]; byRow = true }}
   resetDisabled={!changed1}
 >
   <div class="stack">
   <div class="one">
-    <MatrixGrid value={v} label="one word’s 4 numbers (edit them)" editable decimals={1} onchange={(x) => (v = x)} />
+    <MatrixGrid value={v} label={t('one word’s 4 numbers (edit them)')} editable decimals={1} onchange={(x) => (v = x)} />
     <div class="bars">
       <div>
-        <div class="label">before: mean {f(mean(v[0]))}, std {f(std(v[0]))}</div>
+        <div class="label">{t('before: mean {m}, std {s}', { m: f(mean(v[0])), s: f(std(v[0])) })}</div>
         {#each v[0] as x}
           <div class="b"><span class="track"><span class="bar" class:neg={x < 0} style:width="{bar(x, 0.25)}rem"></span></span><code>{f(x)}</code></div>
         {/each}
       </div>
       <div>
-        <div class="label">after: mean {f(mean(ln), 2)}, std {f(std(ln))}</div>
+        <div class="label">{t('after: mean {m}, std {s}', { m: f(mean(ln), 2), s: f(std(ln)) })}</div>
         {#each ln as x}
           <div class="b"><span class="track"><span class="bar" class:neg={x < 0} style:width="{lnLocked ? 0 : bar(x, 1.5)}rem"></span></span><code class:q={lnLocked}>{lnLocked ? '?' : f(x, 3)}</code></div>
         {/each}
@@ -83,71 +120,71 @@
     </div>
   </div>
   <div class="pair">
-    <MatrixGrid value={M} label="3 words × 4 numbers" rowLabels={['w0', 'w1', 'w2']} />
+    <MatrixGrid value={M} label={t('3 words × 4 numbers')} rowLabels={['w0', 'w1', 'w2']} />
     <div class="op" aria-hidden="true">→</div>
-    <MatrixGrid value={normed} label={byRow ? 'normalized per word' : 'normalized per column'} rowLabels={['w0', 'w1', 'w2']} masked={lnLocked ? [{ i: 0, j: 3 }] : []} />
+    <MatrixGrid value={normed} label={byRow ? t('normalized per word') : t('normalized per column')} rowLabels={['w0', 'w1', 'w2']} masked={lnLocked ? [{ i: 0, j: 3 }] : []} />
   </div>
   </div>
 
   {#snippet controls()}
-    <span class="seg" role="radiogroup" aria-label="Normalize along">
-      <label class:on={byRow}><input type="radio" bind:group={byRow} value={true} /> each row, one word (LayerNorm)</label>
-      <label class:on={!byRow}><input type="radio" bind:group={byRow} value={false} /> each column (wrong axis)</label>
+    <span class="seg" role="radiogroup" aria-label={t('Normalize along')}>
+      <label class:on={byRow}><input type="radio" bind:group={byRow} value={true} /> {t('each row, one word (LayerNorm)')}</label>
+      <label class:on={!byRow}><input type="radio" bind:group={byRow} value={false} /> {t('each column (wrong axis)')}</label>
     </span>
   {/snippet}
 
   {#snippet readout()}
-    <span class="prose">{byRow ? 'Each word is normalized with its own mean and std. Change one word and the others don’t move.' : 'Per column, every word’s result depends on the other words in the batch. Word w1 is 10s everywhere, so it is still large in every column.'}</span>
+    <span class="prose">{byRow ? t('Each word is normalized with its own mean and std. Change one word and the others don’t move.') : t('Per column, every word’s result depends on the other words in the batch. Word w1 is 10s everywhere, so it is still large in every column.')}</span>
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="pos"></i>positive</span>
-    <span class="key"><i class="neg"></i>negative</span>
+    <span class="key"><i class="pos"></i>{t('positive')}</span>
+    <span class="key"><i class="neg"></i>{t('negative')}</span>
   {/snippet}
 </LabFrame>
 
 <LabFrame
-  title={`Stack ${depth} layers: does the signal survive?`}
-  hint="Pick how each layer updates x, then slide the gain and the number of layers."
+  title={t('Stack {n} layers: does the signal survive?', { n: depth })}
+  hint={t('Pick how each layer updates x, then slide the gain and the number of layers.')}
   onreset={() => { mode = 'plain'; gain = 0.5; depth = 30 }}
   resetDisabled={!changed2}
 >
-  <div class="label">size of x after each layer (log scale)</div>
-  <svg viewBox="0 0 {W} {H}" use:readable role="img" aria-label={`Size of x after each of ${depth} layers, on a log scale: ${verdict}.`}>
-    {#each yTicks as [l, t]}
+  <div class="label">{t('size of x after each layer (log scale)')}</div>
+  <svg viewBox="0 0 {W} {H}" use:readable role="img" aria-label={t('Size of x after each of {n} layers, on a log scale: {v}.', { n: depth, v: t(verdict) })}>
+    {#each yTicks as [l, lbl]}
       <line x1={PADL} y1={cy(l)} x2={W - PADR} y2={cy(l)} class={l === 0 ? 'one-line' : 'gl'} />
-      <text x={PADL - 4} y={cy(l) + 3} class="tk end">{t}</text>
+      <text x={PADL - 4} y={cy(l) + 3} class="tk end">{lbl}</text>
     {/each}
-    {#each xTicks as t}<text x={cx(t)} y={H - 9} class="tk mid">{t}</text>{/each}
-    <text x={W - PADR} y={H - 9} class="tk end ax">layer {depth}</text>
+    {#each xTicks as tick}<text x={cx(tick)} y={H - 9} class="tk mid">{tick}</text>{/each}
+    <text x={W - PADR} y={H - 9} class="tk end ax">{t('layer {n}', { n: depth })}</text>
     <line x1={PADL} y1={PADT} x2={PADL} y2={H - PADB} class="axis" />
     <path d={path} class="curve" class:bad={verdict !== 'steady'} />
     <circle cx={cx(depth)} cy={cy(lg(last))} r="4.5" class="end-dot" class:bad={verdict !== 'steady'} />
   </svg>
-  <div class="label">final values of x (bar height = size; a flat row means they all vanished)</div>
+  <div class="label">{t('final values of x (bar height = size; a flat row means they all vanished)')}</div>
   <div class="hist">
     {#each run.final as x}<span class="col" class:neg={x < 0} style:height="{Math.max(0.12, Math.min(2.5, Math.abs(x) * 0.625))}rem" title={big(x)}></span>{/each}
   </div>
 
   {#snippet controls()}
-    <span class="modes" role="radiogroup" aria-label="Each layer does">
+    <span class="modes" role="radiogroup" aria-label={t('Each layer does')}>
       {#each [['plain', 'x ← f(x)'], ['residual', 'x ← x + f(x)'], ['residual+norm', 'x ← LayerNorm(x + f(x))']] as [m, label]}
         <label class:on={mode === m}><input type="radio" bind:group={mode} value={m} /> <code>{label}</code></label>
       {/each}
     </span>
-    <label class="sl"><span>layers</span><input type="range" min="1" max="60" bind:value={depth} /><b>{depth}</b></label>
-    <label class="sl"><span>gain of f</span><input type="range" min="0.3" max="2" step="0.05" bind:value={gain} /><b>{f(gain)}</b></label>
+    <label class="sl"><span>{t('layers')}</span><input type="range" min="1" max="60" bind:value={depth} /><b>{depth}</b></label>
+    <label class="sl"><span>{t('gain of f')}</span><input type="range" min="0.3" max="2" step="0.05" bind:value={gain} /><b>{f(gain)}</b></label>
   {/snippet}
 
   {#snippet readout()}
-    size after {depth} layers: <b class="res" class:bad={verdict !== 'steady'}>{big(last)}</b> · {verdict}
+    {t('size after {n} layers:', { n: depth })} <b class="res" class:bad={verdict !== 'steady'}>{big(last)}</b> · {t(verdict)}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="ln-sw"></i>size of x (vector length), stable</span>
-    <span class="key"><i class="ln-sw bad"></i>vanished or grew very large</span>
-    <span class="key"><i class="dash-sw"></i>size 1</span>
-    <span class="key"><i class="pos"></i><i class="neg"></i>final values: positive / negative</span>
+    <span class="key"><i class="ln-sw"></i>{t('size of x (vector length), stable')}</span>
+    <span class="key"><i class="ln-sw bad"></i>{t('vanished or grew very large')}</span>
+    <span class="key"><i class="dash-sw"></i>{t('size 1')}</span>
+    <span class="key"><i class="pos"></i><i class="neg"></i>{t('final values: positive / negative')}</span>
   {/snippet}
 </LabFrame>
 

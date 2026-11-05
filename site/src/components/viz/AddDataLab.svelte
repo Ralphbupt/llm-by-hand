@@ -6,6 +6,48 @@
    */
   import Tensors3D from '../viz3d/Tensors3D.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is a position in this lab, so the translator is `tx`
+  const tx = useT({
+    'logits ({b}, {l}, {v})': 'logit ({b}, {l}, {v})',
+    'causal mask ({b}, {l}, {l})': '因果掩码 ({b}, {l}, {l})',
+    'example': '样本',
+    'position t': '位置 t',
+    'token': 'token',
+    'may look at': '可以看的位置',
+    'One training example: the input x, and the target y shifted by one': '一个训练样本：输入 x，和错开一位的目标 y',
+    'Type two numbers. Point at or tap a position to see which tokens it may look at.': '输入两个数。指向或点一下某个位置，看看它可以看哪些 token。',
+    'One example': '一个样本',
+    'A batch in 3D': '3D 里的一批',
+    'position': '位置',
+    '(input)': '（输入）',
+    '(target)': '（目标）',
+    'causal mask: row = position t, column = what it may look at': '因果掩码：行 = 位置 t，列 = 它可以看的位置',
+    'Causal mask: pick a position with the arrow keys': '因果掩码：用方向键选一个位置',
+    'no position picked': '还没选位置',
+    'position {r} may look at positions 0 to {r}': '位置 {r} 可以看位置 0 到 {r}',
+    'A batch of four examples: the logits block with the rows the loss reads, and the causal mask for every example': '一批四个样本：logit 方块和损失读取的那些行，以及每个样本的因果掩码',
+    'Left: the model scores all {v} tokens at every position of every example; the loss reads only the highlighted rows ({w}). Right: the same lower triangle (gray = may look) is used for every example in the batch.': '左边：模型在每个样本的每个位置给全部 {v} 个 token 打分；损失只读高亮的那些行（{w}）。右边：批里的每个样本都用同一个下三角（灰色 = 可以看）。',
+    'the answer': '答案',
+    'every position': '每个位置',
+    'Which targets the loss counts': '损失算哪些目标值',
+    'loss on': '损失算',
+    'answer digits only': '只算答案数字',
+    'position {r}': '位置 {r}',
+    'sees:': '看到：',
+    'target': '目标',
+    ', counted': '，算进损失',
+    ', skipped by the loss': '，损失跳过它',
+    'y is x moved one step left. The loss counts': 'y 是 x 往左挪了一步。损失算其中',
+    'of {n} targets.': '个目标值，共 {n} 个。',
+    'target counted in the loss': '算进损失的目标值',
+    'target skipped': '被跳过的目标值',
+    'the position you picked': '你选的位置',
+  })
 
   const ITOS = ['<pad>', '<bos>', '<eos>', ...'0123456789'.split(''), '+', '=']
   const MAXLEN = 11
@@ -35,9 +77,9 @@
     const lossRows: R3[] = x.map((_, t) => t).filter((t) => counted(t)).map((t) => ({ from: [0, t, 0], to: [B3 - 1, t, V - 1], tone: 'ok' }))
     const seen: R3[] = x.map((_, i) => ({ from: [0, i, 0], to: [B3 - 1, i, i], tone: 'dim' }))
     return [
-      { shape: [B3, L, V], title: `logits (${B3}, ${L}, ${V})`, axes: ['example', 'position t', 'token'], highlight: lossRows },
+      { shape: [B3, L, V], title: tx('logits ({b}, {l}, {v})', { b: B3, l: L, v: V }), axes: [tx('example'), tx('position t'), tx('token')], highlight: lossRows },
       '  ',
-      { shape: [B3, L, L], title: `causal mask (${B3}, ${L}, ${L})`, axes: ['example', 'position t', 'may look at'], highlight: seen },
+      { shape: [B3, L, L], title: tx('causal mask ({b}, {l}, {l})', { b: B3, l: L }), axes: [tx('example'), tx('position t'), tx('may look at')], highlight: seen },
     ]
   })
   const nCounted = $derived(y.filter((_, t) => counted(t)).length)
@@ -49,28 +91,28 @@
 </script>
 
 <LabFrame
-  title="One training example: the input x, and the target y shifted by one"
-  hint="Type two numbers. Point at or tap a position to see which tokens it may look at."
-  views={[{ id: 'table', label: 'One example' }, { id: '3d', label: 'A batch in 3D' }]} bind:view
+  title={tx('One training example: the input x, and the target y shifted by one')}
+  hint={tx('Type two numbers. Point at or tap a position to see which tokens it may look at.')}
+  views={[{ id: 'table', label: tx('One example') }, { id: '3d', label: tx('A batch in 3D') }]} bind:view
   onreset={() => { a = 23; b = 58; answerOnly = true; row = null }} resetDisabled={a === 23 && b === 58 && answerOnly && row === null}
 >
   {#if view === 'table'}
     <div class="pic">
       <table>
         <tbody>
-          <tr><th scope="row"><span class="long">position</span> t</th>{#each x as _, t}<td class="t" class:hi={row === t}>{t}</td>{/each}</tr>
-          <tr><th scope="row">x<span class="long">&nbsp;(input)</span></th>{#each x as id, t}
+          <tr><th scope="row"><span class="long">{tx('position')}</span> t</th>{#each x as _, t}<td class="t" class:hi={row === t}>{t}</td>{/each}</tr>
+          <tr><th scope="row">x<span class="long">&nbsp;{tx('(input)')}</span></th>{#each x as id, t}
             <td class="cell" class:hi={row === t} onpointerenter={() => (row = t)} onclick={() => (row = t)}><span class="tok">{ITOS[id]}</span><span class="id">{id}</span></td>{/each}</tr>
-          <tr><th scope="row">y<span class="long">&nbsp;(target)</span></th>{#each y as id, t}
+          <tr><th scope="row">y<span class="long">&nbsp;{tx('(target)')}</span></th>{#each y as id, t}
             <td class="cell" class:off={!counted(t)} class:ans={counted(t)} class:hi={row === t}><span class="tok">{ITOS[id]}</span><span class="id">{counted(t) ? id : '—'}</span></td>{/each}</tr>
         </tbody>
       </table>
 
       <div class="mask">
-        <div class="mlbl">causal mask: row = position t, column = what it may look at</div>
+        <div class="mlbl">{tx('causal mask: row = position t, column = what it may look at')}</div>
         <div class="grid" style="grid-template-columns: repeat({L}, 1.3rem)" role="slider" tabindex="0"
-          aria-label="Causal mask: pick a position with the arrow keys" aria-valuemin={0} aria-valuemax={L - 1} aria-valuenow={row ?? 0}
-          aria-valuetext={row === null ? 'no position picked' : `position ${row} may look at positions 0 to ${row}`} onkeydown={maskKey}>
+          aria-label={tx('Causal mask: pick a position with the arrow keys')} aria-valuemin={0} aria-valuemax={L - 1} aria-valuenow={row ?? 0}
+          aria-valuetext={row === null ? tx('no position picked') : tx('position {r} may look at positions 0 to {r}', { r: row })} onkeydown={maskKey}>
           {#each x as _, i}
             {#each x as _, j}
               <span class="sq" class:see={j <= i} class:hi={row === i} onpointerenter={() => (row = i)} onclick={() => (row = i)} aria-hidden="true"></span>
@@ -80,34 +122,33 @@
       </div>
     </div>
   {:else}
-    <Tensors3D tensors={shapes3d} height="300px" keepView ariaLabel="A batch of four examples: the logits block with the rows the loss reads, and the causal mask for every example" />
-    <p class="note">Left: the model scores all {V} tokens at every position of every example; the loss reads only the highlighted rows
-      ({answerOnly ? 'the answer' : 'every position'}). Right: the same lower triangle (gray = may look) is used for every example in the batch.</p>
+    <Tensors3D tensors={shapes3d} height="300px" keepView ariaLabel={tx('A batch of four examples: the logits block with the rows the loss reads, and the causal mask for every example')} />
+    <p class="note">{tx('Left: the model scores all {v} tokens at every position of every example; the loss reads only the highlighted rows ({w}). Right: the same lower triangle (gray = may look) is used for every example in the batch.', { v: V, w: answerOnly ? tx('the answer') : tx('every position') })}</p>
   {/if}
 
   {#snippet controls()}
     <label class="num">a <input type="number" min="0" max="99" bind:value={a} /></label>
     <label class="num">b <input type="number" min="0" max="99" bind:value={b} /></label>
-    <span class="seg" role="group" aria-label="Which targets the loss counts">
-      <span class="seglbl">loss on</span>
-      <button type="button" class="lab-btn" aria-pressed={answerOnly} onclick={() => (answerOnly = true)}>answer digits only</button>
-      <button type="button" class="lab-btn" aria-pressed={!answerOnly} onclick={() => (answerOnly = false)}>every position</button>
+    <span class="seg" role="group" aria-label={tx('Which targets the loss counts')}>
+      <span class="seglbl">{tx('loss on')}</span>
+      <button type="button" class="lab-btn" aria-pressed={answerOnly} onclick={() => (answerOnly = true)}>{tx('answer digits only')}</button>
+      <button type="button" class="lab-btn" aria-pressed={!answerOnly} onclick={() => (answerOnly = false)}>{tx('every position')}</button>
     </span>
   {/snippet}
 
   {#snippet readout()}
     {#if row !== null}
-      position {row} (<b>{ITOS[x[row]]}</b>) sees: {x.slice(0, row + 1).map((i) => ITOS[i]).join(' ')} → target <b>{ITOS[y[row]]}</b>{counted(row) ? ', counted' : ', skipped by the loss'}
+      {tx('position {r}', { r: row })} (<b>{ITOS[x[row]]}</b>) {tx('sees:')} {x.slice(0, row + 1).map((i) => ITOS[i]).join(' ')} → {tx('target')} <b>{ITOS[y[row]]}</b>{counted(row) ? tx(', counted') : tx(', skipped by the loss')}
     {:else}
-      y is x moved one step left. The loss counts <b>{nCounted}</b> of {y.length} targets.
+      {tx('y is x moved one step left. The loss counts')} <b>{nCounted}</b> {tx('of {n} targets.', { n: y.length })}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="sw ans"></i>target counted in the loss</span>
-    <span class="lg"><s class="mono">5</s>&nbsp;target skipped</span>
-    <span class="lg"><i class="sw see"></i>may look at</span>
-    <span class="lg"><i class="sw sel"></i>the position you picked</span>
+    <span class="lg"><i class="sw ans"></i>{tx('target counted in the loss')}</span>
+    <span class="lg"><s class="mono">5</s>&nbsp;{tx('target skipped')}</span>
+    <span class="lg"><i class="sw see"></i>{tx('may look at')}</span>
+    <span class="lg"><i class="sw sel"></i>{tx('the position you picked')}</span>
   {/snippet}
 </LabFrame>
 

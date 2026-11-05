@@ -8,6 +8,35 @@
   import { themeColors } from '@lib/diffusion'
   import { onThemeChange } from '@lib/settings'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Squeeze a picture into 16 numbers, and back': '把一张图片压成 16 个数，再还原回来',
+    'A trained autoencoder keeps 16 numbers per picture. Then walk from one digit to another in two ways.': '一个训练好的自编码器给每张图片只留 16 个数。然后用两种方式从一个数字走到另一个数字。',
+    'Could not load the digits: {error}': '加载数字图片失败：{error}',
+    'The original digit': '原始的数字图片',
+    '784 pixels': '784 个像素',
+    'The 16 code numbers as bars above and below zero': '编码的 16 个数，画成零线上下的柱子',
+    '16 numbers: [{v}]': '16 个数：[{v}]',
+    'The digit rebuilt from the 16 numbers': '由这 16 个数重建的数字图片',
+    'decoded back to 784': '解码回 784 个数',
+    'walk from the {a} to the {b}:': '从 {a} 走到 {b}：',
+    'Walk between the two digits': '在两个数字之间行走',
+    'Mixing the pixels': '混合像素',
+    'mix the pixels': '混合像素',
+    'Mixing the codes, then decoding': '混合编码，再解码',
+    'mix the 16 numbers, then decode': '混合这 16 个数，再解码',
+    'Loading the trained autoencoder…': '正在加载训练好的自编码器…',
+    'Digit': '数字',
+    'digit': '数字',
+    '784 numbers in, 16 numbers kept ({r} times fewer), 784 numbers out.': '输入 784 个数，留下 16 个（只有原来的 1/{r}），输出 784 个数。',
+    'loading…': '加载中…',
+    'positive code number': '正的编码数',
+    'negative code number': '负的编码数',
+  })
 
   type Data = { labels: number[]; digits: number[][]; codes: number[][]; decoded: number[][]; walk: number[][] }
   let data = $state<Data | null>(null)
@@ -75,53 +104,53 @@
 </script>
 
 <LabFrame
-  title="Squeeze a picture into 16 numbers, and back"
-  hint="A trained autoencoder keeps 16 numbers per picture. Then walk from one digit to another in two ways."
+  title={t('Squeeze a picture into 16 numbers, and back')}
+  hint={t('A trained autoencoder keeps 16 numbers per picture. Then walk from one digit to another in two ways.')}
   onreset={resetAll}
   resetDisabled={pick === 0 && k === 0}
 >
-  {#if error}<p class="err">Could not load the digits: {error}</p>{/if}
+  {#if error}<p class="err">{t('Could not load the digits: {error}', { error: error ?? '' })}</p>{/if}
   {#if data}
     <div>
       <div class="row3">
-        <figure><canvas bind:this={cvs.orig} aria-label="The original digit"></canvas><figcaption>784 pixels</figcaption></figure>
+        <figure><canvas bind:this={cvs.orig} aria-label={t('The original digit')}></canvas><figcaption>{t('784 pixels')}</figcaption></figure>
         <figure class="mid">
-          <canvas bind:this={bars} class="bars" aria-label="The 16 code numbers as bars above and below zero"></canvas>
-          <figcaption>16 numbers: [{data.codes[pick].map((v) => v.toFixed(1)).join(', ')}]</figcaption>
+          <canvas bind:this={bars} class="bars" aria-label={t('The 16 code numbers as bars above and below zero')}></canvas>
+          <figcaption>{t('16 numbers: [{v}]', { v: data.codes[pick].map((v) => v.toFixed(1)).join(', ') })}</figcaption>
         </figure>
-        <figure><canvas bind:this={cvs.dec} aria-label="The digit rebuilt from the 16 numbers"></canvas><figcaption>decoded back to 784</figcaption></figure>
+        <figure><canvas bind:this={cvs.dec} aria-label={t('The digit rebuilt from the 16 numbers')}></canvas><figcaption>{t('decoded back to 784')}</figcaption></figure>
       </div>
     </div>
     <div class="walk">
       <label class="slider">
-        <span>walk from the {data.labels[0]} to the {data.labels[1]}: <b>{k} / 8</b></span>
-        <input type="range" min="0" max="8" step="1" bind:value={k} aria-label="Walk between the two digits" />
+        <span>{t('walk from the {a} to the {b}:', { a: data.labels[0], b: data.labels[1] })} <b>{k} / 8</b></span>
+        <input type="range" min="0" max="8" step="1" bind:value={k} aria-label={t('Walk between the two digits')} />
       </label>
       <div class="row2">
-        <figure><canvas bind:this={cvs.blend} aria-label="Mixing the pixels"></canvas><figcaption>mix the pixels</figcaption></figure>
-        <figure><canvas bind:this={cvs.walk} aria-label="Mixing the codes, then decoding"></canvas><figcaption>mix the 16 numbers, then decode</figcaption></figure>
+        <figure><canvas bind:this={cvs.blend} aria-label={t('Mixing the pixels')}></canvas><figcaption>{t('mix the pixels')}</figcaption></figure>
+        <figure><canvas bind:this={cvs.walk} aria-label={t('Mixing the codes, then decoding')}></canvas><figcaption>{t('mix the 16 numbers, then decode')}</figcaption></figure>
       </div>
     </div>
   {:else if !error}
-    <p class="loading">Loading the trained autoencoder…</p>
+    <p class="loading">{t('Loading the trained autoencoder…')}</p>
   {/if}
 
   {#snippet controls()}
     {#if data}
-      <div class="seg" role="group" aria-label="Digit">
-        <span class="lbl">digit</span>
+      <div class="seg" role="group" aria-label={t('Digit')}>
+        <span class="lbl">{t('digit')}</span>
         {#each data.labels as l, i}<button type="button" class="lab-btn" class:on={pick === i} aria-pressed={pick === i} onclick={() => (pick = i)}>{l}</button>{/each}
       </div>
     {/if}
   {/snippet}
 
   {#snippet readout()}
-    {#if data}784 numbers in, 16 numbers kept ({(784 / 16).toFixed(0)} times fewer), 784 numbers out.{:else}loading…{/if}
+    {#if data}{t('784 numbers in, 16 numbers kept ({r} times fewer), 784 numbers out.', { r: (784 / 16).toFixed(0) })}{:else}{t('loading…')}{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw pos"></i>positive code number</span>
-    <span><i class="sw neg"></i>negative code number</span>
+    <span><i class="sw pos"></i>{t('positive code number')}</span>
+    <span><i class="sw neg"></i>{t('negative code number')}</span>
   {/snippet}
 </LabFrame>
 

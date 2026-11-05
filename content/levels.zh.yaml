@@ -1,0 +1,142 @@
+# 每一关的中文标题、短标题（侧栏和地图用，尽量不超过 11 个汉字）、问题和 Boss 挑战。
+# 键是关卡的 slug（目录名）。英文原文在各关 lesson.en.mdx 的 frontmatter 里。见 TRANSLATING.zh.md。
+
+# ---- 基础 ----
+matrices:
+  title: 矩阵与形状
+  question: 两张数字表怎么相乘？结果是什么形状？
+gradient-descent:
+  title: 梯度下降
+  question: 机器怎样从错误中学习？
+neurons-and-loss:
+  title: 神经元与分类损失
+  short: 神经元与损失
+  question: 模型怎样回答“是”或“否”？答错了又怎样衡量错了多少？
+activations:
+  title: 激活函数
+  question: 网络为什么需要一个非线性的步骤？该用哪一种？
+mlp:
+  title: 多层感知机
+  question: 把一层层神经元叠起来，能多得到什么？
+backprop:
+  title: 反向传播
+  question: 梯度怎样一层一层地流回网络？
+  boss: "为一个 2→6→1 的网络写出反向传播，并用梯度检验证明它是对的。然后在浏览器里训练这个网络，直到四个 XOR 点全部分对。"
+optimization:
+  title: 优化
+  question: 在真实数据上，怎样让训练又快又稳？
+generalization:
+  title: 泛化
+  question: 怎样训练出一个在没见过的数据上也管用的网络？
+numpy-to-pytorch:
+  title: 从 NumPy 到 PyTorch
+  question: PyTorch 替你做了什么？哪些事仍然要你自己来？
+probability:
+  title: 概率与采样
+  question: 模型怎样“掷骰子”来挑下一个词？
+
+# ---- 原理 ----
+language-models:
+  title: 什么是语言模型？
+  short: 语言模型
+  question: 预测下一个词，怎么就变成了写文章？
+tokenization:
+  title: "Token：从字符到 BPE"
+  short: Token 与 BPE
+  question: 文本在哪里被切成小块？切法为什么重要？
+vectors:
+  title: 嵌入与相似度
+  question: 一个 token id 怎样变成一串有意义的数字？
+attention:
+  title: 自注意力
+  question: 一个词怎样“看向”其他词？
+masks-and-heads:
+  title: 掩码与多头注意力
+  short: 掩码与多头
+  question: 怎样不让一个词看到某些词？怎样同时用几种方式去看？
+transformer-parts:
+  title: Transformer 的组成部分
+  short: Transformer 组件
+  question: 位置编码、前馈网络、残差连接和 LayerNorm 各自做什么？它们怎样组成一个解码器块？
+full-model:
+  title: 完整的 Transformer
+  question: 模型怎样一次一个词地生成文本？
+generation:
+  title: 生成策略
+  question: 有了模型给出的分数，到底怎样挑出下一个词？
+modern-llm:
+  title: 现代模型的模块
+  short: 现代模块
+  question: 如今的模型在每个块里改了什么？为什么要改？
+inference-cost:
+  title: 推理成本：显存与速度
+  short: 推理成本
+  question: 模型每写一个 token，要花多少显存和时间？
+write-a-gpt:
+  title: 写一个你自己的 GPT
+  question: 给你一个只有名字、没有代码的起始文件，你能写出一个能用的模型吗？
+  boss: "一个由 pre-norm 块和 RMSNorm 组成的仅解码器 GPT 学习两位数加法。你的代码要通过固定权重的检查，训练好的模型要在 1,000 道没见过的题里至少全对 950 道。"
+
+# ---- 支线：深入底层 ----
+tensors-in-memory:
+  title: 内存里的张量
+  question: 数组里的数字到底存在哪里？为什么转置不花时间？
+numbers-in-a-computer:
+  title: 计算机里的数字
+  question: 损失为什么会突然变成 NaN？softmax 为什么要先减去最大的分数？
+autograd:
+  title: 自己写一个自动求导
+  short: 自己写自动求导
+  question: 计算机怎样自动算出每一个梯度？
+data-pipeline:
+  title: 把数据喂给模型
+  short: 喂数据
+  question: 样本怎样从磁盘上的一个列表，一批一批地进入模型？
+debugging:
+  title: 调试模型
+  question: 代码能跑，但模型学不会。怎样找到 bug？
+  boss: "修好三个坏掉的训练脚本：两个小的 NumPy 脚本在浏览器里评分；另一个 PyTorch 脚本有四个 bug，只有四个 bug 全部修好、模型在留出集上至少答对 95% 的点，check.py 才会通过。"
+attention-backward:
+  title: 注意力的反向传播
+  short: 注意力反向传播
+  question: 梯度怎样穿过注意力传回去？为此训练时必须在显存里留下什么？
+
+# ---- 支线：经典网络 ----
+convolutions:
+  title: 卷积
+  question: 一个小小的卷积核，怎样在图片的任何位置找到边缘？
+residuals-and-norms:
+  title: 残差与归一化
+  question: 很深的网络为什么学不动了？后来是怎么解决的？
+rnn:
+  title: 循环神经网络
+  question: 网络怎样一步一步地读一个序列？
+lstm:
+  title: LSTM 与 GRU
+  question: 门怎样让网络记得更久？
+  boss: "用 NumPy 写出完整的一步 GRU，并在浏览器里通过所有测试。然后在你的电脑上，亲手写出 boss.py 里的 LSTM 单元，用我们生成的文本训练它，直到它写出的行至少 90% 符合所有规则。"
+seq2seq-attention:
+  title: Seq2seq 与最早的注意力
+  short: Seq2seq 与注意力
+  question: 怎样把一个序列变成另一个序列？注意力为什么会出现？
+  boss: "用 NumPy 一次算出解码器每一步的注意力（包括 softmax），并在浏览器里通过所有测试。然后在你的电脑上，把同样的三行用 PyTorch 写进 boss.py，训练一个 LSTM 编码器–解码器，让它把至少 90% 的新的 20 位数字串倒过来。"
+autoencoders:
+  title: 自编码器与 VAE
+  short: 自编码器
+  question: 网络能不能学会把一张图压成几个数，再还原回来？
+encoder-decoder:
+  title: 2017 年的编码器–解码器 Transformer
+  short: 2017 Transformer
+  question: 最早的 Transformer 怎样用两摞层把一个序列变成另一个序列？
+
+# ---- 支线：扩散模型 ----
+noise-and-denoise:
+  title: 加噪与去噪
+  question: 一步一步往图片里掺噪声，能不能再把它还原？
+sampling-and-guidance:
+  title: 采样与引导
+  question: 怎样让它画出你要的东西？
+latents-and-dit:
+  title: 潜空间与 DiT
+  question: 图像生成为什么又回到了 Transformer？
+  boss: "亲手写出完整的采样器，在浏览器里生成指定的形状。然后在你的电脑上完成 boss.py：你自己写的加噪、引导和反向一步，要让一个小 Transformer 画出另一个分类器认得出的数字。"

@@ -4,6 +4,27 @@
    * output is the two states side by side. Pick a word to see what each direction has read by the time it gets there.
    */
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Reading both ways: what each direction has seen': '从两头读：每个方向看到了什么',
+    'Tap a word. The forward RNN has read everything up to it; the backward RNN everything after it.': '点一个词。正向 RNN 读过了它和它之前的所有词；反向 RNN 读过了它和它之后的所有词。',
+    'Pick a word': '选一个词',
+    '→ forward RNN': '→ 正向 RNN',
+    '← backward RNN': '← 反向 RNN',
+    'output': '输出',
+    'both states side by side': '两个状态并排拼在一起',
+    'At “{w}”, the forward state has read': '到 “{w}” 时，正向状态读了',
+    '; the backward state has read': '；反向状态读了',
+    '.': '。',
+    'The output for “{w}” is both states side by side.': '“{w}” 处的输出是两个状态并排拼在一起。',
+    'forward RNN, left to right': '正向 RNN，从左往右',
+    'backward RNN, right to left': '反向 RNN，从右往左',
+    'a word that direction has already read': '这个方向已经读过的词',
+  })
 
   const words = ['he', 'sat', 'by', 'the', 'bank', 'of', 'the', 'river']
   const START = 4
@@ -23,51 +44,51 @@
 </script>
 
 <LabFrame
-  title="Reading both ways: what each direction has seen"
-  hint="Tap a word. The forward RNN has read everything up to it; the backward RNN everything after it."
+  title={t('Reading both ways: what each direction has seen')}
+  hint={t('Tap a word. The forward RNN has read everything up to it; the backward RNN everything after it.')}
   onreset={() => (at = START)}
   resetDisabled={at === START}
 >
   <div class="board" style="--n: {words.length}">
     <span class="corner"></span>
-    <div class="words" role="group" aria-label="Pick a word">
+    <div class="words" role="group" aria-label={t('Pick a word')}>
       {#each words as w, i}
         <button bind:this={btns[i]} class:on={i === at} aria-pressed={i === at} tabindex={i === at ? 0 : -1}
           onclick={() => (at = i)} onkeydown={key}>{w}</button>
       {/each}
     </div>
 
-    <span class="tag fwd">→ forward RNN</span>
+    <span class="tag fwd">{t('→ forward RNN')}</span>
     <div class="lane fwd" aria-hidden="true">
       {#each words as _, i}
         <span class="cell" class:lit={i <= at} class:l={i <= at && i > 0} class:r={i < at} class:here={i === at}><i></i></span>
       {/each}
     </div>
 
-    <span class="tag bwd">← backward RNN</span>
+    <span class="tag bwd">{t('← backward RNN')}</span>
     <div class="lane bwd" aria-hidden="true">
       {#each words as _, i}
         <span class="cell" class:lit={i >= at} class:l={i > at} class:r={i >= at && i < words.length - 1} class:here={i === at}><i></i></span>
       {/each}
     </div>
 
-    <span class="tag out">output</span>
+    <span class="tag out">{t('output')}</span>
     <div class="lane outs" aria-hidden="true">
       {#each words as _, i}
-        <span class="cell">{#if i === at}<span class="pair" title="both states side by side"><b class="f"></b><b class="b"></b></span>{/if}</span>
+        <span class="cell">{#if i === at}<span class="pair" title={t('both states side by side')}><b class="f"></b><b class="b"></b></span>{/if}</span>
       {/each}
     </div>
   </div>
 
   {#snippet readout()}
-    At “{words[at]}”, the forward state has read <b>{fwdRead.join(' ')}</b>; the backward state has read <b>{bwdRead.join(' ')}</b>.
-    The output for “{words[at]}” is both states side by side.
+    {t('At “{w}”, the forward state has read', { w: words[at] })} <b>{fwdRead.join(' ')}</b>{t('; the backward state has read')} <b>{bwdRead.join(' ')}</b>{t('.')}
+    {t('The output for “{w}” is both states side by side.', { w: words[at] })}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw fwd"></i>forward RNN, left to right</span>
-    <span><i class="sw bwd"></i>backward RNN, right to left</span>
-    <span><i class="dot"></i>a word that direction has already read</span>
+    <span><i class="sw fwd"></i>{t('forward RNN, left to right')}</span>
+    <span><i class="sw bwd"></i>{t('backward RNN, right to left')}</span>
+    <span><i class="dot"></i>{t('a word that direction has already read')}</span>
   {/snippet}
 </LabFrame>
 

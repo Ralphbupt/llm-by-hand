@@ -2,8 +2,10 @@
 /** "I got stuck here": a real question a learner asked, and its answer. */
 interface Props { q: string }
 import { smart } from '@lib/typo'
+import { langOf, tr } from '@lib/i18n'
+const lang = langOf(Astro.url.pathname)
 const q = smart(Astro.props.q)
 // `code` in the q shows as code (odd pieces of the split are the code spans)
 const parts = q.split(/`([^`]+)`/)
 ---
-<details class="stuck"><summary><span class="k">I got stuck here</span> {parts.map((p, i) => (i % 2 ? <code>{p}</code> : p))}</summary><div class="body"><slot /></div></details>
+<details class="stuck"><summary><span class="k">{tr(lang, 'I got stuck here')}</span> {parts.map((p, i) => (i % 2 ? <code>{p}</code> : p))}</summary><div class="body"><slot /></div></details>

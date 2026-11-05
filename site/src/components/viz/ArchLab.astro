@@ -1,4 +1,5 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './ArchLab.svelte'
 interface Props {
   which: 'backprop' | 'mlp' | 'conv' | 'rnn' | 'seq2seq' | 'autoencoder' | 'encdec' | 'full'
@@ -6,4 +7,4 @@ interface Props {
 }
 const { which, hide } = Astro.props
 ---
-<Lab client:visible which={which} hide={hide} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible which={which} hide={hide} />

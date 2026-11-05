@@ -9,12 +9,52 @@
    */
   import { onMount } from 'svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   type Step = { input: string[]; last: number[]; logits: number[]; pick: string; cross?: number[]; att?: number[] }
   type Case = { n: number; truth: string[]; steps: Step[] }
   type Data = { vocab: string[]; curve: { epoch: number; loss: number; acc: number }[]; [snap: `epoch${number}`]: Case[] }
 
-  let { data: slug = 'full-model' }: { data?: string } = $props()
+  let { data: slug = 'full-model', lang = 'en' }: { data?: string; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Greedy decoding, one word at a time': '贪心解码，一次一个词',
+    'Pick a number for the trained model to read aloud, then press Next step to watch it choose each word.': '选一个数让训练好的模型读出来，然后按“下一步”，看它怎样选出每个词。',
+    'Could not load the recorded model. Reload the page to try again.': '录下的模型没能加载。刷新页面再试一次。',
+    'Loading the trained model’s recording…': '正在加载训练好的模型的记录……',
+    'Number to read aloud': '要读出来的数',
+    'Read aloud': '读出',
+    'Which model': '哪个模型',
+    Model: '模型',
+    'after {n} epochs': '训练 {n} 轮后',
+    'Bars: where cross-attention looked while choosing this step’s word (last layer, heads averaged).': '条形：选这一步的词时，交叉注意力看向哪里（最后一层，各头取平均）。',
+    'Decoder input': '解码器输入',
+    Input: '输入',
+    ' · {n} row': ' · {n} 行',
+    ' · {n} rows': ' · {n} 行',
+    '← only the last row picks the next word': '← 只有最后一行用来挑下一个词',
+    'Bars: where the last row’s attention looked while choosing this step’s word (last layer, heads averaged).': '条形：选这一步的词时，最后一行的注意力看向哪里（最后一层，各头取平均）。',
+    'Last row of the decoder’s output: {n} numbers': '解码器输出的最后一行：{n} 个数',
+    'Last row of the model’s output: {n} numbers': '模型输出的最后一行：{n} 个数',
+    '× output layer ({d} × {v}) + bias → {v} scores (top 8 shown)': '× 输出层（{d} × {v}）+ 偏置 → {v} 个分数（显示前 8 个）',
+    '· the right word was': '· 正确的词是',
+    ' (ranked {n})': '（排第 {n}）',
+    Press: '按',
+    'Next step': '下一步',
+    ': the model reads the digits once, then writes the first word.': '：模型把数字读一次，然后写出第一个词。',
+    ': the model reads the digits and “=”, then writes the first word.': '：模型读入数字和“=”，然后写出第一个词。',
+    Back: '上一步',
+    'Start again': '从头开始',
+    'step {k} / {n}': '第 {k} 步 / {n}',
+    'output so far:': '目前的输出：',
+    '✓ correct': '✓ 正确',
+    '✗ should be “{s}”': '✗ 应该是“{s}”',
+    'positive number': '正数',
+    'negative number': '负数',
+    'the word it picks': '它挑的词',
+    'the right word, when it picks wrong': '挑错时的正确词',
+  })
   let data = $state<Data | null>(null)
   let failed = $state(false)
   let which = $state<'final' | 'early'>('final')
@@ -59,29 +99,29 @@
 </script>
 
 <LabFrame
-  title="Greedy decoding, one word at a time"
-  hint="Pick a number for the trained model to read aloud, then press Next step to watch it choose each word."
+  title={tx('Greedy decoding, one word at a time')}
+  hint={tx('Pick a number for the trained model to read aloud, then press Next step to watch it choose each word.')}
 >
   {#if failed}
-    <p class="dim">Could not load the recorded model. Reload the page to try again.</p>
+    <p class="dim">{tx('Could not load the recorded model. Reload the page to try again.')}</p>
   {:else if !data || !cs}
     <div class="skeleton" aria-hidden="true"></div>
-    <p class="dim">Loading the trained model’s recording…</p>
+    <p class="dim">{tx('Loading the trained model’s recording…')}</p>
   {:else}
     <div class="pickers">
-      <div class="seg" role="group" aria-label="Number to read aloud">
-        <span class="seglbl">Read aloud</span>
+      <div class="seg" role="group" aria-label={tx('Number to read aloud')}>
+        <span class="seglbl">{tx('Read aloud')}</span>
         <span class="chips">
           {#each cases as c, i}
             <button type="button" class="chip" class:on={ci === i} aria-pressed={ci === i} onclick={() => choose(i)}>{c.n}</button>
           {/each}
         </span>
       </div>
-      <div class="seg" role="group" aria-label="Which model">
-        <span class="seglbl">Model</span>
+      <div class="seg" role="group" aria-label={tx('Which model')}>
+        <span class="seglbl">{tx('Model')}</span>
         <span class="chips">
-          <button type="button" class="chip" class:on={which === 'early'} aria-pressed={which === 'early'} onclick={() => { which = 'early'; k = 0 }}>after {early?.epoch} epochs</button>
-          <button type="button" class="chip" class:on={which === 'final'} aria-pressed={which === 'final'} onclick={() => { which = 'final'; k = 0 }}>after {final?.epoch} epochs</button>
+          <button type="button" class="chip" class:on={which === 'early'} aria-pressed={which === 'early'} onclick={() => { which = 'early'; k = 0 }}>{tx('after {n} epochs', { n: early?.epoch ?? '' })}</button>
+          <button type="button" class="chip" class:on={which === 'final'} aria-pressed={which === 'final'} onclick={() => { which = 'final'; k = 0 }}>{tx('after {n} epochs', { n: final?.epoch ?? '' })}</button>
         </span>
       </div>
     </div>
@@ -95,13 +135,13 @@
             <span class="cv">{step?.cross ? step.cross[j].toFixed(2) : ''}</span>
           </div>
         {/each}
-        <p class="dim small">Bars: where cross-attention looked while choosing this step’s word (last layer, heads averaged).</p>
+        <p class="dim small">{tx('Bars: where cross-attention looked while choosing this step’s word (last layer, heads averaged).')}</p>
       </div>
     {/if}
 
     <div class="flow">
       <div>
-        <div class="lbl">{cross ? 'Decoder input' : 'Input'}{step ? ` · ${step.input.length} row${step.input.length > 1 ? 's' : ''}` : ''}</div>
+        <div class="lbl">{cross ? tx('Decoder input') : tx('Input')}{step ? tx(step.input.length > 1 ? ' · {n} rows' : ' · {n} row', { n: step.input.length }) : ''}</div>
         {#if !cross}
           <div class="toks">
             {#each (step ? step.input : next ? next.input : []) as t, j}
@@ -111,24 +151,24 @@
                 <span class="tok" class:last={step && j === step.input.length - 1}>{t}</span>
               </div>
             {/each}
-            {#if step}<span class="note">← only the last row picks the next word</span>{/if}
+            {#if step}<span class="note">{tx('← only the last row picks the next word')}</span>{/if}
           </div>
-          <p class="dim small">Bars: where the last row’s attention looked while choosing this step’s word (last layer, heads averaged).</p>
+          <p class="dim small">{tx('Bars: where the last row’s attention looked while choosing this step’s word (last layer, heads averaged).')}</p>
         {:else}
           <div class="toks">
             {#each (step ? step.input : next ? next.input : []) as t, j}<span class="tok" class:last={step && j === step.input.length - 1}>{t}</span>{/each}
-            {#if step}<span class="note">← only the last row picks the next word</span>{/if}
+            {#if step}<span class="note">{tx('← only the last row picks the next word')}</span>{/if}
           </div>
         {/if}
       </div>
       {#if step}
         <div>
-          <div class="lbl">Last row of the {cross ? 'decoder' : 'model'}’s output: {dModel} numbers</div>
+          <div class="lbl">{tx(cross ? 'Last row of the decoder’s output: {n} numbers' : 'Last row of the model’s output: {n} numbers', { n: dModel })}</div>
           <div class="strip">{#each step.last as v}<i style={cell(v)} title={v.toFixed(2)}></i>{/each}</div>
           <div class="mono small">[{step.last.slice(0, 4).map((v) => v.toFixed(2)).join(', ')}, …]</div>
         </div>
         <div>
-          <div class="lbl">× output layer ({dModel} × {V}) + bias → {V} scores (top 8 shown)</div>
+          <div class="lbl">{tx('× output layer ({d} × {v}) + bias → {v} scores (top 8 shown)', { d: dModel, v: V })}</div>
           <div class="bars">
             {#each top as t, i}
               <div class="br" class:win={i === 0} class:truth={wrong && t.w === truthNow}>
@@ -139,36 +179,36 @@
             {/each}
           </div>
           <div class="pick">argmax → <b>{step.pick}</b>
-            {#if wrong}<span class="miss">· the right word was <b>{truthNow}</b>{truthRank >= 0 ? ` (ranked ${truthRank + 1})` : ''}</span>{/if}</div>
+            {#if wrong}<span class="miss">{tx('· the right word was')} <b>{truthNow}</b>{truthRank >= 0 ? tx(' (ranked {n})', { n: truthRank + 1 }) : ''}</span>{/if}</div>
         </div>
       {:else}
-        <p class="dim small">Press <b>Next step</b>: {cross ? 'the model reads the digits once, then writes the first word.' : 'the model reads the digits and “=”, then writes the first word.'}</p>
+        <p class="dim small">{tx('Press')} <b>{tx('Next step')}</b>{cross ? tx(': the model reads the digits once, then writes the first word.') : tx(': the model reads the digits and “=”, then writes the first word.')}</p>
       {/if}
     </div>
   {/if}
 
   {#snippet controls()}
-    <button type="button" class="lab-btn" onclick={() => (k = Math.max(0, k - 1))} disabled={!cs || k === 0}>‹ Back</button>
-    <button type="button" class="lab-btn primary" onclick={() => (k = k + 1)} disabled={!cs || finished}>Next step ›</button>
-    <button type="button" class="lab-btn ghost" onclick={() => (k = 0)} disabled={!cs || k === 0}>Start again</button>
-    {#if cs}<span class="stepn mono">step {k} / {cs.steps.length}</span>{/if}
+    <button type="button" class="lab-btn" onclick={() => (k = Math.max(0, k - 1))} disabled={!cs || k === 0}>‹ {tx('Back')}</button>
+    <button type="button" class="lab-btn primary" onclick={() => (k = k + 1)} disabled={!cs || finished}>{tx('Next step')} ›</button>
+    <button type="button" class="lab-btn ghost" onclick={() => (k = 0)} disabled={!cs || k === 0}>{tx('Start again')}</button>
+    {#if cs}<span class="stepn mono">{tx('step {k} / {n}', { k, n: cs.steps.length })}</span>{/if}
   {/snippet}
 
   {#snippet readout()}
     {#if cs}
-      output so far: <b>{words(out) || '…'}</b>
+      {tx('output so far:')} <b>{words(out) || '…'}</b>
       {#if finished}
-        {#if words(out) === cs.truth.join(' ')}<span class="ok">✓ correct</span>
-        {:else}<span class="bad">✗ should be “{cs.truth.join(' ')}”</span>{/if}
+        {#if words(out) === cs.truth.join(' ')}<span class="ok">{tx('✓ correct')}</span>
+        {:else}<span class="bad">{tx('✗ should be “{s}”', { s: cs.truth.join(' ') })}</span>{/if}
       {/if}
     {:else}…{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--pos) 70%, var(--bg))"></i>positive number</span>
-    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--neg) 70%, var(--bg))"></i>negative number</span>
-    <span class="lg"><i class="sw" style="background: var(--accent)"></i>the word it picks</span>
-    <span class="lg"><i class="sw" style="background: var(--ok)"></i>the right word, when it picks wrong</span>
+    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--pos) 70%, var(--bg))"></i>{tx('positive number')}</span>
+    <span class="lg"><i class="sw" style="background: color-mix(in srgb, var(--neg) 70%, var(--bg))"></i>{tx('negative number')}</span>
+    <span class="lg"><i class="sw" style="background: var(--accent)"></i>{tx('the word it picks')}</span>
+    <span class="lg"><i class="sw" style="background: var(--ok)"></i>{tx('the right word, when it picks wrong')}</span>
   {/snippet}
 </LabFrame>
 

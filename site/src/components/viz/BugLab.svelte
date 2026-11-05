@@ -6,6 +6,33 @@
    */
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Four points, one line, and some bugs': '四个点、一条直线和几个 bug',
+    'Pick a learning rate, switch a bug on or off, then train. Changing a setting starts again from w = 0.5, b = 0.': '选一个学习率，打开或关掉某个 bug，然后训练。改动任何设置都会从 w = 0.5、b = 0 重新开始。',
+    'The four points, the best line and your line': '四个点、最好的直线和你的直线',
+    'The 4 points, your line, and the best line (w = 1.6, b = 1).': '4 个点、你的直线，以及最好的直线（w = 1.6，b = 1）。',
+    'Loss after each step, on a log scale': '每一步之后的损失，对数刻度',
+    'train to draw the loss': '训练后这里会画出损失',
+    'step {k}': '第 {k} 步',
+    'Loss after each step, log scale. Dashed: the best possible loss, 0.8.': '每一步之后的损失，对数刻度。虚线：可能的最低损失 0.8。',
+    'Train 200 steps': '训练 200 步',
+    '10 steps': '10 步',
+    'learning rate': '学习率',
+    'Shape bug: pred': '形状 bug：pred',
+    'Forget': '忘记',
+    'Step 0: w = 0.5, b = 0. Press Train.': '第 0 步：w = 0.5，b = 0。按“训练”。',
+    'After {n} steps: loss {l}, w = {w}, b = {b}.': '{n} 步之后：损失 {l}，w = {w}，b = {b}。',
+    'Loss became inf at step {k}.': '损失在第 {k} 步变成 inf。',
+    'Loss became inf at step {k}, NaN at step {m}.': '损失在第 {k} 步变成 inf，在第 {m} 步变成 NaN。',
+    'your line, your loss': '你的直线，你的损失',
+    'the best line, the best loss': '最好的直线，最低的损失',
+    'first inf / NaN': '第一个 inf / NaN',
+  })
 
   const X = [1, 2, 3, 4], Y = [3, 3, 7, 7]
   const LRS = [0.001, 0.01, 0.05, 0.2]
@@ -63,14 +90,14 @@
 </script>
 
 <LabFrame
-  title="Four points, one line, and some bugs"
-  hint="Pick a learning rate, switch a bug on or off, then train. Changing a setting starts again from w = 0.5, b = 0."
+  title={t('Four points, one line, and some bugs')}
+  hint={t('Pick a learning rate, switch a bug on or off, then train. Changing a setting starts again from w = 0.5, b = 0.')}
   onreset={reset}
   resetDisabled={!changed}
 >
   <div class="panes">
     <figure>
-      <svg viewBox="0 0 100 62" use:readable aria-label="The four points, the best line and your line">
+      <svg viewBox="0 0 100 62" use:readable aria-label={t('The four points, the best line and your line')}>
         {#each [0, 4, 8] as gy}
           <line x1="8" x2="96" y1={dy(gy)} y2={dy(gy)} class="grid" />
           <text x="6" y={dy(gy) + 1.2} class="tick end">{gy}</text>
@@ -84,10 +111,10 @@
           <text x={dx(x)} y="61" class="tick mid">x={x}</text>
         {/each}
       </svg>
-      <figcaption>The 4 points, your line, and the best line (w = 1.6, b = 1).</figcaption>
+      <figcaption>{t('The 4 points, your line, and the best line (w = 1.6, b = 1).')}</figcaption>
     </figure>
     <figure>
-      <svg viewBox="0 0 100 60" use:readable aria-label="Loss after each step, on a log scale">
+      <svg viewBox="0 0 100 60" use:readable aria-label={t('Loss after each step, on a log scale')}>
         {#each [-1, 0, 2, 4, 6] as e}
           <line x1="10" x2="96" y1={ly(10 ** e)} y2={ly(10 ** e)} class="grid" />
           <text x="8" y={ly(10 ** e) + 1.2} class="tick end">{e === -1 ? '0.1' : e === 0 ? '1' : `1e${e}`}</text>
@@ -102,39 +129,39 @@
           <line x1={lx(firstNan)} x2={lx(firstNan)} y1="4" y2="50" class="bad" />
           <text x={lx(firstNan) + 1} y="8" class="tick badt">NaN</text>
         {/if}
-        {#if !losses.length}<text x="53" y="28" class="tick mid">train to draw the loss</text>{/if}
-        <text x="10" y="58" class="tick">step 0</text>
-        <text x="96" y="58" class="tick end">step {N - 1}</text>
+        {#if !losses.length}<text x="53" y="28" class="tick mid">{t('train to draw the loss')}</text>{/if}
+        <text x="10" y="58" class="tick">{t('step {k}', { k: 0 })}</text>
+        <text x="96" y="58" class="tick end">{t('step {k}', { k: N - 1 })}</text>
       </svg>
-      <figcaption>Loss after each step, log scale. Dashed: the best possible loss, 0.8.</figcaption>
+      <figcaption>{t('Loss after each step, log scale. Dashed: the best possible loss, 0.8.')}</figcaption>
     </figure>
   </div>
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => step(200)}>Train 200 steps</button>
-    <button class="lab-btn" onclick={() => step(10)}>10 steps</button>
-    <span class="knob" role="group" aria-label="learning rate">learning rate
+    <button class="lab-btn primary" onclick={() => step(200)}>{t('Train 200 steps')}</button>
+    <button class="lab-btn" onclick={() => step(10)}>{t('10 steps')}</button>
+    <span class="knob" role="group" aria-label={t('learning rate')}>{t('learning rate')}
       {#each LRS as v}
         <button class="lab-btn seg" class:on={lr === v} aria-pressed={lr === v} onclick={() => { lr = v; restart() }}>{v}</button>
       {/each}
     </span>
-    <label class="tog"><input type="checkbox" bind:checked={shapeBug} onchange={restart} /> Shape bug: pred <code>(4, 1)</code>, y <code>(4,)</code></label>
-    <label class="tog"><input type="checkbox" bind:checked={noZero} onchange={restart} /> Forget <code>zero_grad</code></label>
+    <label class="tog"><input type="checkbox" bind:checked={shapeBug} onchange={restart} /> {t('Shape bug: pred')} <code>(4, 1)</code>, y <code>(4,)</code></label>
+    <label class="tog"><input type="checkbox" bind:checked={noZero} onchange={restart} /> {t('Forget')} <code>zero_grad</code></label>
   {/snippet}
 
   {#snippet readout()}
     {#if last === undefined}
-      Step 0: w = 0.5, b = 0. Press Train.
+      {t('Step 0: w = 0.5, b = 0. Press Train.')}
     {:else}
-      After {losses.length} steps: loss {fmt(last)}, w = {fmt(st.w)}, b = {fmt(st.b)}.
-      {#if firstInf >= 0} <span class="badt">Loss became inf at step {firstInf}{#if firstNan >= 0}, NaN at step {firstNan}{/if}.</span>{/if}
+      {t('After {n} steps: loss {l}, w = {w}, b = {b}.', { n: losses.length, l: fmt(last), w: fmt(st.w), b: fmt(st.b) })}
+      {#if firstInf >= 0} <span class="badt">{firstNan >= 0 ? t('Loss became inf at step {k}, NaN at step {m}.', { k: firstInf, m: firstNan }) : t('Loss became inf at step {k}.', { k: firstInf })}</span>{/if}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw acc"></i>your line, your loss</span>
-    <span><i class="sw okd"></i>the best line, the best loss</span>
-    <span><i class="sw warn"></i>first inf / NaN</span>
+    <span><i class="sw acc"></i>{t('your line, your loss')}</span>
+    <span><i class="sw okd"></i>{t('the best line, the best loss')}</span>
+    <span><i class="sw warn"></i>{t('first inf / NaN')}</span>
   {/snippet}
 </LabFrame>
 

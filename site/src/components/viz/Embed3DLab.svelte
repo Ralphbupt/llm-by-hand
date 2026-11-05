@@ -9,6 +9,32 @@
    */
   import Points3D from '../viz3d/Points3D.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Word vectors in 3D': '三维中的词向量',
+    'Two word vectors, the angle and the shadow': '两个词向量、夹角和影子',
+    'Pick two words. Drag the picture to turn it (select it first to zoom).': '选两个词。拖动图片可以旋转它（先选中它才能缩放）。',
+    'Pick two words. The picture is the flat plane through both arrows.': '选两个词。图上是穿过这两个箭头的平面。',
+    '1st': '第 1 个数',
+    '2nd': '第 2 个数',
+    '3rd': '第 3 个数',
+    "Six word vectors drawn as arrows in three dimensions; the two picked words are colored, with the angle between them and the second word's shadow on the first": '六个词向量画成三维中的箭头；选中的两个词有颜色，并画出它们的夹角，以及第二个词在第一个词上的影子',
+    "The plane through the two picked arrows: {a} along the bottom line, {b} at angle with cosine {cos}, and its shadow of length {s} on {a}'s line": '穿过两个选中箭头的平面：{a} 沿着底线，{b} 与它的夹角余弦为 {cos}，{b} 在 {a} 所在直线上的影子长 {s}',
+    'shadow {s}': '影子 {s}',
+    'First word': '第一个词',
+    'Second word': '第二个词',
+    'Dot product with {w}, biggest first': '和 {w} 的点积，从大到小',
+    '= shadow {s} × length of {w} {l}': '= 影子 {s} × {w} 的长度 {l}',
+    'cos(angle) = {c}': 'cos(夹角) = {c}',
+    'first word': '第一个词',
+    'second word': '第二个词',
+    'its shadow on the first word’s line': '它在第一个词所在直线上的影子',
+    'The small arc marks the angle between the two words; its cosine and the shadow’s length are in the box above. Gray arrows are the other words; one that sits close to a picked word is not named, so pick it to see which it is.': '小弧线标出两个词之间的夹角；夹角的余弦和影子的长度写在上面的框里。灰色箭头是其他词；离选中的词很近的灰色箭头不标名字，选中它才能看到是哪个词。',
+    'The 1st, 2nd and 3rd numbers of each word are its x, y and z. Animals point one way and vehicles another: same direction gives a big dot product, a right angle gives 0 (no shadow), opposite directions go negative (the shadow falls behind the start).': '每个词的第 1、2、3 个数就是它的 x、y、z。动物指向一个方向，交通工具指向另一个方向：方向相同，点积大；成直角，点积为 0（没有影子）；方向相反，点积为负（影子落在起点后面）。',
+  })
 
   const WORDS: [string, [number, number, number]][] = [
     ['cat', [2, 1, 0]],
@@ -64,8 +90,8 @@
 </script>
 
 <LabFrame
-  title={has3d ? 'Word vectors in 3D' : 'Two word vectors, the angle and the shadow'}
-  hint={has3d ? 'Pick two words. Drag the picture to turn it (select it first to zoom).' : 'Pick two words. The picture is the flat plane through both arrows.'}
+  title={has3d ? t('Word vectors in 3D') : t('Two word vectors, the angle and the shadow')}
+  hint={has3d ? t('Pick two words. Drag the picture to turn it (select it first to zoom).') : t('Pick two words. The picture is the flat plane through both arrows.')}
   bind:has3d
   onreset={() => { a = 0; b = 1 }}
   resetDisabled={a === 0 && b === 1}
@@ -73,11 +99,11 @@
   <div class="cols">
     <div class="pic">
       {#if has3d}
-        <Points3D {points} arrows range={2.05} height="min(300px, 80vw)" axes={['1st', '2nd', '3rd']} highlight={a} angleArc={arc} projection={proj}
-          ariaLabel="Six word vectors drawn as arrows in three dimensions; the two picked words are colored, with the angle between them and the second word's shadow on the first" />
+        <Points3D {points} arrows range={2.05} height="min(300px, 80vw)" axes={[t('1st'), t('2nd'), t('3rd')]} highlight={a} angleArc={arc} projection={proj}
+          ariaLabel={t("Six word vectors drawn as arrows in three dimensions; the two picked words are colored, with the angle between them and the second word's shadow on the first")} />
       {:else}
         <svg class="flat" viewBox="-100 -100 200 120" role="img"
-          aria-label="The plane through the two picked arrows: {WORDS[a][0]} along the bottom line, {WORDS[b][0]} at angle with cosine {cos.toFixed(2)}, and its shadow of length {shadow.toFixed(2)} on {WORDS[a][0]}'s line">
+          aria-label={t("The plane through the two picked arrows: {a} along the bottom line, {b} at angle with cosine {cos}, and its shadow of length {s} on {a}'s line", { a: WORDS[a][0], b: WORDS[b][0], cos: cos.toFixed(2), s: shadow.toFixed(2) })}>
           <line x1="-96" x2="96" y1="0" y2="0" class="base" />
           <line x1={B2[0]} y1={B2[1]} x2={B2[0]} y2="5" class="drop" />
           <line x1="0" y1="5" x2={shadow * S} y2="5" class="shadow" />
@@ -89,16 +115,16 @@
           <text x={A2[0] + 4} y="-4" class="t a">{WORDS[a][0]}</text>
           <text x={B2[0] + (B2[0] < 0 ? -4 : 4)} y={B2[1] - 4} class="t b" text-anchor={B2[0] < 0 ? 'end' : 'start'}>{WORDS[b][0]}</text>
           <text x={arcR + 4} y="-10" class="t dim">cos {cos.toFixed(2)}</text>
-          <text x={shadow * S / 2} y="15" class="t" text-anchor="middle">shadow {shadow.toFixed(2)}</text>
+          <text x={shadow * S / 2} y="15" class="t" text-anchor="middle">{t('shadow {s}', { s: shadow.toFixed(2) })}</text>
         </svg>
       {/if}
     </div>
     <div class="panel">
-      <p class="sec"><i class="sw a"></i>First word</p>
-      <div class="chips" role="group" aria-label="First word">{#each WORDS as [w], i}<button type="button" class:on={i === a} aria-pressed={i === a} onclick={() => { a = i; if (b === i) b = (i + 1) % WORDS.length }}>{w}</button>{/each}</div>
-      <p class="sec"><i class="sw b"></i>Second word</p>
-      <div class="chips" role="group" aria-label="Second word">{#each WORDS as [w], i}<button type="button" class:on={i === b} aria-pressed={i === b} disabled={i === a} onclick={() => choose(i)}>{w}</button>{/each}</div>
-      <p class="sec">Dot product with {WORDS[a][0]}, biggest first</p>
+      <p class="sec"><i class="sw a"></i>{t('First word')}</p>
+      <div class="chips" role="group" aria-label={t('First word')}>{#each WORDS as [w], i}<button type="button" class:on={i === a} aria-pressed={i === a} onclick={() => { a = i; if (b === i) b = (i + 1) % WORDS.length }}>{w}</button>{/each}</div>
+      <p class="sec"><i class="sw b"></i>{t('Second word')}</p>
+      <div class="chips" role="group" aria-label={t('Second word')}>{#each WORDS as [w], i}<button type="button" class:on={i === b} aria-pressed={i === b} disabled={i === a} onclick={() => choose(i)}>{w}</button>{/each}</div>
+      <p class="sec">{t('Dot product with {w}, biggest first', { w: WORDS[a][0] })}</p>
       <ol class="rank">
         {#each ranking as r}
           <li class:hl={r.i === b}><span>{r.w}</span><span class="bar" class:negbar={r.d < 0} style="--w:{Math.abs(r.d) / 8}"></span><b class:neg={r.d < 0} class:pos={r.d > 0}>{r.d}</b></li>
@@ -109,17 +135,16 @@
 
   {#snippet readout()}
     <span class="line">{WORDS[a][0]} · {WORDS[b][0]} = {term(va[0], vb[0])} + {term(va[1], vb[1])} + {term(va[2], vb[2])} = <b class:neg={d < 0} class:pos={d > 0}>{d}</b></span>
-    <span class="line also">= shadow {shadow.toFixed(2)} × length of {WORDS[a][0]} {len(va).toFixed(2)}</span>
-    <span class="line also">cos(angle) = {cos.toFixed(2)}</span>
+    <span class="line also">{t('= shadow {s} × length of {w} {l}', { s: shadow.toFixed(2), w: WORDS[a][0], l: len(va).toFixed(2) })}</span>
+    <span class="line also">{t('cos(angle) = {c}', { c: cos.toFixed(2) })}</span>
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw a"></i>first word</span>
-    <span><i class="sw b"></i>second word</span>
-    <span><i class="sw s"></i>its shadow on the first word’s line</span>
-    {#if has3d}<span>The small arc marks the angle between the two words; its cosine and the shadow’s length are in the box above. Gray arrows are the other words; one that sits close to a picked word is not named, so pick it to see which it is.</span>{/if}
-    <span>The 1st, 2nd and 3rd numbers of each word are its x, y and z. Animals point one way and vehicles another:
-      same direction gives a big dot product, a right angle gives 0 (no shadow), opposite directions go negative (the shadow falls behind the start).</span>
+    <span><i class="sw a"></i>{t('first word')}</span>
+    <span><i class="sw b"></i>{t('second word')}</span>
+    <span><i class="sw s"></i>{t('its shadow on the first word’s line')}</span>
+    {#if has3d}<span>{t('The small arc marks the angle between the two words; its cosine and the shadow’s length are in the box above. Gray arrows are the other words; one that sits close to a picked word is not named, so pick it to see which it is.')}</span>{/if}
+    <span>{t('The 1st, 2nd and 3rd numbers of each word are its x, y and z. Animals point one way and vehicles another: same direction gives a big dot product, a right angle gives 0 (no shadow), opposite directions go negative (the shadow falls behind the start).')}</span>
   {/snippet}
 </LabFrame>
 

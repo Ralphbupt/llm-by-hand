@@ -15,9 +15,40 @@
   import MatrixGrid from './MatrixGrid.svelte'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Car becomes [5, 5]': 'car 变成 [5, 5]',
+    'All three the same': '三个都一样',
+    'Cat and dog opposite': 'cat 和 dog 方向相反',
+    'Each word’s output is a weighted average of all the words': '每个词的输出是所有词的加权平均',
+    'Drag a word’s dot (or focus it and use the arrow keys). Point at or tap a weight to see who looks at whom.': '拖动一个词的点（或选中它后用方向键）。指向或点一下某个权重，看谁在看谁。',
+    "Word vectors. Drag a dot to move a word. The highlighted word's attention and output are drawn.": '词向量。拖动一个点来移动一个词。图上画出了高亮的词的注意力和输出。',
+    '{w}: drag, or use the arrow keys': '{w}：拖动，或用方向键',
+    'how much {w} looks at each word': '{w} 看每个词的程度',
+    '{w}′ = {w}’s output, the weighted mix (dashes: each word’s weight)': '{w}′ = {w} 的输出，即加权混合（每一段：每个词的权重）',
+    'Draw the output of': '画出这个词的输出：',
+    'X (3 words × 2 numbers)': 'X（3 个词 × 2 个数）',
+    'dot every word with every word': '每个词和每个词做点积',
+    ', divide by √2': '，再除以 √2',
+    'scores = X Xᵀ / √2': '分数 = X Xᵀ / √2',
+    'scores = X Xᵀ': '分数 = X Xᵀ',
+    'softmax each row, so it adds up to 1': '对每一行做 softmax，让它加起来等于 1',
+    'weights': '权重',
+    'mix the word vectors with those weights': '用这些权重混合词向量',
+    'output = weights @ X': '输出 = 权重 @ X',
+    'divide the scores by √d_k (d_k = 2)': '把分数除以 √d_k（d_k = 2）',
+    'Try a preset': '试一个预设',
+    ' looks at ': ' 看 ',
+    ': score': '：分数',
+    ', weight': '，权重',
+    '’s output =': ' 的输出 =',
+    'Cat’s output appears in the picture once you compute its x below.': '你在下面算出 cat 输出的 x 之后，图上才会画出 cat 的输出。',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -43,9 +74,9 @@
   const r = $derived(attention(X, X, X, scaled ? dk : 1))
 
   const presets: [string, number[][]][] = [
-    ['Car becomes [5, 5]', [[2, 0], [1, 1], [5, 5]]],
-    ['All three the same', [[1, 1], [1, 1], [1, 1]]],
-    ['Cat and dog opposite', [[2, 0], [-1, 0], [0, 2]]],
+    [tx('Car becomes [5, 5]'), [[2, 0], [1, 1], [5, 5]]],
+    [tx('All three the same'), [[1, 1], [1, 1], [1, 1]]],
+    [tx('Cat and dog opposite'), [[2, 0], [-1, 0], [0, 2]]],
   ]
   const f = (v: number) => (Math.abs(v) < 0.005 ? '0' : v.toFixed(2))
 
@@ -142,8 +173,8 @@
 </script>
 
 <LabFrame
-  title="Each word’s output is a weighted average of all the words"
-  hint="Drag a word’s dot (or focus it and use the arrow keys). Point at or tap a weight to see who looks at whom."
+  title={tx('Each word’s output is a weighted average of all the words')}
+  hint={tx('Drag a word’s dot (or focus it and use the arrow keys). Point at or tap a weight to see who looks at whom.')}
   onreset={() => { X = START.map((row) => [...row]); scaled = true; q = 0; cell = null }}
 >
 
@@ -151,7 +182,7 @@
     <div class="col">
       <svg
         bind:this={svg} use:readable viewBox="0 0 100 100" role="application"
-        aria-label="Word vectors. Drag a dot to move a word. The highlighted word's attention and output are drawn."
+        aria-label={tx("Word vectors. Drag a dot to move a word. The highlighted word's attention and output are drawn.")}
         onpointermove={move} onpointerup={() => (dragging = null)} onpointercancel={() => (dragging = null)}
       >
         {#each ticks as t}
@@ -190,7 +221,7 @@
           <circle
             cx={sx(v[0])} cy={sy(v[1])} r={dragging === j ? 4.4 : 3.4} fill={col(j)} class="dot"
             onpointerdown={(e) => grab(j, e)} onkeydown={(e) => nudge(j, e)} role="slider" tabindex="0"
-            aria-label={`${words[j]}: drag, or use the arrow keys`} aria-valuetext={`[${v[0]}, ${v[1]}]`} aria-valuenow={v[0]}
+            aria-label={tx('{w}: drag, or use the arrow keys', { w: words[j] })} aria-valuetext={`[${v[0]}, ${v[1]}]`} aria-valuenow={v[0]}
           />
           <text x={sx(v[0]) + 4} y={sy(v[1]) - 3} class="tag" class:strong={j === focus}>{words[j]}</text>
         {/each}
@@ -208,12 +239,12 @@
       </svg>
 
       <div class="legend">
-        <span><i class="sw look-sw"></i>how much {words[focus]} looks at each word</span>
-        <span><i class="sw out-sw"></i>{words[focus]}′ = {words[focus]}’s output, the weighted mix (dashes: each word’s weight)</span>
+        <span><i class="sw look-sw"></i>{tx('how much {w} looks at each word', { w: words[focus] })}</span>
+        <span><i class="sw out-sw"></i>{tx('{w}′ = {w}’s output, the weighted mix (dashes: each word’s weight)', { w: words[focus] })}</span>
       </div>
 
       <div class="ctl">
-        <span class="lbl">Draw the output of</span>
+        <span class="lbl">{tx('Draw the output of')}</span>
         {#each words as w, j}
           <button class="lab-btn chip" aria-pressed={q === j} onclick={() => { q = j; cell = null }}><i class="dot" style:background={col(j)}></i>{w}</button>
         {/each}
@@ -222,30 +253,30 @@
 
     <div class="col tables">
       <MatrixGrid
-        value={X} label="X (3 words × 2 numbers)" editable decimals={1}
+        value={X} label={tx('X (3 words × 2 numbers)')} editable decimals={1}
         rowLabels={words} colLabels={['x', 'y']} hiRows={[focus]}
         onchange={(v) => (X = v)}
       />
-      <div class="arrow">↓ <span>dot every word with every word{scaled ? ', divide by √2' : ''}</span></div>
+      <div class="arrow">↓ <span>{tx('dot every word with every word')}{scaled ? tx(', divide by √2') : ''}</span></div>
       <MatrixGrid
-        value={r.scores} label={scaled ? 'scores = X Xᵀ / √2' : 'scores = X Xᵀ'}
+        value={r.scores} label={scaled ? tx('scores = X Xᵀ / √2') : tx('scores = X Xᵀ')}
         rowLabels={words} colLabels={words} hiRows={[focus]} hiCols={cell ? [cell.j] : []} masked={mScores}
         onhover={(c) => (cell = c)}
       />
-      <div class="arrow">↓ <span>softmax each row, so it adds up to 1</span></div>
+      <div class="arrow">↓ <span>{tx('softmax each row, so it adds up to 1')}</span></div>
       <Heatmap masked={mWeights}
-        value={r.weights} label="weights"
+        value={r.weights} label={tx('weights')}
         rowLabels={words} colLabels={words} hiRows={[focus]} hiCols={cell ? [cell.j] : []}
         onhover={(c) => (cell = c)}
       />
-      <div class="arrow">↓ <span>mix the word vectors with those weights</span></div>
-      <MatrixGrid value={r.out} label="output = weights @ X" rowLabels={words} colLabels={['x', 'y']} hiRows={[focus]} masked={mOut} />
+      <div class="arrow">↓ <span>{tx('mix the word vectors with those weights')}</span></div>
+      <MatrixGrid value={r.out} label={tx('output = weights @ X')} rowLabels={words} colLabels={['x', 'y']} hiRows={[focus]} masked={mOut} />
     </div>
   </div>
 
   {#snippet controls()}
-    <label class="sw-check"><input type="checkbox" bind:checked={scaled} /> divide the scores by √d_k (d_k = 2)</label>
-    <span class="presets" role="group" aria-label="Try a preset">
+    <label class="sw-check"><input type="checkbox" bind:checked={scaled} /> {tx('divide the scores by √d_k (d_k = 2)')}</label>
+    <span class="presets" role="group" aria-label={tx('Try a preset')}>
       {#each presets as [name, v]}
         <button class="lab-btn" onclick={() => (X = v.map((row) => [...row]))}>{name}</button>
       {/each}
@@ -254,15 +285,15 @@
 
   {#snippet readout()}
     {#if cell}
-      <b>{words[cell.i]}</b> looks at <b>{words[cell.j]}</b>: score
-      <code>{hidden(mScores, cell.i, cell.j) ? '?' : f(r.scores[cell.i][cell.j])}</code>, weight
+      <b>{words[cell.i]}</b>{tx(' looks at ')}<b>{words[cell.j]}</b>{tx(': score')}
+      <code>{hidden(mScores, cell.i, cell.j) ? '?' : f(r.scores[cell.i][cell.j])}</code>{tx(', weight')}
       <code>{hidden(mWeights, cell.i, cell.j) ? '?' : f(r.weights[cell.i][cell.j])}</code>.
     {:else}
-      <b>{words[q]}</b>’s output =
+      <b>{words[q]}</b>{tx('’s output =')}
       {#each r.weights[q] as w, j}{j ? ' + ' : ''}<code>{hidden(mWeights, q, j) ? '?' : f(w)}</code>×{words[j]}{/each}
       = <code>{q === 0 && mOut.length ? '[?, ' + f(r.out[0][1]) + ']' : `[${f(r.out[q][0])}, ${f(r.out[q][1])}]`}</code>
     {/if}
-    {#if outHidden}<span class="note">Cat’s output appears in the picture once you compute its x below.</span>{/if}
+    {#if outHidden}<span class="note">{tx('Cat’s output appears in the picture once you compute its x below.')}</span>{/if}
   {/snippet}
 </LabFrame>
 

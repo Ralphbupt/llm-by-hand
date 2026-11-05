@@ -7,6 +7,35 @@
   import { onMount } from 'svelte'
   import Heatmap from './Heatmap.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Where the decoder looks': '解码器在看哪里',
+    'Point at or tap a cell. Rows: what the decoder wrote. Columns: what it read. Darker = more weight.': '指向或点一下某一格。行：解码器写出的东西。列：它读入的东西。颜色越深，权重越大。',
+    'Numbers → words': '数字 → 英文单词',
+    'Reversing digits': '倒转数字',
+    'Could not load the recorded weights: {e}': '无法加载录下的权重：{e}',
+    '✓ correct': '✓ 正确',
+    '✗ wrong': '✗ 错误',
+    'a digit string, read backwards': '一个数字串，倒着读',
+    'Loading the recorded weights…': '正在加载录下的权重……',
+    'number': '数字',
+    'previous number': '上一个数字',
+    'pick a number': '选一个数字',
+    'next number': '下一个数字',
+    'Writing “{w}”, the decoder gives digit {j} (“{c}”) weight': '写 “{w}” 时，解码器给第 {j} 位数字（“{c}”）的权重是',
+    'Writing “{w}”, the decoder gives input {j} (“{c}”) weight': '写 “{w}” 时，解码器给第 {j} 个输入（“{c}”）的权重是',
+    '.': '。',
+    'Rows: the words it wrote. Columns: the digits it read. Point at or tap a cell.': '行：它写出的词。列：它读入的数字。指向或点一下某一格。',
+    'Each output digit looks almost only at one input digit: the last one first, then backwards. Point at or tap a cell.': '每个输出数字几乎只看一个输入数字：先看最后一个，然后往前倒着看。指向或点一下某一格。',
+    'Waiting for the recorded weights…': '正在等待录下的权重……',
+    'attention weight, 0 → 1': '注意力权重，0 → 1',
+    'Strongest look for each word: {list}': '每个词看得最重的数字：{list}',
+    ', ': '，',
+  })
 
   type Ex = { n: number; src: string[]; pad: number; out: string[]; right: boolean; weights: number[][] }
   let nums = $state<Ex[]>([])
@@ -36,53 +65,53 @@
 </script>
 
 <LabFrame
-  title="Where the decoder looks"
-  hint="Point at or tap a cell. Rows: what the decoder wrote. Columns: what it read. Darker = more weight."
-  views={[{ id: 'words', label: 'Numbers → words' }, { id: 'reverse', label: 'Reversing digits' }]}
+  title={t('Where the decoder looks')}
+  hint={t('Point at or tap a cell. Rows: what the decoder wrote. Columns: what it read. Darker = more weight.')}
+  views={[{ id: 'words', label: t('Numbers → words') }, { id: 'reverse', label: t('Reversing digits') }]}
   bind:view={tab}
   onreset={() => { tab = 'words'; pick = 0; cell = null }}
   resetDisabled={tab === 'words' && pick === 0 && cell === null}
 >
   {#if error}
-    <p class="bad">Could not load the recorded weights: {error}</p>
+    <p class="bad">{t('Could not load the recorded weights: {e}', { e: error })}</p>
   {:else if view}
     {#if tab === 'words' && ex}
-      <div class="cap"><b>{fmtN(ex.n)}</b> → {ex.out.join(' ')} <span class:ok={ex.right} class:bad={!ex.right}>{ex.right ? '✓ correct' : '✗ wrong'}</span></div>
+      <div class="cap"><b>{fmtN(ex.n)}</b> → {ex.out.join(' ')} <span class:ok={ex.right} class:bad={!ex.right}>{ex.right ? t('✓ correct') : t('✗ wrong')}</span></div>
     {:else}
-      <div class="cap">a digit string, read backwards</div>
+      <div class="cap">{t('a digit string, read backwards')}</div>
     {/if}
     <Heatmap value={view.value} rowLabels={view.rows} colLabels={view.cols} hiRows={cell ? [cell.i] : []} hiCols={cell ? [cell.j] : []} onhover={(c) => (cell = c)} />
   {:else}
-    <div class="loading">Loading the recorded weights…</div>
+    <div class="loading">{t('Loading the recorded weights…')}</div>
   {/if}
 
   {#snippet controls()}
     {#if tab === 'words' && nums.length}
-      <span class="lbl">number</span>
-      <button type="button" class="lab-btn step" aria-label="previous number" disabled={pick === 0} onclick={() => (pick = pick - 1)}>‹</button>
-      <select bind:value={pick} aria-label="pick a number">
+      <span class="lbl">{t('number')}</span>
+      <button type="button" class="lab-btn step" aria-label={t('previous number')} disabled={pick === 0} onclick={() => (pick = pick - 1)}>‹</button>
+      <select bind:value={pick} aria-label={t('pick a number')}>
         {#each nums as e, k}<option value={k}>{fmtN(e.n)}</option>{/each}
       </select>
-      <button type="button" class="lab-btn step" aria-label="next number" disabled={pick === nums.length - 1} onclick={() => (pick = pick + 1)}>›</button>
+      <button type="button" class="lab-btn step" aria-label={t('next number')} disabled={pick === nums.length - 1} onclick={() => (pick = pick + 1)}>›</button>
     {/if}
   {/snippet}
 
   {#snippet readout()}
     {#if view && cell}
-      Writing “{view.rows[cell.i]}”, the decoder gives {tab === 'words' ? 'digit' : 'input'} {cell.j} (“{view.cols[cell.j]}”) weight <b>{view.value[cell.i][cell.j].toFixed(2)}</b>.
+      {t(tab === 'words' ? 'Writing “{w}”, the decoder gives digit {j} (“{c}”) weight' : 'Writing “{w}”, the decoder gives input {j} (“{c}”) weight', { w: view.rows[cell.i], j: cell.j, c: view.cols[cell.j] })} <b>{view.value[cell.i][cell.j].toFixed(2)}</b>{t('.')}
     {:else if tab === 'words' && ex}
-      Rows: the words it wrote. Columns: the digits it read. Point at or tap a cell.
+      {t('Rows: the words it wrote. Columns: the digits it read. Point at or tap a cell.')}
     {:else if view}
-      Each output digit looks almost only at one input digit: the last one first, then backwards. Point at or tap a cell.
+      {t('Each output digit looks almost only at one input digit: the last one first, then backwards. Point at or tap a cell.')}
     {:else}
-      <span class="idle">Waiting for the recorded weights…</span>
+      <span class="idle">{t('Waiting for the recorded weights…')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="ramp"></i>attention weight, 0 → 1</span>
+    <span><i class="ramp"></i>{t('attention weight, 0 → 1')}</span>
     {#if tab === 'words' && !cell && words}
-      <span class="tip">Strongest look for each word: {words.rows.map((w, i) => `${w} → ${words.cols[strongest(words.value[i])]}`).join(', ')}</span>
+      <span class="tip">{t('Strongest look for each word: {list}', { list: words.rows.map((w, i) => `${w} → ${words.cols[strongest(words.value[i])]}`).join(t(', ')) })}</span>
     {/if}
   {/snippet}
 </LabFrame>

@@ -7,6 +7,33 @@
   import { onMount } from 'svelte'
   import { bigramCounts, rowProbs, streamPerplexity } from '@lib/lm'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Count which word follows which': '数一数哪个词跟在哪个词后面',
+    'Pick a word on the left to see what can come after it, then let the counts write a sentence.': '在左边选一个词，看它后面能跟什么，然后让计数来写一句话。',
+    Counts: '计数',
+    Probabilities: '概率',
+    'Could not load the stories. Reload the page to try again.': '故事没能加载。刷新页面再试一次。',
+    'Loading the stories…': '正在加载故事……',
+    'The stories: {a} sentences for counting ({b} words), {c} held out for testing. The first four:': '故事：{a} 句用来计数（{b} 个词），{c} 句留出来做测试。前四句：',
+    'How often the next word follows this word': '下一个词跟在这个词后面的次数',
+    'Each row divided by its total: the chance of each next word': '每一行除以它的总数：每个下一个词的概率',
+    'this ↓ · next →': '这个词 ↓ · 下一个 →',
+    'After “{w}” the next word is…': '在“{w}”后面，下一个词是……',
+    'Sentences written by the counts (each word with the probability it was picked with)': '由计数写出的句子（每个词下面是它被选中时的概率）',
+    'in the stories': '故事里有',
+    'never in the stories': '故事里从没有',
+    'Write a sentence': '写一句话',
+    'Starts after a “.” and picks each next word by its probability.': '从一个“.”之后开始，按概率挑出每个下一个词。',
+    'perplexity on the {n} held-out sentences: counting model': '在 {n} 句留出句子上的困惑度：计数模型',
+    'guessing uniformly among {n} words': '在 {n} 个词里均匀乱猜',
+    'Perplexity appears when the stories have loaded.': '故事加载完后会显示困惑度。',
+  })
+  const afterA = t('After “{w}” the next word is…').split('{w}')
 
   let vocab = $state<string[]>([])
   let train = $state<string[]>([])
@@ -53,26 +80,26 @@
 </script>
 
 <LabFrame
-  title="Count which word follows which"
-  hint="Pick a word on the left to see what can come after it, then let the counts write a sentence."
-  views={[{ id: 'counts', label: 'Counts' }, { id: 'probs', label: 'Probabilities' }]}
+  title={t('Count which word follows which')}
+  hint={t('Pick a word on the left to see what can come after it, then let the counts write a sentence.')}
+  views={[{ id: 'counts', label: t('Counts') }, { id: 'probs', label: t('Probabilities') }]}
   bind:view={show}
   onreset={reset}
   resetDisabled={!changed}
 >
   {#if failed}
-    <p class="state">Could not load the stories. Reload the page to try again.</p>
+    <p class="state">{t('Could not load the stories. Reload the page to try again.')}</p>
   {:else if !vocab.length}
-    <p class="state">Loading the stories…</p>
+    <p class="state">{t('Loading the stories…')}</p>
   {:else}
-    <p class="sec">The stories: {train.length} sentences for counting ({tokens.length} words), {held.length} held out for testing. The first four:</p>
+    <p class="sec">{t('The stories: {a} sentences for counting ({b} words), {c} held out for testing. The first four:', { a: train.length, b: tokens.length, c: held.length })}</p>
     <ul class="corpus">{#each train.slice(0, 4) as s}<li>{s}</li>{/each}</ul>
 
-    <p class="sec">{show === 'counts' ? 'How often the next word follows this word' : 'Each row divided by its total: the chance of each next word'}</p>
+    <p class="sec">{show === 'counts' ? t('How often the next word follows this word') : t('Each row divided by its total: the chance of each next word')}</p>
     <div class="scroll">
       <table>
         <thead>
-          <tr><th class="corner">this ↓ · next →</th>{#each vocab as w}<th>{w}</th>{/each}</tr>
+          <tr><th class="corner">{t('this ↓ · next →')}</th>{#each vocab as w}<th>{w}</th>{/each}</tr>
         </thead>
         <tbody>
           {#each vocab as w, i}
@@ -87,7 +114,7 @@
       </table>
     </div>
 
-    <p class="sec">After “<b>{vocab[row]}</b>” the next word is…</p>
+    <p class="sec">{afterA[0]}<b>{vocab[row]}</b>{afterA[1]}</p>
     <div class="bars">
       {#each vocab.map((w, j) => [w, P[row][j]] as [string, number]).filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]) as [w, q] (w)}
         <div class="b"><span class="lab2">{w}</span><span class="track"><i style="width: {q * 100}%"></i></span><span class="v">{q.toFixed(3)}</span></div>
@@ -95,26 +122,26 @@
     </div>
 
     {#if written.length}
-      <p class="sec">Sentences written by the counts (each word with the probability it was picked with)</p>
+      <p class="sec">{t('Sentences written by the counts (each word with the probability it was picked with)')}</p>
       {#each written as s, k}
         <div class="out" class:latest={k === 0}>
           <div class="words">{#each s as x}<span class="w">{x.w}<small>{x.p.toFixed(2)}</small></span>{/each}</div>
-          <span class="tag" class:new={!all.has(sentence(s))}>{all.has(sentence(s)) ? 'in the stories' : 'never in the stories'}</span>
+          <span class="tag" class:new={!all.has(sentence(s))}>{all.has(sentence(s)) ? t('in the stories') : t('never in the stories')}</span>
         </div>
       {/each}
     {/if}
   {/if}
 
   {#snippet controls()}
-    <button type="button" class="lab-btn primary" onclick={write} disabled={!vocab.length}>Write a sentence</button>
-    <span class="note">Starts after a “.” and picks each next word by its probability.</span>
+    <button type="button" class="lab-btn primary" onclick={write} disabled={!vocab.length}>{t('Write a sentence')}</button>
+    <span class="note">{t('Starts after a “.” and picks each next word by its probability.')}</span>
   {/snippet}
 
   {#snippet readout()}
     {#if vocab.length}
-      perplexity on the {held.length} held-out sentences: counting model <b>{pplCount.toFixed(3)}</b> · guessing uniformly among {vocab.length} words <b>{vocab.length.toFixed(3)}</b>
+      {t('perplexity on the {n} held-out sentences: counting model', { n: held.length })} <b>{pplCount.toFixed(3)}</b> · {t('guessing uniformly among {n} words', { n: vocab.length })} <b>{vocab.length.toFixed(3)}</b>
     {:else}
-      <span class="idle">Perplexity appears when the stories have loaded.</span>
+      <span class="idle">{t('Perplexity appears when the stories have loaded.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

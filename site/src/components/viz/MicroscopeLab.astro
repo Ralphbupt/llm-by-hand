@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './MicroscopeLab.svelte'
 interface Props { data: string }
 const { data } = Astro.props
 ---
-<Lab client:visible data={data} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible data={data} />

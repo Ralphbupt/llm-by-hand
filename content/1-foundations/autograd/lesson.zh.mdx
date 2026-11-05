@@ -1,0 +1,170 @@
+---
+recap:
+  can:
+    - "从末尾开始依次访问节点，手算出一个小计算图的所有梯度。"
+    - "把一种新运算的反向规则写成一个 `_backward` 函数，往 `.grad` 里累加。"
+    - "把节点排成拓扑序，再倒着走一遍，完成整个反向传播。"
+  keys:
+    - "从 $\\partial L / \\partial L = 1$ 开始；每个节点把自己的 grad × 局部因子传给它的输入"
+    - "加法：两个输入都得到 `out.grad`。乘法：每个输入得到另一个输入的 data × `out.grad`"
+    - "往 `.grad` 里永远用 `+=`：一个用在好几处的值，得到的是所有部分的和"
+    - "给输出一个为 1 的梯度，然后从输出往回到输入，依次调用每个节点的 `_backward`"
+  mistakes:
+    - "把 `+=` 写成 `=`，于是一个用了两次的值只留下了最后一部分。"
+    - "按前向的顺序访问节点，那时它们的梯度还不完整。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import AutogradLab from '@viz/AutogradLab.astro'
+
+在第 6 关，你手写了反向传播。在 PyTorch 里（第 9 关），一行 `loss.backward()` 就全做完了。
+这一关让你看看这一行在里面做了什么。学完这一关，你会自己写出同样的东西，大约 50 行 Python。
+
+它用到两个想法：
+
+1. **把计算过程记下来。** 一边计算，一边记住每个结果、它是哪种运算算出来的、用了哪些输入。
+   这份记录就是**计算图**（computation graph）。
+2. **每种运算只知道自己的规则。** 乘法知道输入变化时，它的输出怎样变化。
+   加法也知道。没有谁知道整个网络。第 6 关的链式法则把这些片段组合起来：
+   倒着走一遍计算图，一路相乘。
+
+## 1. 一个可以一步步走的计算图
+
+取 $L = (a \cdot b + c) \cdot d$，$a = 2$，$b = 3$，$c = 1$，$d = -2$。给中间结果起名字：
+$e = a \cdot b$，$f = e + c$。按主按钮（它一开始是 **计算 e = a·b**），一次算一个节点。算完 $L$ 之后，同一个按钮
+会运行反向传播。
+
+反向传播从设定 $\partial L / \partial L = 1$ 开始。它只是说“如果 L 增加一点点，L 就增加同样的一点点”。
+这是起始的数；其他每个梯度都是从它开始的乘积。
+然后反向传播从末尾往开头**访问**各个节点。
+访问一个节点只意味着一件事：用这个节点自己的规则，把它的梯度推给它的输入。
+
+- 乘积 $L = f \cdot d$ 把 $d \times$（L 的 grad）传给 $f$，把 $f \times$（L 的 grad）传给 $d$：
+  每个输入得到的是**另一个输入**乘以乘积的 grad
+- 和 $f = e + c$ 把 f 的 grad 原封不动地传给 $e$ 和 $c$
+
+<AutogradLab hide={{ d: "grad-d", a: "grad-a" }} />
+
+<Blank id="grad-d" />
+
+<Gate requires="grad-d">
+
+$a$ 离得更远。它的梯度沿着 $L \to f \to e \to a$ 传过来，每经过一个节点就乘上一个局部因子：
+在加法那里乘 1，在乘积 $e = a \cdot b$ 那里乘 $b$。
+
+<Blank id="grad-a" />
+
+<TryIt>
+
+把 $c$ 改成 10，按 **全部运行**。$L$ 变了，但每个梯度都没变，因为 $c$ 从头到尾只被**加**进去。
+现在改一下 $b$。哪些梯度变了？为什么 $\partial L / \partial b$ 不依赖于 $b$ 本身？
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="grad-a">
+
+## 2. 每个值都记得自己从哪里来
+
+这是一个自动求导引擎的核心。一个 `Value` 存着一个数（`data`）、它的梯度（`grad`）、
+算出它的那些值（`_children`），以及一个知道局部规则的小函数 `_backward`。
+加法已经写好了。乘法交给你：规则就是实验台里的那条。
+
+有三处 Python 写法你可能没见过：
+
+- 当你对两个 `Value` 写 `a + b` 时，会运行 `def __add__(self, other)`；写 `a * b` 时运行 `__mul__`。
+  `self` 是左边那个，`other` 是右边那个。
+- `lambda: None` 是一个什么都不做的小函数。不是由运算得到的值，它的 `_backward` 就是这个。
+- `_backward` 定义在 `__mul__` **里面**，所以之后反向传播调用它时，它仍然能用 `self`、`other` 和 `out`。
+  `out._backward = _backward` 这一行把这个函数存到结果上，留着以后用。
+
+<CodeBlank id="code-mul" />
+
+<Stuck q="为什么 _backward 要用 out.grad？它是从哪里来的？">
+
+`_backward` 运行时，`out` 已经从它后面的节点那里拿到了自己的梯度。
+这正是从末尾开始访问所保证的。`out.grad` 是“`out` 每变一个单位，L 变多少”。
+局部规则把它变成“`self` 每变一个单位，L 变多少”。这一次乘法就是链式法则。
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="code-mul">
+
+## 3. 一个值被用了两次
+
+在真实的网络里，一个权重会流向很多地方。最简单的情况：$y = x \cdot x$。这里 $x$ **同时**是
+同一个乘法的两个输入。微积分告诉我们 $dy/dx = 2x$。
+
+<Blank id="x-times-x" />
+
+在 `x * x` 里，`self` 和 `other` 是同一个对象：两个名字都指向 `x`。
+
+<Predict id="pred-equals" />
+
+所以 `_backward` 里的两行，各自把梯度的一部分送到同一个 `x`：`self.grad` 得到 $x \times 1$，
+`other.grad` 又得到一个 $x \times 1$。只有把两部分加起来，才得到 $2x$。
+
+<Stuck q="那为什么用 += 而不是 =？">
+
+一个流向好几处的值，会通过**所有**这些地方影响 $L$。它的总梯度是每条路径传回来的部分之和。
+`+=` 把它们收集起来。用 `=` 的话，每条路径都会覆盖前一条，只有最后一条路径算数。
+
+这也是为什么 PyTorch 里的 `loss.backward()` 会往 `.grad` 里累加，以及为什么你每一步之前都要调用
+`opt.zero_grad()`（第 9 关）。在一次反向传播里，累加是对的。跨越不同的步时，旧的和必须清掉。
+
+</Stuck>
+
+现在你自己给 `Value` 加一种新运算：减法，`out = self - other`。前向部分已经写好了。反向规则是：
+
+- 如果 `self` 增加一点，`out` 增加同样多。局部因子是 1，和加法一样。
+- 如果 `other` 增加一点，`out` 减少同样多。局部因子是 −1。
+
+所以 `self` 得到 `1 × out.grad`，`other` 得到 `−1 × out.grad`。两行都要写，而且仍然往 `.grad` 里累加：
+`other.grad -= out.grad` 是 `other.grad = other.grad - out.grad` 的简写，和加上 −1 × `out.grad` 一样。
+
+<CodeBlank id="code-sub" />
+
+</Gate>
+
+<Gate requires="code-sub">
+
+## 4. 访问的顺序
+
+一个节点只有在**所有**用到它的节点都被访问过之后，才能被访问。否则它的梯度还不完整。
+把节点排成一个列表，让每个节点都排在它的输入之后，这叫**拓扑序**（topological order）。
+对实验台里的计算图，一个这样的列表是 `[a, b, e, c, f, d, L]`：每个节点都出现在算出它的那些节点之后。
+
+代码用一个小的递归函数 `build` 来构造这个列表：加入一个节点之前，先构造它的每个子节点
+（**深度优先遍历**），所以子节点总是排在列表更前面。然后反向传播**从末尾**开始访问这个列表，从 L 开始。
+
+还有一处 Python：`reversed(xs)` 从最后一项到第一项走一遍列表。
+比如 `list(reversed([1, 2, 3]))` 是 `[3, 2, 1]`。
+
+写出 `backward` 在 `build(self)` 之后的结尾部分：给 L 它的起始梯度（第 1 节），然后按正确的顺序访问每个节点，
+调用它的 `_backward`。`tanh` 方法也已经写好了，所以最后一个测试是一个真正的神经元。
+
+<CodeBlank id="code-backward" />
+
+<Deeper title="loss.backward() 做的就是这件事">
+
+PyTorch 的做法一样，只有三点不同，而且都只是规模上的：
+
+- 它处理的是整个张量，所以一个节点是一次矩阵乘法，而不是两个数的一次乘积；
+- 它知道几百种运算的局部规则：`@`、`exp`、`softmax`、`layer_norm`……；
+- 这些规则是用快速的编译代码写的，还能在 GPU 上运行。
+
+访问的顺序、`+=`、起始梯度 $\partial L / \partial L = 1$：全都一样。
+`tanh` 展示了任何一种新运算的套路。前向算出 $t = \tanh(x)$，反向加上 $(1 - t^2) \times$ `out.grad`。
+一种运算只要有了这两部分，引擎就能在任何地方用它。
+
+</Deeper>
+
+</Gate>

@@ -9,26 +9,27 @@ import Blank from './Blank.astro'
 import CodeBlank from './CodeBlank.astro'
 import Predict from './Predict.astro'
 import { loadExercises } from '@lib/quiz'
+import { translator, type Lang } from '@lib/i18n'
 
-interface Props { slug: string; ids: string[] }
-const { slug, ids } = Astro.props
-const ex = loadExercises(slug)
+interface Props { slug: string; ids: string[]; lang?: Lang }
+const { slug, ids, lang = 'en' } = Astro.props
+const t = translator(lang)
+const ex = loadExercises(slug, lang)
 const items = ids.filter((id) => ex[id])
 const n = items.length
 ---
 {n > 0 && (
   <div class="testout" data-testout={slug} data-ids={items.join(' ')} hidden>
     <button type="button" class="to-link" aria-expanded="false" aria-controls="testout-panel">
-      Already know this? <span>Skip it with a short test</span>
+      {t('Already know this?')} <span>{t('Skip it with a short test')}</span>
     </button>
     <section id="testout-panel" class="to-panel" aria-labelledby="testout-h" tabindex="-1" hidden>
       <div class="to-head">
-        <h2 id="testout-h">A short test to skip this level</h2>
-        <button type="button" class="to-close" data-testout-close>Close</button>
+        <h2 id="testout-h">{t('A short test to skip this level')}</h2>
+        <button type="button" class="to-close" data-testout-close>{t('Close')}</button>
       </div>
       <p class="to-lede">
-        Solve {n === 1 ? 'this question' : `these ${n} questions`} on your own. Answer all of them correctly and the level counts as
-        cleared with three stars, and every part of the page opens. Showing an answer doesn’t count.
+        {t(n === 1 ? 'Solve this question on your own.' : 'Solve these {n} questions on your own.', { n })} {t('Answer all of them correctly and the level counts as cleared with three stars, and every part of the page opens. Showing an answer doesn’t count.')}
       </p>
       <p class="to-status" data-testout-status aria-live="polite"></p>
       {items.map((id) => (
@@ -42,6 +43,8 @@ const n = items.length
   import { readingMode, recordTestOut, snapshot, subscribe, testedOut } from '@lib/progress'
   import { scoreOf } from '@lib/marks'
   import { testOutStatus } from '@lib/testout'
+  import { pageLang, translator } from '@lib/i18n'
+  const t = translator(pageLang())
 
   const root = document.querySelector<HTMLElement>('[data-testout]')
   if (root) {
@@ -75,9 +78,9 @@ const n = items.length
       // nothing to test out of: already cleared (unless the panel is open and showing its result), or reading mode
       root!.hidden = readingMode() || (!!scoreOf(slug)?.cleared && panel.hidden)
       root!.classList.toggle('is-done', done)
-      if (done) status.textContent = '✓ Test passed. This level counts as cleared with three stars, and every part is open.'
-      else if (st.shown > 0) status.textContent = 'You showed an answer, so this test can’t count. Do the level step by step instead; nothing is lost.'
-      else status.textContent = `${st.solved} of ${st.total} solved on your own`
+      if (done) status.textContent = t('✓ Test passed. This level counts as cleared with three stars, and every part is open.')
+      else if (st.shown > 0) status.textContent = t('You showed an answer, so this test can’t count. Do the level step by step instead; nothing is lost.')
+      else status.textContent = t('{a} of {b} solved on your own', { a: st.solved, b: st.total })
       status.dataset.state = done ? 'done' : st.shown > 0 ? 'off' : ''
     }
     subscribe(sync)

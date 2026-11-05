@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useT } from '@lib/i18nSvelte'
+  const t = useT()
   /**
    * A 3D surface z = f(x, y) with an optional path and current point on it.
    * Used for loss surfaces: drag to orbit, scroll or pinch to zoom, click the surface to pick a point.
@@ -402,7 +404,7 @@
 </script>
 
 <Stage3D opts={{ kind: 'surface', view, camera, target: [0, height / 2, 0] }} {ariaLabel} aspect="4 / 3" maxHeight="420px" {fallback} onready={setup} />
-{#if onpick && has3d}<p class="hint3d">Your first click or tap selects the view. After that, a click or tap on the surface moves the point there.</p>{/if}
+{#if onpick && has3d}<p class="hint3d">{t('Your first click or tap selects the view. After that, a click or tap on the surface moves the point there.')}</p>{/if}
 
 <style>
   .hint3d { margin: 0.1rem 0 0; font-size: 0.75rem; color: var(--dim); }

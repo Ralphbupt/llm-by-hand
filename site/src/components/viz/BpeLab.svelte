@@ -7,10 +7,47 @@
   import { bpeEncode, bpeTrain, generatedWords, type Word } from '@lib/lm'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'generated words (40)': '生成的词（40 个）',
+    'BPE, one merge at a time': 'BPE，一次合并一对',
+    'Merge the most frequent neighboring pair, again and again. Watch the vocabulary grow and the token count shrink.': '一次又一次地合并最常见的相邻对。看词表变大，token 数变少。',
+    'Words to learn from': '用来学习的词',
+    'Words:': '词：',
+    'Each word, cut into its current tokens': '每个词，切成它当前的 token',
+    'Neighboring pairs, counted over all words': '相邻对，在所有词上计数',
+    '…and {n} more': '……还有 {n} 对',
+    'No pairs left: every word is one token.': '没有相邻对了：每个词都是一个 token。',
+    'Merges learned, in order': '学到的合并，按顺序',
+    'None yet. Press “Merge the top pair”.': '还没有。按“合并最常见的一对”。',
+    'Vocabulary size against total tokens, one dot per merge (the ringed dot is now)': '词表大小与 token 总数的关系，每次合并一个点（带圈的点是现在）',
+    'Vocabulary size against total tokens': '词表大小与 token 总数的关系',
+    'vocabulary →': '词表 →',
+    tokens: 'token 数',
+    'Encode new text with the {k} merge so far': '用目前的 {k} 次合并来编码新文本',
+    'Encode new text with the {k} merges so far': '用目前的 {k} 次合并来编码新文本',
+    'Text to encode': '要编码的文本',
+    characters: '字符',
+    'whole words': '整词',
+    'Merge the top pair': '合并最常见的一对',
+    'Undo a merge': '撤销一次合并',
+    'All {n} merges': '全部 {n} 次合并',
+    merges: '合并次数',
+    vocabulary: '词表',
+    'tokens in all words (× their counts)': '所有词的 token 数（× 出现次数）',
+    'next:': '下一个：',
+    'merges next': '下一个合并',
+    'just merged': '刚合并的',
+    'not in the word list': '不在单词列表里',
+  })
 
   const PRESETS: Record<string, { name: string; words: Word[]; max: number }> = {
     hand: { name: 'cat, cats, hat, hats', words: [{ w: 'cat', n: 4 }, { w: 'cats', n: 2 }, { w: 'hat', n: 3 }, { w: 'hats', n: 1 }], max: 6 },
-    gen: { name: 'generated words (40)', words: generatedWords(), max: 40 },
+    gen: { name: tx('generated words (40)'), words: generatedWords(), max: 40 },
   }
   let preset = $state<'hand' | 'gen'>('hand')
   let k = $state(0)
@@ -48,13 +85,13 @@
 </script>
 
 <LabFrame
-  title="BPE, one merge at a time"
-  hint="Merge the most frequent neighboring pair, again and again. Watch the vocabulary grow and the token count shrink."
+  title={tx('BPE, one merge at a time')}
+  hint={tx('Merge the most frequent neighboring pair, again and again. Watch the vocabulary grow and the token count shrink.')}
   onreset={reset}
   resetDisabled={preset === 'hand' && k === 0 && probe === 'chats'}
 >
-  <div class="row" role="group" aria-label="Words to learn from">
-    <span class="dim">Words:</span>
+  <div class="row" role="group" aria-label={tx('Words to learn from')}>
+    <span class="dim">{tx('Words:')}</span>
     {#each Object.entries(PRESETS) as [key, p]}
       <button type="button" class="seg" class:on={preset === key} aria-pressed={preset === key} onclick={() => choose(key as 'hand' | 'gen')}>{p.name}</button>
     {/each}
@@ -62,7 +99,7 @@
 
   <div class="cols">
     <div class="col">
-      <p class="sec">Each word, cut into its current tokens</p>
+      <p class="sec">{tx('Each word, cut into its current tokens')}</p>
       <div class="words">
         {#each P.words as wd, i}
           {@const hot = nextMerge(st.segs[i])}
@@ -71,7 +108,7 @@
       </div>
     </div>
     <div class="col">
-      <p class="sec">Neighboring pairs, counted over all words</p>
+      <p class="sec">{tx('Neighboring pairs, counted over all words')}</p>
       {#if top.length}
         <table class="pairs">
           <tbody>
@@ -80,55 +117,55 @@
             {/each}
           </tbody>
         </table>
-        {#if st.pairs.length > top.length}<p class="dim">…and {st.pairs.length - top.length} more</p>{/if}
+        {#if st.pairs.length > top.length}<p class="dim">{tx('…and {n} more', { n: st.pairs.length - top.length })}</p>{/if}
       {:else}
-        <p class="dim">No pairs left: every word is one token.</p>
+        <p class="dim">{tx('No pairs left: every word is one token.')}</p>
       {/if}
-      <p class="sec">Merges learned, in order</p>
-      {#if merges.length === 0}<p class="none">None yet. Press “Merge the top pair”.</p>{/if}
+      <p class="sec">{tx('Merges learned, in order')}</p>
+      {#if merges.length === 0}<p class="none">{tx('None yet. Press “Merge the top pair”.')}</p>{/if}
       <ol class="merges">{#each merges as [a, b]}<li><span class="tok">{a}</span> + <span class="tok">{b}</span> → <span class="tok new">{a + b}</span></li>{/each}</ol>
     </div>
   </div>
 
   {#if preset === 'gen'}
-    <p class="sec">Vocabulary size against total tokens, one dot per merge (the ringed dot is now)</p>
-    <svg viewBox="0 0 {CW} {CH}" class="chart" use:readable role="img" aria-label="Vocabulary size against total tokens">
+    <p class="sec">{tx('Vocabulary size against total tokens, one dot per merge (the ringed dot is now)')}</p>
+    <svg viewBox="0 0 {CW} {CH}" class="chart" use:readable role="img" aria-label={tx('Vocabulary size against total tokens')}>
       <line x1="30" y1={CH - 18} x2={CW - 10} y2={CH - 18} class="ax" />
       <line x1="30" y1="8" x2="30" y2={CH - 18} class="ax" />
-      <text x={CW - 10} y={CH - 4} class="tx" text-anchor="end">vocabulary →</text>
-      <text x="34" y="14" class="tx">tokens</text>
+      <text x={CW - 10} y={CH - 4} class="tx" text-anchor="end">{tx('vocabulary →')}</text>
+      <text x="34" y="14" class="tx">{tx('tokens')}</text>
       <text x="26" y={cy(yr[1]) + 3} class="tx" text-anchor="end">{yr[1]}</text>
       {#each pts as p, i}<circle cx={cx(p[0])} cy={cy(p[1])} r={i === k ? 4 : 2} class:cur={i === k} />{/each}
     </svg>
   {/if}
 
-  <p class="sec">Encode new text with the {k} merge{k === 1 ? '' : 's'} so far</p>
-  <label class="probe-l"><span class="sr-only">Text to encode</span><input class="probe" bind:value={probe} spellcheck="false" maxlength="40" autocomplete="off" /></label>
+  <p class="sec">{tx(k === 1 ? 'Encode new text with the {k} merge so far' : 'Encode new text with the {k} merges so far', { k })}</p>
+  <label class="probe-l"><span class="sr-only">{tx('Text to encode')}</span><input class="probe" bind:value={probe} spellcheck="false" maxlength="40" autocomplete="off" /></label>
   <div class="enc-wrap">
     <table class="enc">
       <tbody>
-        <tr><th>characters</th><td>{#each probeWords as w}{#each [...w] as c}<span class="tok">{c}</span>{/each}<span class="gap"></span>{/each}</td></tr>
-        <tr><th>whole words</th><td>{#each probeWords as w}<span class="tok" class:unk={!wordVocab.has(w)}>{wordVocab.has(w) ? w : '<unk>'}</span>{/each}</td></tr>
+        <tr><th>{tx('characters')}</th><td>{#each probeWords as w}{#each [...w] as c}<span class="tok">{c}</span>{/each}<span class="gap"></span>{/each}</td></tr>
+        <tr><th>{tx('whole words')}</th><td>{#each probeWords as w}<span class="tok" class:unk={!wordVocab.has(w)}>{wordVocab.has(w) ? w : '<unk>'}</span>{/each}</td></tr>
         <tr><th>BPE</th><td>{#each probeWords as w}{#each bpeEncode(w, merges) as t}<span class="tok">{t}</span>{/each}<span class="gap"></span>{/each}</td></tr>
       </tbody>
     </table>
   </div>
 
   {#snippet controls()}
-    <button type="button" class="lab-btn primary" onclick={() => (k = Math.min(maxK, k + 1))} disabled={k === maxK}>Merge the top pair</button>
-    <button type="button" class="lab-btn" onclick={() => (k = Math.max(0, k - 1))} disabled={k === 0}>Undo a merge</button>
-    {#if preset === 'gen'}<button type="button" class="lab-btn" onclick={() => (k = maxK)} disabled={k === maxK}>All {maxK} merges</button>{/if}
+    <button type="button" class="lab-btn primary" onclick={() => (k = Math.min(maxK, k + 1))} disabled={k === maxK}>{tx('Merge the top pair')}</button>
+    <button type="button" class="lab-btn" onclick={() => (k = Math.max(0, k - 1))} disabled={k === 0}>{tx('Undo a merge')}</button>
+    {#if preset === 'gen'}<button type="button" class="lab-btn" onclick={() => (k = maxK)} disabled={k === maxK}>{tx('All {n} merges', { n: maxK })}</button>{/if}
   {/snippet}
 
   {#snippet readout()}
-    merges <b>{k}</b> · vocabulary <b>{st.vocab.length}</b> · tokens in all words (× their counts) <b>{st.totalTokens}</b>
-    {#if best}· next: {best.a} + {best.b} ({best.count}×){/if}
+    {tx('merges')} <b>{k}</b> · {tx('vocabulary')} <b>{st.vocab.length}</b> · {tx('tokens in all words (× their counts)')} <b>{st.totalTokens}</b>
+    {#if best}· {tx('next:')} {best.a} + {best.b} ({best.count}×){/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><span class="tok hot">a</span> merges next</span>
-    <span><span class="tok fresh">at</span> just merged</span>
-    <span><span class="tok unk">&lt;unk&gt;</span> not in the word list</span>
+    <span><span class="tok hot">a</span> {tx('merges next')}</span>
+    <span><span class="tok fresh">at</span> {tx('just merged')}</span>
+    <span><span class="tok unk">&lt;unk&gt;</span> {tx('not in the word list')}</span>
   {/snippet}
 </LabFrame>
 

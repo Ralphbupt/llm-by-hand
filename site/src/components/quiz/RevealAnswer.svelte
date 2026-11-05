@@ -4,8 +4,10 @@
    * Asks once for confirmation, with a "Don't ask me again" box that is remembered in this browser.
    */
   import { revealNeedsConfirm, setRevealNeedsConfirm } from '@lib/progress'
+  import { translator, type Lang } from '@lib/i18n'
 
-  let { onreveal }: { onreveal: () => void } = $props()
+  let { onreveal, lang = 'en' }: { onreveal: () => void; lang?: Lang } = $props()
+  const t = translator(lang)
   let asking = $state(false)
   let noAsk = $state(false)
 
@@ -21,14 +23,14 @@
 </script>
 
 {#if !asking}
-  <button class="reveal-btn" onclick={click}>Stuck? Show answer</button>
+  <button class="reveal-btn" onclick={click}>{t('Stuck? Show answer')}</button>
 {:else}
-  <div class="ask" role="group" aria-label="Show the answer?">
-    <p>Showing the answer keeps this level at two stars at most. One more try usually teaches more. Show it anyway?</p>
-    <label><input type="checkbox" bind:checked={noAsk} /> Don’t ask me again</label>
+  <div class="ask" role="group" aria-label={t('Show the answer?')}>
+    <p>{t('Showing the answer keeps this level at two stars at most. One more try usually teaches more. Show it anyway?')}</p>
+    <label><input type="checkbox" bind:checked={noAsk} /> {t('Don’t ask me again')}</label>
     <div class="btns">
-      <button class="yes" onclick={confirm}>Show answer</button>
-      <button onclick={() => (asking = false)}>Keep trying</button>
+      <button class="yes" onclick={confirm}>{t('Show answer')}</button>
+      <button onclick={() => (asking = false)}>{t('Keep trying')}</button>
     </div>
   </div>
 {/if}

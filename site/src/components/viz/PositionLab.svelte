@@ -11,9 +11,41 @@
   import LabFrame from './LabFrame.svelte'
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'pos {p}': '位置 {p}',
+    'Attention alone can’t see word order': '只靠注意力，看不出词序',
+    'Compare cat’s output in the two orders. Then add positional encoding.': '比较两种顺序下 cat 的输出。然后加上位置编码。',
+    'cat’s output:': 'cat 的输出：',
+    'PE for positions 0–2: [sin(pos), cos(pos)]': '位置 0–2 的 PE：[sin(pos), cos(pos)]',
+    'add positional encoding (d = 2)': '加上位置编码（d = 2）',
+    'Same output. Attention does not know where cat is.': '输出相同。注意力不知道 cat 在哪个位置。',
+    'Different output. Now the order matters.': '输出不同。现在顺序有影响了。',
+    'Positional encoding for 16 positions × 8 numbers': '16 个位置 × 8 个数的位置编码',
+    'Point at or tap a row (or focus the picture and use ↑ ↓) to read that position’s vector.': '把鼠标指向某一行（手机上点一下，或选中图后用 ↑ ↓），读出这个位置的向量。',
+    'Point at or tap a position (or focus a plot and use ← →) to read its vector.': '把鼠标指向某个位置（手机上点一下，或选中一张图后用 ← →），读出它的向量。',
+    'Stripes': '条纹',
+    'Waves': '波形',
+    'The sin columns (0, 2, 4, 6), one plot each. A dot is one row of the table; the line between dots is the same sin, to show how fast it turns. Column 0 turns fast; column 6 has barely moved by position 15.': 'sin 列（0、2、4、6），每列一张图。一个点是表里的一行；点之间的线是同一个 sin，用来显示它转得多快。第 0 列转得快；第 6 列到位置 15 几乎还没动。',
+    'column {c}': '第 {c} 列',
+    'pair {i}': '第 {i} 对',
+    'Column {c}: sin value at each position': '第 {c} 列：每个位置的 sin 值',
+    'position {p}: {v}': '位置 {p}：{v}',
+    'position {p}': '位置 {p}',
+    'none': '无',
+    'column 0 (fast)': '第 0 列（快）',
+    'column 7 (slow)': '第 7 列（慢）',
+    'Positional encoding stripes: pick a position': '位置编码条纹：选一个位置',
+    'position {p}: [{v}]': '位置 {p}：[{v}]',
+    'Each row is one position’s vector. Left columns change fast from row to row, right columns slowly.': '每一行是一个位置的向量。从一行到下一行，左边的列变得快，右边的列变得慢。',
+    'Left columns change fast from row to row, right columns slowly.': '从一行到下一行，左边的列变得快，右边的列变得慢。',
+  })
+  const posLabels = [0, 1, 2].map((p) => t('pos {p}', { p }))
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -85,49 +117,49 @@
 </script>
 
 <LabFrame
-  title="Attention alone can’t see word order"
-  hint="Compare cat’s output in the two orders. Then add positional encoding."
+  title={t('Attention alone can’t see word order')}
+  hint={t('Compare cat’s output in the two orders. Then add positional encoding.')}
   onreset={() => (usePE = false)}
   resetDisabled={!usePE}
 >
   <div class="pair">
     <div>
-      <MatrixGrid value={A} label={usePE ? 'cat, dog, car + PE' : 'cat, dog, car'} rowLabels={['pos 0', 'pos 1', 'pos 2']} masked={mAB} />
-      <div class="res">cat’s output: <code>[{catFirst.map(f).join(', ')}]</code></div>
+      <MatrixGrid value={A} label={usePE ? 'cat, dog, car + PE' : 'cat, dog, car'} rowLabels={posLabels} masked={mAB} />
+      <div class="res">{t('cat’s output:')} <code>[{catFirst.map(f).join(', ')}]</code></div>
     </div>
     <div>
-      <MatrixGrid value={B} label={usePE ? 'car, dog, cat + PE' : 'car, dog, cat'} rowLabels={['pos 0', 'pos 1', 'pos 2']} masked={mAB} />
-      <div class="res">cat’s output: <code>[{catLast.map(f).join(', ')}]</code></div>
+      <MatrixGrid value={B} label={usePE ? 'car, dog, cat + PE' : 'car, dog, cat'} rowLabels={posLabels} masked={mAB} />
+      <div class="res">{t('cat’s output:')} <code>[{catLast.map(f).join(', ')}]</code></div>
     </div>
     {#if usePE}
-      <MatrixGrid value={PE2} label="PE for positions 0–2: [sin(pos), cos(pos)]" rowLabels={['pos 0', 'pos 1', 'pos 2']} masked={m10} />
+      <MatrixGrid value={PE2} label={t('PE for positions 0–2: [sin(pos), cos(pos)]')} rowLabels={posLabels} masked={m10} />
     {/if}
   </div>
 
   {#snippet controls()}
-    <label class="sw"><input type="checkbox" bind:checked={usePE} /> add positional encoding (d = 2)</label>
+    <label class="sw"><input type="checkbox" bind:checked={usePE} /> {t('add positional encoding (d = 2)')}</label>
   {/snippet}
 
   {#snippet readout()}
-    <span class="verdict" class:diff={!same}>{same ? 'Same output. Attention does not know where cat is.' : 'Different output. Now the order matters.'}</span>
+    <span class="verdict" class:diff={!same}>{same ? t('Same output. Attention does not know where cat is.') : t('Different output. Now the order matters.')}</span>
   {/snippet}
 </LabFrame>
 
 <LabFrame
-  title="Positional encoding for 16 positions × 8 numbers"
-  hint={view === 'stripes' ? 'Point at or tap a row (or focus the picture and use ↑ ↓) to read that position’s vector.' : 'Point at or tap a position (or focus a plot and use ← →) to read its vector.'}
-  views={[{ id: 'stripes', label: 'Stripes' }, { id: 'waves', label: 'Waves' }]}
+  title={t('Positional encoding for 16 positions × 8 numbers')}
+  hint={view === 'stripes' ? t('Point at or tap a row (or focus the picture and use ↑ ↓) to read that position’s vector.') : t('Point at or tap a position (or focus a plot and use ← →) to read its vector.')}
+  views={[{ id: 'stripes', label: t('Stripes') }, { id: 'waves', label: t('Waves') }]}
   bind:view
 >
   {#if view === 'waves'}
-    <p class="cap">The sin columns (0, 2, 4, 6), one plot each. A dot is one row of the table; the line between dots is the same sin, to show how fast it turns. Column 0 turns fast; column 6 has barely moved by position 15.</p>
+    <p class="cap">{t('The sin columns (0, 2, 4, 6), one plot each. A dot is one row of the table; the line between dots is the same sin, to show how fast it turns. Column 0 turns fast; column 6 has barely moved by position 15.')}</p>
     <div class="waves">
       {#each PAIRS as i}
         <div class="wave">
-          <span class="wl">column {2 * i}<br /><small>pair {i}</small></span>
+          <span class="wl">{t('column {c}', { c: 2 * i })}<br /><small>{t('pair {i}', { i })}</small></span>
           <svg viewBox="0 0 100 20" preserveAspectRatio="none" role="slider" tabindex="0"
-            aria-label={`Column ${2 * i}: sin value at each position`} aria-valuemin="0" aria-valuemax={N - 1} aria-valuenow={row ?? 0}
-            aria-valuetext={row !== null ? `position ${row}: ${f(PE[row][2 * i])}` : 'none'}
+            aria-label={t('Column {c}: sin value at each position', { c: 2 * i })} aria-valuemin="0" aria-valuemax={N - 1} aria-valuenow={row ?? 0}
+            aria-valuetext={row !== null ? t('position {p}: {v}', { p: row, v: f(PE[row][2 * i]) }) : t('none')}
             onpointermove={pickWave} onpointerdown={pickWave} onkeydown={keyWave}>
             <line x1="6" x2="98" y1={WY(0)} y2={WY(0)} class="zero" />
             <path d={wavePath(i)} class="curve" />
@@ -139,16 +171,16 @@
           </svg>
         </div>
       {/each}
-      <div class="wave axis" aria-hidden="true"><span></span><div><span>pos 0</span><span>pos 15</span></div></div>
+      <div class="wave axis" aria-hidden="true"><span></span><div><span>{t('pos {p}', { p: 0 })}</span><span>{t('pos {p}', { p: 15 })}</span></div></div>
     </div>
   {:else}
     <div class="stripes">
       <span></span>
-      <div class="cols" aria-hidden="true"><span>column 0 (fast)</span><span>column 7 (slow)</span></div>
-      <div class="rows" aria-hidden="true"><span>pos 0</span><span>pos 15</span></div>
+      <div class="cols" aria-hidden="true"><span>{t('column 0 (fast)')}</span><span>{t('column 7 (slow)')}</span></div>
+      <div class="rows" aria-hidden="true"><span>{t('pos {p}', { p: 0 })}</span><span>{t('pos {p}', { p: 15 })}</span></div>
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="slider" tabindex="0"
-        aria-label="Positional encoding stripes: pick a position" aria-valuemin="0" aria-valuemax={N - 1} aria-valuenow={row ?? 0}
-        aria-valuetext={row !== null ? `position ${row}` : 'none'}
+        aria-label={t('Positional encoding stripes: pick a position')} aria-valuemin="0" aria-valuemax={N - 1} aria-valuenow={row ?? 0}
+        aria-valuetext={row !== null ? t('position {p}', { p: row }) : t('none')}
         onpointermove={pickRow} onpointerdown={pickRow} onkeydown={keyRow}>
         {#each PE as r, p}
           {#each r as v, i}
@@ -166,16 +198,16 @@
 
   {#snippet readout()}
     {#if row !== null}
-      position {row}: [{peText(row)}]
+      {t('position {p}: [{v}]', { p: row, v: peText(row) })}
     {:else}
-      Each row is one position’s vector. Left columns change fast from row to row, right columns slowly.
+      {t('Each row is one position’s vector. Left columns change fast from row to row, right columns slowly.')}
     {/if}
   {/snippet}
 
   {#snippet legend()}
     {#if view === 'stripes'}
       <span class="key"><i class="ramp"></i>−1 … 0 … +1</span>
-      <span>Left columns change fast from row to row, right columns slowly.</span>
+      <span>{t('Left columns change fast from row to row, right columns slowly.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

@@ -10,6 +10,66 @@
   import { onThemeChange, reducedMotion } from '@lib/settings'
   import Tensors3D from '../viz3d/Tensors3D.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // draw() uses `t` for a canvas, so the translator is `tx`
+  const tx = useT({
+    'row': '行',
+    'col': '列',
+    'number': '数',
+    'picture (28, 28)': '图片 (28, 28)',
+    '{n} patches ({n}, {p}, {p})': '{n} 个图块 ({n}, {p}, {p})',
+    'tokens ({n}, {pp})': 'token ({n}, {pp})',
+    'picture': '图片',
+    '784 numbers': '784 个数',
+    'cut into patches': '切成图块',
+    '{n} tokens of {pp} numbers': '{n} 个 token，每个 {pp} 个数',
+    'each patch becomes a token vector': '每个图块变成一个 token 向量',
+    '+ position': '+ 位置',
+    'which patch is where': '哪个图块在哪里',
+    '+ step t and label': '+ 步数 t 和标签',
+    '({D}) added to every token': '({D}) 加到每个 token 上',
+    'like D1–D2, but as a vector': '和 D1–D2 一样，只是换成了向量',
+    'Transformer blocks': 'Transformer 块',
+    'attention scores per head: {s}': '每个头的注意力分数：{s}',
+    '? (answer the question below)': '?（先回答下面的问题）',
+    'a noise guess for every patch': '每个图块一个噪声猜测',
+    'put patches back': '把图块拼回去',
+    'the noise guess for the picture': '整张图片的噪声猜测',
+    'Cut a picture into patches: each patch becomes one token': '把图片切成图块：每个图块变成一个 token',
+    'Pick a patch size. Point at, tap or arrow-key through the patches to see which token each one becomes.': '选一个图块大小。指向、点一下或用方向键浏览图块，看每个图块变成哪个 token。',
+    'Picture and tokens': '图片和 token',
+    '3D: the stack of patches': '3D：一摞图块',
+    'Could not load the digits: {error}': '加载数字图片失败：{error}',
+    'picture, cut into {n} patches of {p} × {p} pixels': '图片，切成 {n} 个 {p} × {p} 像素的图块',
+    'Digit with its patch grid. Arrow keys move between patches.': '数字图片和它的图块网格。用方向键在图块之间移动。',
+    'tokens: shape': 'token：形状',
+    ', one row per patch': '，每个图块一行',
+    'Token rows': 'token 行',
+    'The picture, the same picture cut into a stack of patches, and the stack flattened into token rows, with the chosen patch highlighted': '图片、同一张图片切成的一摞图块，以及这摞图块压平后的 token 行；选中的图块高亮显示',
+    '▶ Play the cut': '▶ 播放切割过程',
+    'cut': '切割',
+    'Move through the cut: picture, then stack, then rows': '拖动查看切割过程：先是图片，再是一摞图块，最后是行',
+    'Choose a patch': '选一个图块',
+    'Previous patch': '上一个图块',
+    'Next patch': '下一个图块',
+    'patch {k}': '图块 {k}',
+    'The picture is cut into {n} patches. Each patch moves to its place in a stack of {n} thin blocks, read left to right and top to bottom.': '图片被切成 {n} 个图块。每个图块按从左到右、从上到下的顺序，移到一摞 {n} 个薄块里自己的位置上。',
+    'Then each thin block is flattened into one row of {pp} numbers: the token matrix ({n}, {pp}).': '然后每个薄块被压平成一行 {pp} 个数：这就是 token 矩阵 ({n}, {pp})。',
+    'Flattening each thin block into one row of {pp} numbers gives the token matrix ({n}, {pp}); with 196 rows it is too tall to draw here, so pick a bigger patch to watch that step.': '把每个薄块压平成一行 {pp} 个数，就得到 token 矩阵 ({n}, {pp})；它有 196 行，太高了，这里画不下，选一个更大的图块来看这一步。',
+    'The highlighted patch is the same in every block.': '高亮的图块在每一块里都是同一个。',
+    'Inside a DiT with patch size {p}': '图块大小为 {p} 时 DiT 的内部',
+    'Patch size in pixels per side': '图块边长（像素）',
+    'patch size': '图块大小',
+    'each patch is {s} × {s} pixels': '每个图块是 {s} × {s} 像素',
+    'Digit': '数字',
+    'digit': '数字',
+    '{n} patches → {n} tokens of {pp} numbers each. Choose a patch to follow it.': '{n} 个图块 → {n} 个 token，每个 {pp} 个数。选一个图块来跟踪它。',
+    'patch {k} (row {r}, column {c}) → token {k}: one row of {pp} numbers': '图块 {k}（第 {r} 行，第 {c} 列）→ token {k}：一行 {pp} 个数',
+  })
 
   const SIZES = [2, 4, 7, 14]
   const D = 96
@@ -160,14 +220,14 @@
     const h = shown3d
     const by = Math.floor(h / per), bx = h % per
     const out: any[] = [
-      { shape: [28, 28], axes: ['row', 'col'], title: 'picture (28, 28)', values: pix2d,
+      { shape: [28, 28], axes: ['row', 'col'].map((s) => tx(s)), title: tx('picture (28, 28)'), values: pix2d,
         highlight: [{ from: [0, by * p, bx * p], to: [0, by * p + p - 1, bx * p + p - 1], tone: 'accent' }] },
       '→',
-      { shape: [n, p, p], axes: ['token', 'row', 'col'], title: `${n} patches (${n}, ${p}, ${p})`, values: stack,
+      { shape: [n, p, p], axes: ['token', 'row', 'col'].map((s) => tx(s)), title: tx('{n} patches ({n}, {p}, {p})', { n, p }), values: stack,
         highlight: [{ from: [h, 0, 0], to: [h, p - 1, p - 1], tone: 'accent' }], hidden: cutT < 1 },
     ]
     if (withRows)
-      out.push('→', { shape: [n, p * p], axes: ['token', 'number'], title: `tokens (${n}, ${p * p})`,
+      out.push('→', { shape: [n, p * p], axes: ['token', 'number'].map((s) => tx(s)), title: tx('tokens ({n}, {pp})', { n, pp: p * p }),
         values: stack?.map((slab) => slab.flat()),
         highlight: [{ from: [0, h, 0], to: [0, h, p * p - 1], tone: 'accent' }], hidden: cutT < 2 })
     return out
@@ -182,59 +242,59 @@
   })
 
   const rows = $derived([
-    ['picture', '(28, 28)', '784 numbers'],
-    ['cut into patches', `(${n}, ${p * p})`, `${n} tokens of ${p * p} numbers`],
-    ['@ W_in', `(${p * p}, ${D}) → ${solvedShape ? `(${n}, ${D})` : '(?, ?)'}`, 'each patch becomes a token vector'],
-    ['+ position', solvedShape ? `(${n}, ${D})` : '(?, ?)', 'which patch is where'],
-    ['+ step t and label', `(${D}) added to every token`, 'like D1–D2, but as a vector'],
-    ['Transformer blocks', solvedShape ? `(${n}, ${D}) → (${n}, ${D})` : '(?, ?) → (?, ?)',
-      `attention scores per head: ${solvedScores ? `${n} × ${n} = ${(n * n).toLocaleString()}` : '? (answer the question below)'}`],
-    ['@ W_out', `(${D}, ${p * p}) → (${n}, ${p * p})`, 'a noise guess for every patch'],
-    ['put patches back', '(28, 28)', 'the noise guess for the picture'],
+    [tx('picture'), '(28, 28)', tx('784 numbers')],
+    [tx('cut into patches'), `(${n}, ${p * p})`, tx('{n} tokens of {pp} numbers', { n, pp: p * p })],
+    ['@ W_in', `(${p * p}, ${D}) → ${solvedShape ? `(${n}, ${D})` : '(?, ?)'}`, tx('each patch becomes a token vector')],
+    [tx('+ position'), solvedShape ? `(${n}, ${D})` : '(?, ?)', tx('which patch is where')],
+    [tx('+ step t and label'), tx('({D}) added to every token', { D }), tx('like D1–D2, but as a vector')],
+    [tx('Transformer blocks'), solvedShape ? `(${n}, ${D}) → (${n}, ${D})` : '(?, ?) → (?, ?)',
+      tx('attention scores per head: {s}', { s: solvedScores ? `${n} × ${n} = ${(n * n).toLocaleString()}` : tx('? (answer the question below)') })],
+    ['@ W_out', `(${D}, ${p * p}) → (${n}, ${p * p})`, tx('a noise guess for every patch')],
+    [tx('put patches back'), '(28, 28)', tx('the noise guess for the picture')],
   ])
 </script>
 
 <LabFrame
-  title="Cut a picture into patches: each patch becomes one token"
-  hint="Pick a patch size. Point at, tap or arrow-key through the patches to see which token each one becomes."
-  views={[{ id: 'flat', label: 'Picture and tokens' }, { id: '3d', label: '3D: the stack of patches' }]}
+  title={tx('Cut a picture into patches: each patch becomes one token')}
+  hint={tx('Pick a patch size. Point at, tap or arrow-key through the patches to see which token each one becomes.')}
+  views={[{ id: 'flat', label: tx('Picture and tokens') }, { id: '3d', label: tx('3D: the stack of patches') }]}
   bind:view
   onreset={resetAll}
   resetDisabled={p === 7 && pick === 0 && sel === null && view === 'flat'}
 >
-  {#if error}<p class="err">Could not load the digits: {error}</p>{/if}
+  {#if error}<p class="err">{tx('Could not load the digits: {error}', { error: error ?? '' })}</p>{/if}
   <div class="grid" class:gone={view !== 'flat'}>
       <div>
-        <div class="cap">picture, cut into {n} patches of {p} × {p} pixels</div>
+        <div class="cap">{tx('picture, cut into {n} patches of {p} × {p} pixels', { n, p })}</div>
         <canvas bind:this={pic} class="pic" tabindex="0" onpointermove={onPic} onpointerleave={() => (hover = null)} onpointerdown={pickPic} onkeydown={keys}
-          aria-label="Digit with its patch grid. Arrow keys move between patches."></canvas>
+          aria-label={tx('Digit with its patch grid. Arrow keys move between patches.')}></canvas>
       </div>
       <div>
-        <div class="cap">tokens: shape <b>({n}, {p * p})</b>, one row per patch</div>
-        <canvas bind:this={toks} class="toks" onpointermove={onTok} onpointerleave={() => (hover = null)} onpointerdown={pickTok} aria-label="Token rows"></canvas>
+        <div class="cap">{tx('tokens: shape')} <b>({n}, {p * p})</b>{tx(', one row per patch')}</div>
+        <canvas bind:this={toks} class="toks" onpointermove={onTok} onpointerleave={() => (hover = null)} onpointerdown={pickTok} aria-label={tx('Token rows')}></canvas>
       </div>
   </div>
   {#if view === '3d'}
     <Tensors3D tensors={tensors3d} height="320px" {explode}
-      ariaLabel="The picture, the same picture cut into a stack of patches, and the stack flattened into token rows, with the chosen patch highlighted" />
+      ariaLabel={tx('The picture, the same picture cut into a stack of patches, and the stack flattened into token rows, with the chosen patch highlighted')} />
     <div class="cut">
-      <button type="button" class="lab-btn primary" onclick={playCut}>▶ Play the cut</button>
-      <label class="scrub"><span>cut</span>
-        <input type="range" min="0" max={cutEnd} step="0.01" bind:value={cutT} aria-label="Move through the cut: picture, then stack, then rows" />
+      <button type="button" class="lab-btn primary" onclick={playCut}>{tx('▶ Play the cut')}</button>
+      <label class="scrub"><span>{tx('cut')}</span>
+        <input type="range" min="0" max={cutEnd} step="0.01" bind:value={cutT} aria-label={tx('Move through the cut: picture, then stack, then rows')} />
       </label>
-      <span class="seg" role="group" aria-label="Choose a patch">
-        <button type="button" class="lab-btn" onclick={() => stepPatch(-1)} aria-label="Previous patch">◀</button>
-        <span class="mono">patch {shown3d}</span>
-        <button type="button" class="lab-btn" onclick={() => stepPatch(1)} aria-label="Next patch">▶</button>
+      <span class="seg" role="group" aria-label={tx('Choose a patch')}>
+        <button type="button" class="lab-btn" onclick={() => stepPatch(-1)} aria-label={tx('Previous patch')}>◀</button>
+        <span class="mono">{tx('patch {k}', { k: shown3d })}</span>
+        <button type="button" class="lab-btn" onclick={() => stepPatch(1)} aria-label={tx('Next patch')}>▶</button>
       </span>
     </div>
-    <p class="cap">The picture is cut into {n} patches. Each patch moves to its place in a stack of {n} thin blocks, read left to right and top to bottom.
-      {#if withRows}Then each thin block is flattened into one row of {p * p} numbers: the token matrix ({n}, {p * p}).{:else}Flattening each thin block into one row of {p * p} numbers gives the token matrix ({n}, {p * p}); with 196 rows it is too tall to draw here, so pick a bigger patch to watch that step.{/if}
-      The highlighted patch is the same in every block.</p>
+    <p class="cap">{tx('The picture is cut into {n} patches. Each patch moves to its place in a stack of {n} thin blocks, read left to right and top to bottom.', { n })}
+      {#if withRows}{tx('Then each thin block is flattened into one row of {pp} numbers: the token matrix ({n}, {pp}).', { n, pp: p * p })}{:else}{tx('Flattening each thin block into one row of {pp} numbers gives the token matrix ({n}, {pp}); with 196 rows it is too tall to draw here, so pick a bigger patch to watch that step.', { n, pp: p * p })}{/if}
+      {tx('The highlighted patch is the same in every block.')}</p>
   {/if}
 
   <div class="flow">
-    <div class="flow-h">Inside a DiT with patch size {p}</div>
+    <div class="flow-h">{tx('Inside a DiT with patch size {p}', { p })}</div>
     <table>
       <tbody>
         {#each rows as [what, sh, note]}
@@ -245,15 +305,15 @@
   </div>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="Patch size in pixels per side">
-      <span class="lbl">patch size</span>
+    <div class="seg" role="group" aria-label={tx('Patch size in pixels per side')}>
+      <span class="lbl">{tx('patch size')}</span>
       {#each SIZES as sz}
-        <button type="button" class="lab-btn" class:on={p === sz} aria-pressed={p === sz} onclick={() => setP(sz)} title={`each patch is ${sz} × ${sz} pixels`}>{sz}</button>
+        <button type="button" class="lab-btn" class:on={p === sz} aria-pressed={p === sz} onclick={() => setP(sz)} title={tx('each patch is {s} × {s} pixels', { s: sz })}>{sz}</button>
       {/each}
     </div>
     {#if data}
-      <div class="seg" role="group" aria-label="Digit">
-        <span class="lbl">digit</span>
+      <div class="seg" role="group" aria-label={tx('Digit')}>
+        <span class="lbl">{tx('digit')}</span>
         {#each data.labels as l, i}
           <button type="button" class="lab-btn" class:on={pick === i} aria-pressed={pick === i} onclick={() => (pick = i)}>{l}</button>
         {/each}
@@ -262,8 +322,8 @@
   {/snippet}
 
   {#snippet readout()}
-    {#if cur === null}{n} patches → {n} tokens of {p * p} numbers each. Choose a patch to follow it.
-    {:else}patch {cur} (row {Math.floor(cur / per)}, column {cur % per}) → token {cur}: one row of {p * p} numbers{/if}
+    {#if cur === null}{tx('{n} patches → {n} tokens of {pp} numbers each. Choose a patch to follow it.', { n, pp: p * p })}
+    {:else}{tx('patch {k} (row {r}, column {c}) → token {k}: one row of {pp} numbers', { k: cur, r: Math.floor(cur / per), c: cur % per, pp: p * p })}{/if}
   {/snippet}
 </LabFrame>
 

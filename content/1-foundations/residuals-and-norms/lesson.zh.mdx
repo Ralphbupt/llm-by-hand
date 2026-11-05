@@ -1,0 +1,236 @@
+---
+glossarySkip: [padding]
+recap:
+  can:
+    - "算出一个普通堆叠里有多少梯度能传到底部：把每一层的斜率乘起来。"
+    - "解释为什么残差层 $h + f(h)$ 能防止梯度缩到 0：它的斜率是 $1 + f'(x)$。"
+    - "手算和用 NumPy 对一张表做归一化，按列（BatchNorm）或按行（LayerNorm）。"
+  keys:
+    - "$h_{\\text{out}} = h + f(h)$，斜率 $1 + f'(x)$"
+    - "归一化：$(x - \\text{mean}) / \\sqrt{\\text{var} + \\varepsilon}$，之后均值为 0、标准差为 1"
+    - "BatchNorm：`axis=0`，每个特征在整批上算一个均值。LayerNorm：`axis=1`，每个样本算一个均值"
+    - "滑动平均：保留旧值的 0.9，加上新一批均值的 0.1"
+  mistakes:
+    - "用错了轴：BatchNorm 沿每一列往下求平均，LayerNorm 沿每一行横着求平均。"
+    - "以为比 1 小一点的斜率无所谓：30 层、每层 0.75，会把梯度缩到大约 0.0002。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import DepthLab from '@viz/DepthLab.astro'
+import NormAxisLab from '@viz/NormAxisLab.astro'
+import ResBlockDiagram from '@viz/ResBlockDiagram.astro'
+
+这一关要用到 [N1](/learn/convolutions/) 和第 6–7 关。
+
+层越多，网络应该越聪明。可是很多年里并不是这样：超过几十层后，网络反而变差了。
+两个小改动解决了这个问题，它们都在你第 16 关要搭的每一个 Transformer 块里：
+
+1. **残差连接**（residual connection），把一层的输入加回到它的输出上；
+2. **归一化**（normalization），重新缩放数值，让它们待在稳定的范围里。
+
+## 1. 更深应该更好。真的吗？
+
+反向传播（第 6 关）把梯度一层一层往下传。每一层都把它乘上自己的斜率。
+如果每个斜率都比 1 小一点，很多个乘起来就会非常小。
+
+<Blank id="grad-plain" />
+
+<Gate requires="grad-plain">
+
+现在来看一个真实的堆叠。每一层是 `h ← tanh(h @ W)`，宽 16 个数，权重从标准差为 0.8/√16 的正态分布里抽取。
+这比第 7 关的规则 1/√16 稍小一点。
+
+<Predict id="depth-guess" />
+
+<Gate requires="depth-guess">
+
+<DepthLab />
+
+标着“普通”的线是普通堆叠。往上走，信号（每一层的输出）一层比一层小。往下回来，梯度也一样：
+在 [`demo.py`](/files/residuals-and-norms/demo.py) 里，梯度的标准差在顶部是 1.02，往下 10 层是 0.098，往下 20 层是 0.0059，到底部是 0.000135。
+前面的几层几乎收不到学习信号，所以它们几乎不变。更深的普通网络最后可能比浅的还差。
+
+<Stuck q="第 7 关用一个好的初始尺度解决了这个问题。为什么还不够？">
+
+好的初始尺度只能保证第一步时数值在范围内。之后训练会改变每一个权重，tanh 单元会慢慢移到它平坦的两端，
+那里斜率接近 0。三十个各自和 1 差一点的因子，乘起来仍然会非常小或非常大。
+解决办法必须在权重变化时一直有效。残差连接做到了。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 2. 残差通路
+
+<Gate requires="depth-guess">
+
+**残差**层把它的输入加回去：
+
+$$
+h_{\text{out}} = h + f(h)
+$$
+
+$f$ 是要学习的那一层，这里是 `tanh(h @ W)`。拿一个数来看看这对梯度有什么影响。$x + f(x)$ 的斜率是
+
+$$
+\frac{d}{dx}\bigl(x + f(x)\bigr) = 1 + f'(x)
+$$
+
+<Blank id="res-deriv" />
+
+<Gate requires="res-deriv">
+
+关键就是那个 1。即使 $f$ 的斜率接近 0，梯度仍然能沿着那条普通的 $x$ 通路，也就是**残差通路**（residual path），原封不动地往下传。
+层 $f$ 在 `+` 的另一边：我们叫它层这一侧。十个斜率为 0.1 的普通层把梯度乘上 $0.1^{10} = 10^{-10}$。
+十个用同样 $f$ 的残差层把它乘上 $1.1^{10} \approx 2.59$。
+
+看实验台里标着“残差”的线：传到第 0 层的梯度从不缩到 0。在这个堆叠里它甚至变大了，大约是顶部的 11 倍。
+残差的信号也在变大，在 `demo.py` 里从输入的 0.97 变成 10、20、30 层之后的 2.33、3.46 和 4.39。
+每个块都给 $h$ 加上一些东西，所以 $h$ 越来越大。数值不停变大是下一个问题，所以每个残差网络
+也都要做**归一化**：第 4 节和第 5 节。
+
+<TryIt>
+
+把权重尺度设成 0.5，深度设成 50。普通堆叠的梯度往下掉了多少？残差的停在哪里？
+然后试试尺度 1.5：现在普通堆叠出了什么问题？
+
+</TryIt>
+
+<Deeper title="每层有很多个数时，为什么仍然是“1 + 某个东西”？">
+
+每层有 16 个数时，一层的斜率是一张 16×16 的斜率表（每一对输入和输出一个），叫作雅可比矩阵（Jacobian）。
+对 $h + f(h)$，它是 $I + J_f$，其中 $I$ 是单位表：对角线上是 1，其余是 0。
+往下穿过 $L$ 个块，就是把 $L$ 张这样的表相乘。展开后，乘积里有一项是 $I \cdot I \cdots I = I$，
+所以总有一条路线，梯度在上面一点都不会缩小。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 3. 卷积网络里的残差块
+
+<Gate requires="res-deriv">
+
+处理图片的残差网络，把很多个像这样的块叠起来。层这一侧有两个 3×3 卷积（支线 N1），
+每个后面跟着 BatchNorm（第 4 节）和一个 ReLU。残差通路把块的输入原封不动地绕过它们送过去。
+
+<ResBlockDiagram />
+
+`+` 把两个张量逐格相加，所以 $F(x)$ 的形状必须和 $x$ 完全一样。填充 1 的 3×3 卷积保持
+高和宽不变（支线 N1），它的卷积核个数决定输出通道数。
+
+<Blank id="resblock-shape" />
+
+<Deeper title="如果一个块改变了通道数呢？">
+
+那 $x$ 和 $F(x)$ 就对不上了。残差通路会有自己的一个小层，通常是 1×1 卷积：它在每个像素上把各个通道混合成新的个数，
+不看邻居。步幅为 2 时，它还会把高和宽减半，和缩小图片的层这一侧对上。
+
+</Deeper>
+
+</Gate>
+
+## 4. BatchNorm：一个特征，跨整批
+
+<Gate requires="resblock-shape">
+
+残差能防止梯度消失，但随着训练改变权重，网络内部的数值仍然可能变大或偏移。
+**归一化**把它们拉回稳定的范围：减去均值，再除以标准差（标准差 = √方差，第 10 关）。
+之后这些数的均值是 0，标准差是 1。
+
+问题在于**哪些数**共用一个均值。这里是一批 4 个样本（行），每个有 4 个特征（列）：
+
+|  | f0 | f1 | f2 | f3 |
+|---|---|---|---|---|
+| 样本 0 | 1 | 4 | 2 | 9 |
+| 样本 1 | 1 | 0 | 6 | 3 |
+| 样本 2 | 5 | 1 | 5 | 1 |
+| 样本 3 | 5 | 7 | 3 | 1 |
+
+**BatchNorm** 对每个特征（列）做归一化，用的是这一列在整批上的均值和标准差。
+手算标准差：减去均值，把每个差平方，对平方求平均，再开平方根。
+
+<Blank id="bn-x20" />
+
+<Gate requires="bn-x20">
+
+真正的 BatchNorm 会在开平方根之前给方差加一个很小的数 ε，这样它永远不会除以 0。然后它对每个特征
+乘上一个学到的缩放、加上一个学到的平移，这样如果有帮助，网络可以撤销归一化。
+
+训练时，均值和标准差来自当前这一批。测试时可能只有一个样本，所以 BatchNorm 会维护一个
+**滑动平均**（running mean）：每一批之后，它保留旧值的 0.9，再加上新一批均值的 0.1。
+
+<Blank id="running" />
+
+<Predict id="bn-one" />
+
+在卷积网络里，比如第 3 节的残差块，每个通道是一个特征。它的均值在整批上、
+以及这个通道的每个像素上一起算。
+
+</Gate>
+
+</Gate>
+
+## 5. LayerNorm：一个样本，跨它的特征
+
+<Gate requires="bn-one">
+
+**LayerNorm** 用表的另一个方向：它对每个样本（行）做归一化，用的是这一行自己的均值和标准差。
+它从不看这一批里的其他样本。
+
+<Blank id="ln-x21" />
+
+<Gate requires="ln-x21">
+
+<NormAxisLab />
+
+<Blank id="bn-count" />
+
+<Predict id="why-ln" />
+
+Transformer 用 LayerNorm 而不用 BatchNorm，有三个原因：
+
+- **句子长短不一。** 一批里短的句子会多出一些填充 token（PAD），BatchNorm 会把它们混进每个特征的均值里。
+- **生成时一次只走一个 token。** 模型写字的时候，“一批”常常只有一个序列，批统计量毫无用处。
+- **同一个 token 应该得到同样的结果。** 用 LayerNorm，一个 token 的输出只取决于它自己，和这一批里还有哪些句子无关。
+
+<Stuck q="如果 LayerNorm 只看一个样本，它怎么能帮上训练？">
+
+它仍然做了最要紧的那件事：不管下面那层输出了什么，下一层收到的数均值都是 0、标准差都是 1。
+下一层的权重永远不用去适应越来越大或不断偏移的输入。在第 16 关你会看到，它出现在 Transformer 块里每一个注意力步骤
+和前馈步骤之后（在如今的模型里是之前），紧挨着残差的 `+`。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 6. 自己写一遍
+
+<Gate requires="why-ln">
+
+在 NumPy 里，`X.mean(axis=0)` 沿每一列**往下**求平均，每列得到一个数。`X.mean(axis=1)` 沿每一行**横着**求平均，
+每行得到一个数。`keepdims=True` 把被平均的那个轴保留成大小 1，所以一张 (4, 4) 的表会得到 (1, 4) 或 (4, 1) 的结果，
+它能广播回整张表上（第 1 关）。`X.var(...)` 用同样的方式给出方差，`np.sqrt` 开平方根。
+
+```python
+X = np.array([[1., 3], [5, 7]])
+X.mean(axis=0, keepdims=True)   # [[3., 5.]]      每列一个均值
+X.var(axis=1, keepdims=True)    # [[1.], [1.]]    每行一个方差
+```
+
+这是 BatchNorm，方差里加了 ε。写出完整的 LayerNorm 函数：三行。
+
+<CodeBlank id="ln-code" />
+
+</Gate>

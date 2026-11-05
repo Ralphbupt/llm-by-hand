@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './CurveLab.svelte'
 interface Props { dropout?: boolean }
 const { dropout = false } = Astro.props
 ---
-<Lab client:visible dropout={dropout} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible dropout={dropout} />

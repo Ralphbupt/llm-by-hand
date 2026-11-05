@@ -1,4 +1,11 @@
 ---
+import { langOf, tr } from '@lib/i18n'
+const lang = langOf(Astro.url.pathname)
+// `t` names a caption line below, so the translator is `tx`
+const tx = (s: string) => tr(lang, s, undefined, {
+  'One attention head. Forward: Q and K give the scores S, softmax gives the weights A, and A with V gives the output O. Backward starts at dO and runs the other way: O = A @ V gives dV and dA, the softmax gives dS, and the scores give dQ and dK.': '一个注意力头。前向：Q 和 K 给出分数 S，softmax 给出权重 A，A 和 V 给出输出 O。反向从 dO 出发，方向相反：O = A @ V 给出 dV 和 dA，softmax 给出 dS，分数给出 dQ 和 dK。',
+  'Solid arrows: the forward pass. Dashed arrows: the backward pass. It starts with dO on the right, and each arrow is labelled with the gradient it gives. First O = A @ V gives dV and dA, then the softmax gives dS, then the scores give dQ and dK.': '实线箭头：前向传播。虚线箭头：反向传播。它从右边的 dO 出发，每个箭头上标着它算出的梯度。先由 O = A @ V 给出 dV 和 dA，再由 softmax 给出 dS，最后由分数给出 dQ 和 dK。',
+})
 /**
  * U6 §2: one attention head, forward (solid, left to right) and backward (dashed, right to left).
  * Each backward arrow is labelled with the gradient it produces, so the order dO → dV, dA → dS → dQ, dK can be read off.
@@ -37,7 +44,7 @@ const lines = [pair('Q', 'S', 'dQ'), pair('K', 'S', 'dK'), pair('S', 'A', 'dS'),
 const W = 560, H = 214
 ---
 <figure class="abf">
-  <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="One attention head. Forward: Q and K give the scores S, softmax gives the weights A, and A with V gives the output O. Backward starts at dO and runs the other way: O = A @ V gives dV and dA, the softmax gives dS, and the scores give dQ and dK.">
+  <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={tx('One attention head. Forward: Q and K give the scores S, softmax gives the weights A, and A with V gives the output O. Backward starts at dO and runs the other way: O = A @ V gives dV and dA, the softmax gives dS, and the scores give dQ and dK.')}>
     <defs>
       <marker id="abf-f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="hf" /></marker>
       <marker id="abf-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="hb" /></marker>
@@ -60,8 +67,7 @@ const W = 560, H = 214
       </>
     ))}
   </svg>
-  <figcaption>Solid arrows: the forward pass. Dashed arrows: the backward pass. It starts with dO on the right, and each arrow is
-  labelled with the gradient it gives. First O = A @ V gives dV and dA, then the softmax gives dS, then the scores give dQ and dK.</figcaption>
+  <figcaption>{tx('Solid arrows: the forward pass. Dashed arrows: the backward pass. It starts with dO on the right, and each arrow is labelled with the gradient it gives. First O = A @ V gives dV and dA, then the softmax gives dS, then the scores give dQ and dK.')}</figcaption>
 </figure>
 
 <style>

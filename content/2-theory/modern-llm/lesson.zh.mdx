@@ -1,0 +1,259 @@
+---
+recap:
+  can:
+    - "解释为什么第 16 关和第 17 关已经在用的 pre-norm，比 2017 年的 post-norm 更容易训练很深的堆叠。"
+    - "手算 RMSNorm 和一次 RoPE 旋转，并用 NumPy 把两者写出来。"
+    - "写出一个 SwiGLU FFN，并设定它的隐藏层大小，让它和普通 FFN 的权重一样多。"
+  keys:
+    - "pre-norm：`x = x + f(norm(x))`，最后再加一个归一化；post-norm：`x = norm(x + f(x))`"
+    - "$\\text{RMSNorm}(x) = x \\,/\\, \\sqrt{\\tfrac{1}{d}\\sum_i x_i^2}$，不减去均值"
+    - "RoPE：把 q 和 k 的每一对数旋转 `position × θ`；分数只取决于距离"
+    - "$\\text{FFN}(x) = \\big(\\text{SiLU}(x\\,W_{\\text{gate}}) \\odot (x\\,W_{\\text{up}})\\big)\\,W_{\\text{down}}$，其中 $d_{ff}' = \\tfrac{2}{3} d_{ff}$"
+    - "一个现代的块：`x = x + attn(RMSNorm(x))`，q 和 k 用 RoPE 旋转；然后 `x = x + SwiGLU(RMSNorm(x))`"
+  mistakes:
+    - "在错误的轴上求平均（或者没写 `keepdims=True`），结果每个词没有各自归一化。"
+    - "把 SiLU 用在值上而不是门上，或者用 `@` 而不是逐个数相乘来乘门和值。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import NormPathLab from '@viz/NormPathLab.astro'
+import RmsLab from '@viz/RmsLab.astro'
+import RopeLab from '@viz/RopeLab.astro'
+import GluLab from '@viz/GluLab.astro'
+
+你在第 17 关搭的模型，已经有了如今大语言模型的两个习惯：它只有一个堆叠，而且
+把 LayerNorm 放在每个子层前面（pre-norm）。今天搭的模型，整体设计和它一样：
+嵌入、注意力、前馈网络、残差、归一化。在每个块里面，有三个部件是新的。
+每一个都回答一个问题。归一化能不能少做点事？RMSNorm 能。分数能不能只取决于两个 token 相隔多远，
+而不取决于它们在哪里？RoPE，也就是用旋转表示位置，能。前馈网络能不能用同样多的权重达到更低的损失？
+SwiGLU，一种带门的 FFN，能。第 2 节先复习 pre-norm，这是你的模型已经有的改动。
+
+## 1. 仅解码器：一个堆叠
+
+2017 年的设计有两个堆叠：一个读原文的编码器，一个写译文的解码器，两者通过
+交叉注意力连在一起。支线 [N7](/learn/encoder-decoder/) 会把它搭出来。那张图里的交叉注意力
+就是从这里来的。从第 16 关到第 21 关，每个模型都只有一个堆叠。如今几乎每个大语言模型也都
+只有一个堆叠。每个块都用带掩码的自注意力，“原文”只是序列的开头部分。
+
+<Predict id="why-decoder-only" />
+
+## 2. 再看 pre-norm：没有东西重新缩放残差通路
+
+在第 16 关第 3 节，每个子层（注意力或 FFN，记作 `f`）都包成 `x = LayerNorm(x + f(x))`：先加，再归一化。这就是 **post-norm**，2017 年的放法。
+第 16 关的解码器块、第 17 关的模型，以及如今几乎每个模型，用的都是 **pre-norm**：`x = x + f(LayerNorm(x))`。
+只有子层的输入被归一化。最后一个块之后再加一个 LayerNorm。
+
+区别在残差通路上：也就是从输入直通到输出的那条路（第 16 关）。
+数一数这条路上有几个 LayerNorm。
+
+<Gate requires="why-decoder-only">
+
+<NormPathLab />
+
+<Blank id="postnorm-count" />
+
+<Stuck q="pre-norm 仍然在归一化。归一化跑到哪里去了？">
+
+跑到了子层的输入那里，在子层这一侧。每个注意力或 FFN 看到的仍然是归一化过的输入，所以它处理的
+数大小合适。变的是残差通路：东西只会被*加*到它上面。在 post-norm 里，每一层都会
+重新缩放整个和 x，包括前面各层加进去的所有东西。
+
+取 x = [1, −1, 0.5, −0.5]，子层的输出是 [3, 3, −3, −3]。post-norm 留下 LN(x + f(x)) = [1.29, 0.64, −0.81, −1.13]。
+从这些数里，很难再找回 x。pre-norm 留下 x + f(x) = [4, 2, −2.5, −3.5]：x 仍然在里面，没有被动过，只是被加了东西。
+
+</Stuck>
+
+为什么这对训练有帮助？梯度沿着同一条路往回走。在 pre-norm 堆叠里，梯度先经过
+最后那一个归一化。之后它就可以沿着残差通路回到前面的层，只乘以 1：
+没有每层一个的归一化。所以前面的层总能得到一个
+不太小的梯度，即使堆叠非常深也是如此。
+
+<Deeper title="post-norm 需要什么来弥补，pre-norm 又有什么代价">
+
+在 post-norm 堆叠里，梯度每经过一层就要经过一个归一化，每个都会把它除以该层输入的标准差。
+有几十层时，post-norm 模型只有在很长、很小心的学习率预热下才能训练；pre-norm 模型在多得多的设置下都能训练得很好。
+代价是：在 pre-norm 里，残差通路随着各层往上加东西而不断变大，所以在输出之前要有最后一个 LayerNorm。
+
+</Deeper>
+
+</Gate>
+
+## 3. RMSNorm：跳过均值
+
+LayerNorm 先减去每个向量的均值，再除以它的标准差（std）。**RMSNorm** 跳过均值。
+它除以均方根（root mean square），也就是各个数平方的平均值的平方根：
+
+$$
+\text{RMSNorm}(x) = \frac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2}}
+$$
+
+<Gate requires="postnorm-count">
+
+<RmsLab hide={{ rms: "rms-value", out: "rms-out0" }} />
+
+<Blank id="rms-value" />
+
+<Gate requires="rms-value">
+
+<Blank id="rms-out0" />
+
+实验表明，减去均值的作用不大：用 RMSNorm 的模型训练得一样好。RMSNorm 只算
+一个平均值而不是两个，也没有平移。对一个归一化来说省下的很少，但每一层在每一步都会省下这一点。
+在真实的模型里，两种版本之后都会把每一列乘以一个学到的增益。第 16 关的例子没有用它，好让
+数字简单些。RMSNorm 也没有学到的平移。
+
+在代码里，`keepdims=True` 会把求平均的那个轴保留下来，大小为 1，所以 (B, L, d) 的输入会得到 (B, L, 1) 的结果。
+这样每个词都除以它自己的那个数：`np.mean(np.ones((2, 3)), axis=-1, keepdims=True).shape` 是 `(2, 1)`。
+
+<CodeBlank id="rmsnorm-code" />
+
+</Gate>
+
+</Gate>
+
+## 4. RoPE：用旋转表示位置
+
+第 16 关给每个词*加*上一个位置向量。如今的模型则是把 q 和 k **旋转**一个随位置增大的角度。
+把 q 的数两两分成一对；每一对旋转 `position × θ`。对 k 也这样做。然后照常算点积。
+
+把一对数 [x, y] 逆时针旋转角度 a，得到
+
+$$
+[\,x\cos a - y\sin a,\;\; x\sin a + y\cos a\,]
+$$
+
+用四分之一圈来验证一下：a = 90°，此时 cos a = 0，sin a = 1：[1, 0] 变成 [0, 1]，[0, 1] 变成 [−1, 0]。
+长度从不改变，只有方向变。这里的角度用弧度：一整圈是 2π ≈ 6.28，所以 1 弧度大约是 57°。
+
+下面只有一对数，θ = 每个位置 0.5 弧度。q = [1, 0]，k = [0, 1]：不旋转时它们互相
+垂直，所以不管它们在句子里的哪个位置，分数都是 0。
+
+<Gate requires="rmsnorm-code">
+
+<RopeLab hide={{ qx: "rope-qx", score: "rope-score" }} />
+
+<Blank id="rope-qx" />
+
+<Gate requires="rope-qx">
+
+<Predict id="rope-shift" />
+
+<Blank id="rope-score" />
+
+把 q 旋转 mθ、把 k 旋转 nθ，它们之间的夹角正好改变 (m − n)θ。点积只取决于
+长度和夹角，所以**分数只取决于距离 m − n**，与这一对词在文本里的位置无关。
+语言模型需要这一点：“往回数两个位置的那个词”，在位置 5 和在位置 5,000 意思一样。
+
+<CodeBlank id="rope-code" />
+
+<Deeper title="很多对，很多种频率">
+
+一个真实的头有 `d_k` 个数，所以有 `d_k` / 2 对。每一对以自己的速度旋转：θᵢ = 10000^(−2i/`d_k`)。
+`d_k` = 4 时，两对分别以每个位置 1 弧度和 0.01 弧度旋转。转得快的对能区分相邻的词。
+转得慢的对，在相隔几千个位置的词之间仍然会变化。时钟也是这样：分针
+快，时针慢。
+`demo.py` 用一个随机的 4 个数的 q 和 k 验证了这一点：位置 (7, 4) 和 (107, 104) 上的分数是同一个 1.058526。
+
+RoPE 并不能让模型处理比训练时更长的文本。一个比训练中见过的任何距离都长的距离，
+会让转得慢的对出现模型从没见过的角度，所以那里的分数对模型来说仍然是新的。
+
+有 KV 缓存时（第 18 关），k 在存起来之前就旋转好了。所以缓存里的 k 行已经带着各自的
+位置，旧的 k 不会再被旋转。v 完全不旋转：RoPE 只改变分数，不改变
+权重混合的那些数。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 5. SwiGLU：前馈网络里的门
+
+2017 年的 FFN 是 `ReLU(x @ W1) @ W2`。如今的 FFN 多了第三个矩阵，并且把两样东西相乘：一个**门**，决定
+能通过多少；一个**值**，是被通过的东西：
+
+$$
+\text{FFN}(x) = \big(\text{SiLU}(x\,W_{\text{gate}}) \odot (x\,W_{\text{up}})\big)\,W_{\text{down}}
+$$
+
+$$
+\text{SiLU}(z) = z \cdot \text{sigmoid}(z)
+$$
+
+符号 ⊙ 的意思是“逐个数相乘”，就像 NumPy 里的 `*`。每个隐藏单元从它的门那一列算出一个数，
+从它的值那一列算出一个数，再把两者相乘。
+
+<Gate requires="rope-code">
+
+<GluLab hide="silu-1" />
+
+<Blank id="silu-1" />
+
+<Gate requires="silu-1">
+
+三个矩阵而不是两个，意味着权重多 50%。所以要把隐藏层大小 `d_ff` 缩小，让总数保持不变。
+
+<Blank id="swiglu-hidden" />
+
+<Stuck q="如果权重总数一样，为什么它更好？">
+
+没有简单的证明。在真实的训练中测量，带门的 FFN 在权重一样多时能达到更低的损失。
+有一种理解方式。在 ReLU 里，一个单元要么开要么关，只由它自己的输入决定。在 SwiGLU 里，x 的一个乘积
+（门）决定 x 的另一个乘积（值）能通过多少。所以 FFN 可以把由同一个词算出的两个不同的数相乘。
+普通的 FFN 在一层里做不到这一点。
+
+</Stuck>
+
+现在把它写出来。每个词是 `x` 的一行。
+
+1. `x @ W_gate` 和 `x @ W_up` 都是 (L, `d_ff`)。
+2. `*` 把它们逐个数相乘（就是 ⊙）。
+3. `@ W_down` 把每一行重新变成 `d_model` 个数。
+
+<CodeBlank id="swiglu-code" />
+
+</Gate>
+
+</Gate>
+
+
+## 6. 一个现代的块，合在一起
+
+把这三个新部件放进第 16 关的 pre-norm 解码器块。你就得到了如今几乎每个大语言模型的块：
+
+```python
+h = RMSNorm(x)
+# 因果掩码；q 和 k 用 RoPE 旋转，不加位置向量
+x = x + attention(h)
+h = RMSNorm(x)
+x = x + SwiGLU(h)
+```
+
+把这些块叠起来，最后一个 RMSNorm，然后是输出层。这一页上的每个部件都改进了一点东西：
+
+- pre-norm 让很深的堆叠保持稳定；
+- RMSNorm 更省计算；
+- RoPE 让分数只取决于距离；
+- SwiGLU 用同样多的权重达到更低的损失。
+
+<Gate requires="swiglu-code">
+
+<TryIt>
+
+在第 4 节的 RoPE 实验台上，把 q 的位置设为 2，k 的位置设为 0，然后按几次“两个都 +1”。
+分数保持 0.84：两个向量都在转，但距离一直是 2。现在只移动 k 的滑块，看分数
+怎样跟着距离 m − n 变化。在一段很长的文本里，同样的距离会出现在位置 5，也会出现在位置 5,000。
+三个新部件里，是哪一个让那里的分数一致？
+
+</TryIt>
+
+你在第 21 关写的 GPT 用了 pre-norm，以及三个新部件中的一个：RMSNorm。它保留了学到的位置向量和
+ReLU FFN。第 21 关的最后有一道选做题，让你把学到的位置换成 RoPE。在那之前，第 20 关会问
+运行这样一个模型要花多少：它在写的时候需要多少 GPU 显存，每秒能写出多少个 token。
+
+</Gate>

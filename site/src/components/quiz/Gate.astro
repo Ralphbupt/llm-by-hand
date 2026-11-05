@@ -5,17 +5,19 @@
  * and a blurred, non-interactive peek of the first lines. Stuck readers can "Skip for now".
  * Only the first locked gate shows all that; later locked gates fold into its "Then N more parts" line.
  */
+import { langOf, translator } from '@lib/i18n'
 interface Props { requires: string }
 const { requires } = Astro.props
+const t = translator(langOf(Astro.url.pathname))
 ---
 <div class="gate is-locked" data-gate={requires}>
   <div class="locked">
     <div class="msg">
-      <span class="why">🔒 <span data-why>Answer the question above to unlock</span></span>
+      <span class="why">🔒 <span data-why>{t('Answer the question above to unlock')}</span></span>
       <span class="next" data-next></span>
       <span class="more" data-more hidden></span>
     </div>
-    <button type="button" data-gate-skip>Skip for now</button>
+    <button type="button" data-gate-skip>{t('Skip for now')}</button>
   </div>
   <div class="content" inert><slot /></div>
 </div>
@@ -23,6 +25,8 @@ const { requires } = Astro.props
 <script>
   import { has, recordSkip, subscribe } from '@lib/progress'
   import { reducedMotion } from '@lib/settings'
+  import { pageLang, translator } from '@lib/i18n'
+  const t = translator(pageLang())
 
   const gates = [...document.querySelectorAll<HTMLElement>('.gate[data-gate]')]
 
@@ -40,11 +44,13 @@ const { requires } = Astro.props
       const own = (sel: string) => [...content.querySelectorAll<HTMLElement>(sel)].filter((el) => el.closest('.gate') === g)
       const qs = own('.blank, .code, .predict').length
       const lab = own('.lf-title')[0]?.textContent?.trim()
-      name = [lab, qs ? (qs === 1 ? '1 question' : `${qs} questions`) : ''].filter(Boolean).join(' + ')
+      name = [lab, qs ? t(qs === 1 ? '1 question' : '{n} questions', { n: qs }) : ''].filter(Boolean).join(' + ')
     }
     if (!name) {
-      const q = content.querySelector('.prompt')?.textContent?.trim().replace(/^(Fill in|Number|Shape|Code|Choose|Predict first)\s*/, '') ?? ''
-      name = q ? q.split(/\s+/).slice(0, 7).join(' ') + (q.split(/\s+/).length > 7 ? '…' : '') : ''
+      const q = content.querySelector('.prompt')?.textContent?.trim().replace(/^(Fill in|Number|Shape|Code|Choose|Predict first|填空|数字|形状|代码|选择|先猜一猜)\s*/, '') ?? ''
+      // Chinese has no spaces between words: cut it by characters
+      const cjk = /[\u4e00-\u9fff]/.test(q)
+      name = !q ? '' : cjk ? q.slice(0, 18) + (q.length > 18 ? '…' : '') : q.split(/\s+/).slice(0, 7).join(' ') + (q.split(/\s+/).length > 7 ? '…' : '')
     }
     g.querySelector<HTMLElement>('[data-next]')!.textContent = name
   }
@@ -84,7 +90,7 @@ const { requires } = Astro.props
       const more = lead.querySelector<HTMLElement>('[data-more]')!
       const list = rest.map((g) => names.get(g)).filter(Boolean)
       more.hidden = rest.length === 0
-      more.textContent = rest.length ? `Then ${rest.length} more ${rest.length === 1 ? 'part' : 'parts'}${list.length ? ': ' + list.join(' · ') : ''}` : ''
+      more.textContent = rest.length ? t(rest.length === 1 ? 'Then {n} more part' : 'Then {n} more parts', { n: rest.length }) + (list.length ? t(': ') + list.join(' · ') : '') : ''
     }
     rest.forEach((g) => g.classList.add('folded'))
     first = false

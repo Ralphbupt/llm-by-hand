@@ -1,0 +1,850 @@
+# 术语表的中文文字，以 content/glossary.yaml 里的英文 term 为键。
+#   term     中文课文里的写法
+#   aliases  中文课文可能用的其他写法（含课文里可能直接写的英文），第一次出现时加下划线
+#   def      给初学者的一两句解释，和英文 def 内容一致
+# level、mark、only、senses 等字段都从英文文件读，这里不写。
+
+matrix:
+  term: 矩阵
+  aliases: [matrix, matrices]
+  def: "一张由行和列组成的数字表。神经网络里几乎每一步都是一次矩阵乘法。"
+shape:
+  term: 形状
+  aliases: [shape]
+  def: "数组在每个轴上的大小，写成 (3, 4) 这样，表示 3 行 4 列。模型代码里的大多数 bug，都是形状对不上。"
+matrix multiplication:
+  term: 矩阵乘法
+  aliases: [matrix multiplication, matmul, 矩阵相乘]
+  def: "结果的每一格，是左边矩阵的一行乘右边矩阵的一列：逐个数相乘，再加起来。(n, k) @ (k, m) 得到 (n, m)。"
+transpose:
+  term: 转置
+  aliases: [transpose]
+  def: "把矩阵翻过来，让行变成列。(3, 2) 的矩阵变成 (2, 3)；代码里写作 `X.T`。"
+broadcasting:
+  term: 广播
+  aliases: [broadcasting, 广播机制]
+  def: "让不同形状的数组也能相加或相乘的规则：把大小为 1 的轴拉伸到对得上。(4, 1) 的一列加上 (1, 5) 的一行，得到 (4, 5) 的表。"
+batch:
+  term: 批
+  aliases: [batch, batches, mini-batch, 小批量, 批量, 一批]
+  def: "在一步里一起处理的多个样本，沿着最前面多出来的一个轴叠在一起。32 个句子、每句 10 个 token 的一批，是一个 (32, 10, …) 的张量。"
+loss:
+  term: 损失
+  aliases: [loss, 损失值]
+  def: "一个数，说明模型在数据上错得有多厉害。训练就是让这个数变小。"
+gradient:
+  term: 梯度
+  aliases: [gradient, gradients]
+  def: "损失对每个参数的斜率排成的列表，一个参数一个。它指向损失增长最快的方向，所以训练往反方向走一步。"
+gradient descent:
+  term: 梯度下降
+  aliases: [gradient descent]
+  def: "一次又一次地把每个参数沿梯度的反方向改一小步，让损失下降。"
+learning rate:
+  term: 学习率
+  aliases: [learning rate]
+  def: "梯度下降每一步走多大。太小，训练很慢；太大，损失会一步高一步低地来回跳，或者变得非常大。"
+neuron:
+  term: 神经元
+  aliases: [neuron, neurons]
+  def: "网络的基本单元。它把输入加权求和，加上偏置，再把结果送进激活函数。"
+weight:
+  term: 权重
+  aliases: [weight, weights]
+  def: "网络学到的一个数，说明某个输入有多重要。权重和偏置合在一起，就是网络的参数。"
+bias:
+  term: 偏置
+  aliases: [bias, biases, 偏置项]
+  def: "加权求和之后再加上的一个学到的数。它移动神经元开始输出非零值的那个位置。"
+activation function:
+  term: 激活函数
+  aliases: [activation function, activation functions]
+  def: "每次加权求和之后用的一个简单的非线性（弯曲的）函数。没有它，叠起来的多层会变成一个线性层。"
+sigmoid:
+  term: sigmoid
+  aliases: [sigmoid 函数]
+  def: "一种激活函数，沿一条 S 形曲线把任何数压到 0 到 1 之间。σ(0) = 0.5。"
+decision boundary:
+  term: 决策边界
+  aliases: [decision boundary]
+  def: "分类器从一个答案切换到另一个答案的那条线。对单个神经元来说，它就是 z = 0 的那条直线。"
+binary cross-entropy:
+  term: 二元交叉熵
+  aliases: [binary cross-entropy, BCE]
+  def: "是 / 否答案的损失：目标是 1 时为 −ln p，目标是 0 时为 −ln(1 − p)，再对所有样本取平均。"
+tanh:
+  term: tanh
+  aliases: [tanh 函数]
+  def: "和 sigmoid 一样的 S 形激活函数，但以 0 为中心，输出在 −1 到 1 之间。"
+ReLU:
+  term: ReLU
+  aliases: []
+  def: "激活函数 max(0, x)。正数原样通过，负数变成 0。"
+layer:
+  term: 层
+  aliases: [layer, layers, 网络层]
+  def: "并排的若干个神经元，它们读同样的输入。一层把 (batch, n_in) 的数组变成 (batch, n_out) 的数组。"
+slope:
+  term: 斜率
+  aliases: [slope, slopes]
+  def: "输入稍微变大一点时，函数的输出变得有多快：输出的变化除以输入的变化。训练靠斜率推动。"
+saturation:
+  term: 饱和
+  aliases: [saturation, saturated, 饱和区]
+  def: "sigmoid 或 tanh 的输入离 0 很远时，曲线在那里几乎是平的，斜率接近 0，几乎没有梯度能传回去。"
+dead ReLU:
+  term: 死 ReLU
+  aliases: [dead ReLU, dead ReLUs, 死掉的 ReLU]
+  def: "对每个样本输入都小于 0 的 ReLU 神经元。它的输出和斜率永远是 0，所以它的权重不再学习。"
+GELU:
+  term: GELU
+  aliases: []
+  def: "ReLU 的平滑版本，让较小的负数也能通过一点点。大多数现代语言模型用它或类似的函数。"
+vanishing gradient:
+  term: 梯度消失
+  aliases: [vanishing gradient, vanishing gradients]
+  def: "梯度一层一层（或一步一步）地变小，直到网络前面的部分几乎学不到东西。"
+MLP:
+  term: 多层感知机
+  aliases: [MLP, MLPs, multilayer perceptron]
+  def: "由多层神经元组成的网络，每一层是一次矩阵乘法，后面跟一个激活函数。"
+hidden layer:
+  term: 隐藏层
+  aliases: [hidden layer, hidden layers]
+  def: "输入和输出之间的层。它的数不是数据给的；这些数代表什么，由网络自己学。"
+hidden unit:
+  term: 隐藏单元
+  aliases: [hidden unit, hidden units]
+  def: "隐藏层里的一个神经元，也指它输出的那一个数。有 8 个隐藏单元的隐藏层输出 8 个数。"
+parameter:
+  term: 参数
+  aliases: [parameter, parameters]
+  def: "模型在训练中学到的任何一个数，比如一个权重或一个偏置。模型的大小通常用参数个数来算。"
+backpropagation:
+  term: 反向传播
+  aliases: [backpropagation, backprop, backward pass, 反向计算]
+  def: "计算网络里每个梯度的方法：从损失出发，一层一层往回走，用链式法则把局部斜率乘起来。"
+chain rule:
+  term: 链式法则
+  aliases: [chain rule]
+  def: "要知道损失怎样随前面某个数变化，就把从这个数到损失一路上的变化率乘起来。"
+gradient check:
+  term: 梯度检验
+  aliases: [gradient check, gradient checking, 梯度检查]
+  def: "检验算出来的梯度：把一个输入改动一点点，量一量损失动了多少。两个数应该对得上。"
+forward pass:
+  term: 前向传播
+  aliases: [forward pass, 前向计算]
+  def: "把输入从头到尾送过网络，得到输出和损失。"
+autograd:
+  term: 自动求导
+  aliases: [autograd, 自动微分]
+  def: "一段代码：记下前向传播里的每个运算，然后沿着这份记录往回走，自动算出所有梯度。"
+computation graph:
+  term: 计算图
+  aliases: [computation graph, computational graph]
+  def: "哪些数合成了哪个数的记录，画成节点和箭头。反向传播按相反方向走过它。"
+optimizer:
+  term: 优化器
+  aliases: [optimizer, optimizers]
+  def: "把梯度变成参数更新的规则。普通梯度下降、动量和 Adam 都是优化器。"
+momentum:
+  term: 动量
+  aliases: [momentum]
+  def: "优化器的一个技巧：对过去的梯度保持一个滑动平均。这样在斜率方向一直不变的地方步子会变快，也不再来回摆动。"
+Adam:
+  term: Adam
+  aliases: [Adam 优化器]
+  def: "最常用的优化器。它把动量和“每个参数一个步长”结合起来，步长按这个参数过去梯度的大小自动调整。"
+running average:
+  term: 滑动平均
+  aliases: [running average, 移动平均]
+  def: "每一步都更新的平均值：保留旧值的大部分，再加上最新值的一小部分。Adam 维护两个这样的平均。"
+fan-in:
+  term: 扇入
+  aliases: [fan-in, fan_in]
+  def: "送进一个神经元的输入个数（n）。好的初始权重按它来缩放，比如 ReLU 用标准差 √(2/n)。"
+initialization:
+  term: 初始化
+  aliases: [initialization, 权重初始化]
+  def: "训练开始前权重怎么设。太大，各层的输出一层层变得非常大；太小，它们一层层缩向 0。"
+learning-rate schedule:
+  term: 学习率调度
+  aliases: [learning-rate schedule, learning rate schedule, 学习率计划]
+  def: "训练过程中改变学习率的规则，通常先短暂预热上升，然后慢慢降向 0。"
+warmup:
+  term: 预热
+  aliases: [warmup, warm-up, 学习率预热]
+  def: "学习率调度的第一段：从很小的学习率开始，在最初几百步里把它调高。"
+learning-rate decay:
+  term: 学习率衰减
+  aliases: [learning-rate decay, learning rate decay, decay, 衰减]
+  def: "随着训练进行降低学习率，让带噪声的小批量步子最后停在离最低点很近的地方。"
+overfitting:
+  term: 过拟合
+  aliases: [overfitting, overfit]
+  def: "模型记住了训练样本，而没有学到规律：在训练样本上表现好，在新数据上表现差。故意让模型过拟合一个小批是另一回事：那是检查训练代码能不能跑通的快速测试（支线 U5）。"
+generalization:
+  term: 泛化
+  aliases: [generalization, generalize, 泛化能力]
+  def: "模型在从没见过的新数据上表现得有多好，而不只是在训练过的样本上。"
+regularization:
+  term: 正则化
+  aliases: [regularization]
+  def: "任何防止模型记住训练数据里噪声的方法，比如权重衰减或 dropout。"
+held-out set:
+  term: 留出集
+  aliases: [held-out set, held-out data, validation set, test set, 留出数据, 验证集, 测试集]
+  def: "专门留出来、从不用来训练的样本，只用来衡量模型在没见过的数据上表现得有多好。"
+weight decay:
+  term: 权重衰减
+  aliases: [weight decay]
+  def: "每一步都把每个权重变小一点，更靠近 0。它抑制过大的权重，有助于防止过拟合。"
+AdamW:
+  term: AdamW
+  aliases: []
+  def: "把权重衰减单独处理的 Adam：不把衰减加进损失，而是在每一步之后直接把每个权重缩小。"
+dropout:
+  term: dropout
+  aliases: [inverted dropout, 反向 dropout]
+  def: "训练时，每一步随机把一些单元设为 0，让网络不能依赖其中任何一个。留下的单元除以 1 − p（inverted dropout），所以测试时什么都不用改。"
+early stopping:
+  term: 早停
+  aliases: [early stopping, 提前停止]
+  def: "留出数据上的损失不再改善时就停止训练，即使训练损失还在下降。"
+capacity:
+  term: 容量
+  aliases: [capacity, 模型容量]
+  def: "模型能拟合多复杂的规律。参数越多，容量越大；对数据来说容量太大，就会过拟合。"
+tensor:
+  term: 张量
+  aliases: [tensor, tensors]
+  def: "有任意多个轴的数组。一个数、一个列表、一张表、一叠表都是张量；PyTorch 的主要数据类型就是张量。"
+softmax:
+  term: softmax
+  aliases: [softmax 函数]
+  def: "把一列分数变成概率：全是正数，加起来等于 1。分数越大，概率越大。"
+temperature:
+  term: 温度
+  aliases: [temperature]
+  def: "softmax 之前分数要除以的一个数。温度低，最高的选项占绝对优势；温度高，各个概率更平均。"
+cross-entropy:
+  term: 交叉熵
+  aliases: [cross-entropy, cross entropy]
+  def: "从许多选项里挑一个正确答案时常用的损失。它等于 −log（模型给正确答案的概率）。"
+entropy:
+  term: 熵
+  aliases: [entropy]
+  def: "一个概率分布有多不确定，用它各个结果的平均惊讶度来衡量。"
+perplexity:
+  term: 困惑度
+  aliases: [perplexity]
+  def: "e 的（平均交叉熵）次方。困惑度为 4，表示模型就像在 4 个同样可能的词里挑一个那样拿不准。"
+nat:
+  term: 奈特
+  aliases: [nat, nats]
+  def: "用自然对数 ln 时惊讶度的单位。1 奈特是概率为 1/e 的事件的惊讶度。"
+bit:
+  term: 比特
+  aliases: [bit, bits]
+  def: "这里指：用 log₂ 时惊讶度的单位。1 比特是概率为 1/2 的事件的惊讶度。"
+geometric mean:
+  term: 几何平均
+  aliases: [geometric mean, 几何平均数, 几何平均值]
+  def: "n 个数乘积的 n 次方根。2 和 8 的几何平均是 √(2 · 8) = 4。"
+Gaussian:
+  term: 高斯分布
+  aliases: [Gaussian, Gaussian noise, normal distribution, 高斯噪声, 正态分布]
+  def: "钟形的分布。高斯噪声指的是一些随机数：通常离均值很近，很少离得很远。"
+language model:
+  term: 语言模型
+  aliases: [language model, language models]
+  def: "根据已有的 token，给每一个可能的下一个 token 一个概率的模型。写文本就是挑一个 token，然后重复。"
+bigram:
+  term: 二元模型
+  aliases: [bigram, bigrams, bigram 模型]
+  def: "一对相邻的词。二元模型只根据当前这个词，用计数来预测下一个词。"
+token:
+  term: token
+  aliases: [tokens]
+  def: "模型读或写的一小段文本：可以是一个字符、一个词或一个词的片段，取决于分词器。在图像模型里，指图片的一个图块。"
+tokenizer:
+  term: 分词器
+  aliases: [tokenizer, tokenizers]
+  def: "把文本切成 token，并把每个 token 对应到一个 id 编号的规则。"
+vocabulary:
+  term: 词表
+  aliases: [vocabulary, vocab, 词汇表]
+  def: "模型认识的所有 token 的完整列表。每个 token 有一个 id，模型的输出对词表里的每一项给一个分数。"
+id:
+  term: id
+  aliases: [token id, ID]
+  def: "代表一个 token 的编号：从 0 到词表大小减一。"
+context window:
+  term: 上下文窗口
+  aliases: [context window, 上下文长度]
+  def: "模型一次最多能读的 token 数。"
+BPE:
+  term: BPE
+  aliases: [byte-pair encoding, 字节对编码]
+  def: "一种分词器：从字符开始，反复把出现最多的相邻一对合并成一个新 token。"
+embedding:
+  term: 嵌入
+  aliases: [embedding, embeddings, 嵌入向量]
+  def: "代表一个 token 的一串数。嵌入表里，词表的每一项都有一行学到的数。"
+one-hot:
+  term: 独热
+  aliases: [one-hot, 独热编码, 独热向量]
+  def: "除了在 token 的 id 位置上有一个 1，其余全是 0 的向量。用它乘嵌入表，得到的正好是这个 token 的那一行。"
+dot product:
+  term: 点积
+  aliases: [dot product, dot products]
+  def: "两个向量逐个数相乘再加起来。两个向量指向同一方向时它很大，互不相关时接近 0。"
+attention:
+  term: 注意力
+  aliases: [attention, 注意力机制]
+  def: "每个 token 把它能看到的所有 token 做加权平均，得到一个新向量；权重由模型根据它们的相似程度算出来。"
+query:
+  term: 查询
+  aliases: [query, queries, 查询向量]
+  def: "在注意力里，token 用来问“我在找什么？”的向量。分数就是查询和键的点积。"
+key:
+  term: 键
+  aliases: [key, keys, 键向量]
+  def: "在注意力里，其他词拿自己的查询来比较的那个向量。查询和指向同一方向的键匹配得好。"
+value:
+  term: 值
+  aliases: [value, values, 值向量]
+  def: "在注意力里，一个 token 交给看它的那些 token 的东西。输出是值的加权平均。"
+mask:
+  term: 掩码
+  aliases: [mask, masks, masking]
+  def: "在 softmax 之前挡住一部分注意力分数的表，比如不让一个 token 看它后面的 token，或者不让它看填充。"
+multi-head attention:
+  term: 多头注意力
+  aliases: [multi-head attention, attention head, attention heads, 注意力头, 多头]
+  def: "并排跑几个较小的注意力，每个有自己的 Q、K 和 V，再把它们的输出拼起来。每个头可以关注一种不同的关系。"
+concat:
+  term: 拼接
+  aliases: [concat, concatenate, concatenation]
+  def: "concatenate 的简写：把数组沿一个轴并排放在一起。把各个头的输出拼接起来，得到一张更宽的表。"
+positional encoding:
+  term: 位置编码
+  aliases: [positional encoding, positional encodings]
+  def: "加到每个 token 的嵌入上、说明它在序列中位置的一组数。只靠注意力本身，不知道词的顺序。"
+feed-forward network:
+  term: 前馈网络
+  aliases: [feed-forward network, FFN, position-wise feed-forward network, 逐位置前馈网络, 前馈层]
+  def: "每个 Transformer 层里，在注意力之后对每个 token 单独使用的小 MLP。因为它对每个位置分别计算，所以也叫逐位置（position-wise）前馈网络。"
+residual connection:
+  term: 残差连接
+  aliases: [residual connection, residual connections, residual, residuals, 残差]
+  def: "把一层的输入加回到它的输出上。这样每一层只需要学一个改变量，数值和梯度都能轻松穿过很深的层堆叠。"
+LayerNorm:
+  term: LayerNorm
+  aliases: [layer normalization, layer norm, 层归一化]
+  def: "把每个 token 的向量缩放到均值 0、标准差 1，再乘上学到的缩放、加上学到的平移（γ 和 β）。它让数值保持在稳定的范围里。"
+encoder:
+  term: 编码器
+  aliases: [encoder, encoders]
+  def: "原始的双栈 Transformer 里的一部分：一次读完整个源句子，产生它的向量（memory）。"
+decoder:
+  term: 解码器
+  aliases: [decoder, decoders]
+  def: "一叠带掩码自注意力的块，一次写一个 token 的输出，只看已经写出来的 token。在原始的双栈设计里，它还要读编码器的 memory。"
+cross-attention:
+  term: 交叉注意力
+  aliases: [cross-attention, cross attention]
+  def: "查询来自一个序列、键和值来自另一个序列的注意力，比如解码器读编码器的 memory。"
+start token:
+  term: 起始 token
+  aliases: [start token, "<bos>", 开始 token]
+  def: "一个特殊 token，写作 <bos>（“beginning of sequence”，序列开始），用来开始一个序列。在写出任何词之前，它给模型第一个输入。支线 N7和第 21 关会用到。"
+end token:
+  term: 结束 token
+  aliases: [end token, "<eos>"]
+  def: "一个特殊 token，写作 <eos>（“end of sequence”，序列结束），用来结束一个序列。答案写完时模型就写出它，生成过程因此知道什么时候停。支线 N7和第 21 关会用到。"
+logits:
+  term: logits
+  aliases: [logit]
+  def: "softmax 之前，模型给词表里每个 token 的原始分数。越大表示越可能。"
+greedy decoding:
+  term: 贪心解码
+  aliases: [greedy decoding, greedy, 贪心]
+  def: "生成文本时，每次都取最可能的那一个下一个 token。"
+label smoothing:
+  term: 标签平滑
+  aliases: [label smoothing]
+  def: "训练时用的目标给正确 token 略少于 100%，把剩下的分给其他 token，让模型不要变得过于确定。"
+beam search:
+  term: 束搜索
+  aliases: [beam search, 集束搜索]
+  def: "每一步保留几个最好的半句，而不是只留一个，最后选总分最好的那个序列。"
+top-k:
+  term: top-k
+  aliases: [top-k 采样]
+  def: "一种采样规则：只保留最可能的 k 个 token，在它们中间挑。"
+top-p:
+  term: top-p
+  aliases: [nucleus sampling, top-p 采样, 核采样]
+  def: "一种采样规则：按可能性从高到低保留 token，直到它们的概率加起来达到 p，然后在这些 token 中间挑。"
+repetition penalty:
+  term: 重复惩罚
+  aliases: [repetition penalty]
+  def: "降低已经用过的 token 的分数，让生成不会一遍又一遍地重复同样的词。"
+decoder-only:
+  term: 仅解码器
+  aliases: [decoder-only]
+  def: "只有解码器栈和带掩码自注意力的 Transformer。今天的大语言模型都是这样搭的。"
+decoder block:
+  term: 解码器块
+  aliases: [decoder block, decoder blocks]
+  def: "带掩码的自注意力，再接 FFN，每个都有自己的残差和 LayerNorm。仅解码器模型就是这些块叠起来。"
+prompt:
+  term: 提示词
+  aliases: [prompt, prompts]
+  def: "一开始交给模型的 token。模型一次一个 token 地接着往下写，它写出来的 token 就是答案。"
+pre-norm:
+  term: pre-norm
+  aliases: [pre-LN]
+  def: "把归一化放在每个子层之前而不是之后。这样残差通路上没有东西会重新缩放数值，很深的堆叠也能稳定地训练。"
+post-norm:
+  term: post-norm
+  aliases: [post-LN]
+  def: "2017 年的顺序：先把子层的输出加到 x 上，再归一化，即 LayerNorm(x + f(x))。很深的 post-norm 堆叠需要很长的预热才能训练。"
+residual path:
+  term: 残差通路
+  aliases: [residual path, residual stream, 残差流, 残差路径]
+  def: "从堆叠的输入直接通到输出的那条普通的 x。旁边的每一层（在 Transformer 里是每个子层）读 x，把自己的输出加到 x 上：x + f(x)。梯度沿着这条通路往回传，不会被变小。"
+RMSNorm:
+  term: RMSNorm
+  aliases: [RMS Norm]
+  def: "更简单的 LayerNorm：只除以向量的均方根，不减去均值。"
+RoPE:
+  term: RoPE
+  aliases: [rotary position embedding, 旋转位置编码]
+  def: "通过旋转查询和键里的一对对数来编码位置，让注意力分数取决于两个 token 相隔多远。"
+SwiGLU:
+  term: SwiGLU
+  aliases: []
+  def: "带门的前馈网络：x 的一个矩阵乘积（门，经过 SiLU）决定另一个矩阵乘积（值）能通过多少。"
+SiLU:
+  term: SiLU
+  aliases: [Swish]
+  def: "激活函数 z · sigmoid(z)。它看起来像 ReLU，但是平滑的，在 0 以下有一个小凹陷。"
+FLOPs:
+  term: FLOPs
+  aliases: [FLOP, 浮点运算次数]
+  def: "浮点运算次数：一次计算需要的乘法和加法的个数。用来数一个模型需要多少算术。"
+memory bandwidth:
+  term: 显存带宽
+  aliases: [memory bandwidth, bandwidth, 带宽, 内存带宽]
+  def: "GPU 每秒能从显存里读多少字节。模型一次写一个 token 时，每写一个 token 就要把每个权重读一遍，所以限制速度的往往是带宽，而不是算术。"
+GQA:
+  term: GQA
+  aliases: [grouped-query attention, 分组查询注意力]
+  def: "几个查询头共用一个键头和一个值头的注意力，生成时可以节省 GPU 显存。"
+GPT:
+  term: GPT
+  aliases: []
+  def: "训练来预测下一个 token 的仅解码器 Transformer。第 21 关搭一个很小的 GPT，让它学会两位数加法。"
+convolution:
+  term: 卷积
+  aliases: [convolution, convolutions, conv]
+  def: "把一个小卷积核在图片上滑动，在每个位置做一次点积，这样同一个图案在哪里都能被找到。"
+filter:
+  term: 卷积核
+  aliases: [filter, filters, kernel, kernels, 滤波器]
+  def: "卷积在输入上滑动的那一小格学到的权重，比如一个 3×3 的边缘检测器。"
+weight sharing:
+  term: 权重共享
+  aliases: [weight sharing, 共享权重]
+  def: "在许多位置使用同一组权重。卷积在图片的每个位置都用同样的 9 个卷积核权重。"
+stride:
+  term: 步幅
+  aliases: [stride]
+  def: "卷积核在两个位置之间移动多少个像素。步幅为 2 时，输出大小减半。"
+padding:
+  term: 填充
+  aliases: [padding, "<PAD>", 填充 token]
+  def: "加在短序列末尾的占位 token（常写作 <PAD>），让一批里每个序列一样长。掩码和损失都会忽略它们。"
+receptive field:
+  term: 感受野
+  aliases: [receptive field]
+  def: "一个输出数能看到的原始输入的那一块。卷积层叠得越多，它越大。"
+pooling:
+  term: 池化
+  aliases: [pooling, 池化层]
+  def: "从每个小块里只留一个数（通常是最大的），把特征图缩小。"
+feature map:
+  term: 特征图
+  aliases: [feature map, feature maps]
+  def: "一个卷积核扫过整张图片的输出：一张网格，卷积核的图案出现在哪里，哪里就亮。"
+RNN:
+  term: RNN
+  aliases: [RNNs, recurrent network, recurrent neural network, 循环神经网络, 循环网络]
+  def: "一次一步地读序列的网络：把一个隐藏状态往前带，每一步都用同样的权重。"
+hidden state:
+  term: 隐藏状态
+  aliases: [hidden state, hidden states]
+  def: "RNN 从一步带到下一步的向量。它对目前为止的序列记住的一切，都必须装进这个向量。"
+backpropagation through time:
+  term: 随时间反向传播
+  aliases: [backpropagation through time, BPTT]
+  def: "训练 RNN 的方法：沿着序列把它展开，再穿过每一步做反向传播。传到前面步骤的梯度往往会变得很小或非常大。"
+LSTM:
+  term: LSTM
+  aliases: [LSTMs, 长短期记忆网络]
+  def: "带门和单独细胞状态的循环网络，比普通 RNN 能把信息保留多得多的步数。"
+gate:
+  term: 门
+  aliases: [gate, gates, 门控]
+  def: "一个介于 0 和 1 之间的 sigmoid，乘到一个信号上，决定保留多少（1 全部保留，0 一点不留）。"
+forget gate:
+  term: 遗忘门
+  aliases: [forget gate]
+  def: "LSTM 里的门 f（介于 0 和 1 之间），决定每一步保留多少旧的细胞状态 c。"
+input gate:
+  term: 输入门
+  aliases: [input gate]
+  def: "LSTM 里的门 i（介于 0 和 1 之间），决定把多少新的候选值 g 加进细胞状态。"
+output gate:
+  term: 输出门
+  aliases: [output gate]
+  def: "LSTM 里的门 o（介于 0 和 1 之间），决定把多少细胞状态作为输出 h 拿出来。"
+cell state:
+  term: 细胞状态
+  aliases: [cell state, 单元状态]
+  def: "LSTM 的长期记忆：一个从一步传到下一步、几乎不变的向量，除非门去修改它。"
+GRU:
+  term: GRU
+  aliases: [GRUs, 门控循环单元]
+  def: "LSTM 的简化版：有两个门（更新门和重置门），没有单独的细胞状态。"
+diffusion:
+  term: 扩散
+  aliases: [diffusion, diffusion model, diffusion models, 扩散模型]
+  def: "通过学习去除噪声来生成数据的方法：一步步给样本加噪声，再训练一个网络把噪声去掉。"
+noise schedule:
+  term: 噪声调度
+  aliases: [noise schedule, alpha-bar, 噪声表]
+  def: "每一步加多少噪声的计划。alpha-bar 表示走了 t 步之后，原始信号还剩多少。"
+sampling:
+  term: 采样
+  aliases: [sampling, sample, 抽样]
+  def: "按概率随机挑选。语言模型从它的 softmax 里采样下一个 token；扩散模型从噪声出发、跑一遍去噪步骤，采样出一张新图片。"
+guidance:
+  term: 引导
+  aliases: [guidance, classifier-free guidance, 无分类器引导]
+  def: "把生成推向所要求的内容：比较网络在有要求和没有要求时对噪声的猜测，再往两者之差的方向多走一些。"
+latent:
+  term: 潜变量
+  aliases: [latent, latents, latent space, 潜空间, 潜向量]
+  def: "代表一个大得多的输入的一段短编码，比如用 16 个数代表一张 784 像素的图片。在潜空间里做扩散要便宜得多。"
+autoencoder:
+  term: 自编码器
+  aliases: [autoencoder, autoencoders]
+  def: "一种网络：把输入压缩成一小段潜编码，再从这段编码重建输入。"
+code:
+  term: 编码
+  aliases: [code, 潜编码]
+  def: "在自编码器里，编码器输出的那几个数（也叫潜变量）。不是程序代码。"
+mean squared error:
+  term: 均方误差
+  aliases: [mean squared error, MSE]
+  def: "一种损失：预测减去目标，把每个差平方，再取平均。"
+patch:
+  term: 图块
+  aliases: [patch, patches]
+  def: "从图片上切下的一个小方块。处理图像的 Transformer 把每个图块当作一个 token。"
+DiT:
+  term: DiT
+  aliases: [扩散 Transformer, diffusion Transformer]
+  def: "扩散 Transformer：把带噪声的图片切成图块 token，用 Transformer 层来猜噪声。"
+variance:
+  term: 方差
+  aliases: [variance]
+  def: "一组数到它们均值的距离平方的平均。它衡量这组数有多分散；它的平方根就是标准差。"
+standard deviation:
+  term: 标准差
+  aliases: [standard deviation, std]
+  def: "一组数通常离均值有多远：方差的平方根。写作 std 或 σ。"
+epoch:
+  term: 轮
+  aliases: [epoch, epochs, 训练轮次]
+  def: "在整个训练集上训练一遍。"
+bottleneck:
+  term: 瓶颈
+  aliases: [bottleneck]
+  def: "所有信息都必须穿过一个小向量的地方。在普通的 seq2seq 模型里，整个源句子必须装进一个固定大小的状态。"
+seq2seq:
+  term: seq2seq
+  aliases: [sequence-to-sequence, 序列到序列]
+  def: "读一个序列、写另一个序列的模型，比如读进数字、写出单词：编码器读，解码器写。"
+alignment:
+  term: 对齐
+  aliases: [alignment, alignments, 对齐关系]
+  def: "在 seq2seq 注意力里，每个输出步最关注源序列的哪个位置。画成一张注意力权重表。"
+exploding gradient:
+  term: 梯度爆炸
+  aliases: [exploding gradient, exploding gradients]
+  def: "梯度每一步都乘上比 1 大的数，于是变得非常大，训练失败。"
+unrolling:
+  term: 展开
+  aliases: [unrolling, unroll, unrolled, 按时间展开]
+  def: "把 RNN 画成每个时间步一份副本，所有副本共用同样的权重，这样就能把整个计算看成一个长长的网络。"
+plateau:
+  term: 平台期
+  aliases: [plateau, plateaus]
+  def: "训练中损失或准确率保持平坦一段时间，之后才又开始改善的阶段。"
+self-attention:
+  term: 自注意力
+  aliases: [self-attention, self attention]
+  def: "查询、键和值都来自同一个序列的注意力，所以每个 token 看的是它自己这句话里的 token。"
+causal mask:
+  term: 因果掩码
+  aliases: [causal mask, causal masking]
+  def: "挡住每个位置去看后面位置的掩码，让从左往右写的模型看不到未来。"
+inference:
+  term: 推理
+  aliases: [inference]
+  def: "用训练好的模型产生输出。权重固定不变；每个新输入只重新计算激活值。"
+activation:
+  term: 激活值
+  aliases: [activation, activations]
+  def: "网络对某一个输入在内部算出的值，比如隐藏层的输出。和参数不同，它对每个输入都要重新计算，也不随模型保存。训练时它一直留在内存里，直到反向传播用完它。"
+channel:
+  term: 通道
+  aliases: [channel, channels]
+  def: "卷积的输入或输出里叠在一起的二维图之一，比如彩色图片里的红、绿、蓝，或者一个卷积核的特征图。"
+padding (convolution):
+  term: 边缘填充
+  aliases: [zero padding, 零填充, 补零]
+  def: "在输入四周加上的一圈额外格子（通常是 0），让卷积核能落在边缘上，输出也保持原来的大小。"
+BatchNorm:
+  term: BatchNorm
+  aliases: [batch normalization, batch norm, 批归一化]
+  def: "用一批数据上的均值和标准差，对每个特征做归一化。对图片很有效，但依赖批的大小。"
+VAE:
+  term: VAE
+  aliases: [VAEs, variational autoencoder, 变分自编码器]
+  def: "一种自编码器：编码器为每个编码数输出一个均值和一个标准差，训练的目标是让随机的编码也能解码成像样的样本。"
+KL divergence:
+  term: KL 散度
+  aliases: [KL divergence, KL term, KL 项]
+  def: "衡量一个概率分布和另一个有多不同的数。VAE 用它让自己的编码保持接近标准高斯分布。"
+reparameterization trick:
+  term: 重参数化技巧
+  aliases: [reparameterization trick, 重参数化]
+  def: "把随机编码写成 z = μ + σ·ε，其中 ε 从标准高斯分布里抽取，这样梯度就能流过 μ 和 σ。"
+bidirectional RNN:
+  term: 双向 RNN
+  aliases: [bidirectional RNN, bidirectional, 双向循环网络]
+  def: "两个 RNN，一个从左往右读，一个从右往左读，再把它们的状态拼起来。适合给整句话打标签；不能用来一次一个 token 地写文本。"
+context vector:
+  term: 上下文向量
+  aliases: [context vector, context vectors]
+  def: "在 seq2seq 注意力里，解码器在某一步用到的编码器状态的加权平均。"
+KV cache:
+  term: KV 缓存
+  aliases: [KV cache, KV-cache, KV 快取]
+  def: "生成时把之前 token 的键和值存起来，这样每个新 token 只需算它自己的查询、键和值。"
+memory:
+  term: memory
+  aliases: [编码器 memory, 编码器输出]
+  def: "在编码器–解码器 Transformer 里，编码器的最终输出：每个源 token 一个向量。解码器的每一层都通过交叉注意力读它。（不是 RNN 的隐藏状态。）"
+teacher forcing:
+  term: 教师强制
+  aliases: [teacher forcing]
+  def: "训练解码器时，把正确的前一个 token 作为输入，而不是它自己的猜测，这样每个位置可以同时训练。"
+word vector:
+  term: 词向量
+  aliases: [word vector, word vectors, word2vec]
+  def: "根据哪些词常出现在一起学到的嵌入，所以用在相似位置的词会得到相似的向量。"
+seed:
+  term: 随机种子
+  aliases: [seed, random seed, 种子]
+  def: "随机数生成器开始时用的数。同一个种子每次都给出同样的“随机”数，所以一次运行可以被完全重现。"
+random generator:
+  term: 随机数生成器
+  aliases: [random generator, 随机生成器]
+  def: "产生随机数的对象，从一个叫种子的数开始。同一个种子给出同样的数。"
+data pipeline:
+  term: 数据管道
+  aliases: [data pipeline, 数据流水线]
+  def: "把原始样本变成训练用的批的代码：打乱、划分、分成批，再填充到一样长。"
+DataLoader:
+  term: DataLoader
+  aliases: [Dataset]
+  def: "PyTorch 数据管道的两个部分。Dataset 给出第 i 个样本；DataLoader 把样本组成批，一次给一批。"
+bucket:
+  term: 桶
+  aliases: [bucket, buckets, 分桶]
+  def: "一组长度差不多的样本，放在一起组成批，这样只需要很少的填充。"
+collate function:
+  term: 整理函数
+  aliases: [collate function, collate 函数, collate_fn]
+  def: "把一列样本变成一个批数组的函数：把较短的序列填充，并同时返回填充掩码。"
+NaN:
+  term: NaN
+  aliases: [NaNs]
+  def: "“Not a number”（不是一个数）：没有答案的计算的结果，比如 inf − inf 或 0 × inf。一旦出现 NaN，用它算出的所有东西也都是 NaN。"
+mantissa:
+  term: 尾数
+  aliases: [mantissa, 尾数位]
+  def: "浮点数里存它各位数字的那些位：1.5 × 2² 里“1.”后面的部分。尾数位越多，相邻两个数之间的间隔越细。"
+exponent:
+  term: 指数位
+  aliases: [exponent, 指数部分]
+  def: "浮点数里说明这个数要乘以 2 的几次方的那些位。指数位越多，范围越宽，从极小到极大。"
+exponent bias:
+  term: 指数偏移
+  aliases: [exponent bias, 指数偏移量]
+  def: "存进浮点数之前，加到 2 的幂次上的一个固定数，这样负的幂次也不需要符号位。不是神经元的偏置。"
+overflow:
+  term: 上溢
+  aliases: [overflow, overflows, 溢出]
+  def: "结果比某种格式能表示的最大数还大，于是变成 inf。在 float16 里，e¹² 就已经上溢了。"
+underflow:
+  term: 下溢
+  aliases: [underflow, underflows]
+  def: "结果比某种格式能表示的最小数还接近 0，于是变成正好 0。"
+mixed precision:
+  term: 混合精度
+  aliases: [mixed precision, mixed-precision, 混合精度训练]
+  def: "训练时大部分乘法用 16 位数来提速，而权重、求和和损失保持 32 位数。"
+log-sum-exp:
+  term: log-sum-exp
+  aliases: [logsumexp, LSE]
+  def: "每个分数取 e 的幂、加起来、再取 ln。先减去最大的分数，就不会上溢；交叉熵等于 log-sum-exp 减去目标的分数。"
+smoothing:
+  term: 平滑
+  aliases: [smoothing, 加一平滑]
+  def: "在相除之前，给每个计数都加一个小数（通常是 1），这样从没见过的一对也能得到一个小概率，而不是 0。"
+cosine similarity:
+  term: 余弦相似度
+  aliases: [cosine similarity]
+  def: "两个向量的点积除以它们的长度。它只取决于夹角：方向相同为 1，成直角为 0，方向相反为 −1。"
+topological order:
+  term: 拓扑序
+  aliases: [topological order, topological sort, 拓扑排序]
+  def: "计算图节点的一个列表，其中每个节点都排在它所有输入的后面。倒着走这个列表，就能按正确的顺序做反向传播。"
+depth-first walk:
+  term: 深度优先遍历
+  aliases: [depth-first walk, depth-first search, DFS, 深度优先搜索]
+  def: "遍历图的一种方式：沿一条路走到底，再去试下一条。自动求导用它来构建拓扑序。"
+surprise:
+  term: 惊讶度
+  aliases: [surprise, 惊奇度]
+  def: "对实际出现的那个词取 −ln p。概率为 1 时惊讶度为 0；概率很小，惊讶度就很大。交叉熵就是平均惊讶度。"
+update gate:
+  term: 更新门
+  aliases: [update gate]
+  def: "GRU 里的门 z，决定取多少新的候选值；剩下的 1 − z 是原样保留的旧隐藏状态。"
+reset gate:
+  term: 重置门
+  aliases: [reset gate]
+  def: "GRU 里的门 r，决定在生成新候选值时用多少旧隐藏状态。r = 0 时，候选值只用输入。"
+stride (memory):
+  term: 步长
+  aliases: [stride, strides]
+  def: "沿一个轴走一步，在内存里要移动多少个位置。按行存储的 (3, 4) 数组，步长是 (4, 1)：往下一行移动 4 个位置，往右一列移动 1 个。"
+view:
+  term: 视图
+  aliases: [view, views]
+  def: "用自己的形状和步长去读另一个数组内存的数组。什么都没有复制，所以往视图里写会改变原数组。"
+contiguous:
+  term: 内存连续
+  aliases: [contiguous, 连续存储]
+  def: "按普通的行顺序存储：一行一行地读数组时，在内存里每次只走一步。`.contiguous()` 会按这个顺序复制一份。"
+local gradient:
+  term: 局部梯度
+  aliases: [local gradient, local gradients]
+  def: "只看某一个运算时，它的输出随输入怎样变化。链式法则把路径上的局部梯度乘起来。"
+normalization:
+  term: 归一化
+  aliases: [normalization, normalize, normalized, normalizing]
+  def: "重新缩放数值，让它们保持在稳定的范围里：减去均值，再除以标准差。BatchNorm 和 LayerNorm 的区别只在于对哪些数求平均。"
+precision:
+  term: 精度
+  aliases: [precision]
+  def: "一种浮点格式有多精确：在 2 的一个幂次和下一个幂次之间有多少个数。尾数位越多，精度越高。"
+range:
+  term: 表示范围
+  aliases: [range, 数值范围]
+  def: "一种浮点格式能表示多大和多小的数。指数位越多，表示范围越宽。"
+master copy:
+  term: 主副本
+  aliases: [master copy, master weights, 主权重]
+  def: "混合精度训练里，权重的 float32 副本。每次更新都加到它上面，所以小的改变不会被舍入掉；16 位的权重由它生成。"
+loss scaling:
+  term: 损失缩放
+  aliases: [loss scaling]
+  def: "反向传播之前把损失乘上一个大数（比如 1024），让很小的 16 位梯度不会变成 0，之后再把梯度除以同一个数。"
+vector:
+  term: 向量
+  aliases: [vector, vectors]
+  def: "按固定顺序排列的一列数，比如 [0.5, −1, 2]。一个词的向量，就是代表它的那一行数。"
+padding mask:
+  term: 填充掩码
+  aliases: [padding mask]
+  def: "挡住每个 PAD token（为了让短序列和最长的一样长而加的额外 token）的掩码，这样没有词会去看填充。"
+numeric gradient:
+  term: 数值梯度
+  aliases: [numeric gradient, numerical gradient]
+  def: "不用微积分求出的梯度：把一个权重移动很小的 h，再跑一遍前向传播，用损失的变化除以 h。"
+in place:
+  term: 原地
+  aliases: [in place, in-place, 原地修改, 就地]
+  def: "直接改数组自己的数，而不是新建一个数组。`w[i] += h` 就是原地改 w。"
+steepness:
+  term: 陡度
+  aliases: [steepness, 陡峭程度]
+  def: "这一关的实验台里，sigmoid(k · z) 中的数 k。k 越大，S 形曲线从 0 升到 1 越快。"
+running mean:
+  term: 滑动均值
+  aliases: [running mean]
+  def: "BatchNorm 里，每一批之后更新一次的各批均值的平均（保留旧值的 0.9，加上新值的 0.1）。模型在新数据上运行时，用它代替这一批的均值。"
+Jacobian:
+  term: 雅可比矩阵
+  aliases: [Jacobian, 雅可比]
+  def: "一个运算的输入和输出之间所有斜率组成的表：第 i 行第 j 列表示输入 j 变动时输出 i 变得有多快。softmax 的雅可比矩阵是 diag(p) − pᵀp。"
+saved activations:
+  term: 保存的激活值
+  aliases: [saved activations, saved activation]
+  def: "前向传播里的一些值，因为后面某条反向规则要用，训练时把它们留在 GPU 显存里，比如注意力权重 A。它们随批大小和序列长度增长。"
+fused kernel:
+  term: 融合算子
+  aliases: [fused kernel, fused kernels, fused attention kernel, fused attention kernels, 融合 kernel, 融合核]
+  def: "一个做好几步的 GPU 程序，比如算分数、softmax 和加权求和，中间的值不存进 GPU 显存。"
+recomputation:
+  term: 重计算
+  aliases: [recomputation, 重新计算]
+  def: "前向传播时只保留每一层的输入，反向传播时再跑一遍这一层的前向传播，把其他值找回来。它节省 GPU 显存，代价是大约多跑一次前向传播。"
+sublayer:
+  term: 子层
+  aliases: [sublayer, sublayers]
+  def: "Transformer 块里有自己残差的部分之一：注意力或 FFN。一个解码器块有两个子层。2017 年设计的解码器层有三个。"
+translation:
+  term: 翻译
+  aliases: [translation, 机器翻译]
+  def: "把一种语言的句子变成另一种语言的句子。第一个 Transformer 就是为这个任务造的。"
+source sentence:
+  term: 源句子
+  aliases: [source sentence, source sequence, 源序列, 源句]
+  def: "翻译里交给模型的那个句子。编码器读它。在支线 N7里，它是数字，比如 427。"
+target sentence:
+  term: 目标句子
+  aliases: [target sentence, target sequence, 目标序列, 目标句]
+  def: "翻译里模型必须写出的那个句子。解码器写它。它和训练目标 y 不是一回事：tgt_in 和 tgt_out 都是从目标句子做出来的。"
+decode:
+  term: 解码
+  aliases: [decode, decoding, 解码阶段]
+  def: "一步写一个 token 地写出答案。每一步为每个用户写一个新 token，都要把每个权重和 KV 缓存读一遍，所以通常限制它的是显存带宽，而不是算术。"
+prefill:
+  term: 预填充
+  aliases: [prefill, 预填充阶段]
+  def: "在开始写答案之前，用一次前向传播读完整个提示词。所有提示词 token 只需把权重读一遍。所以提示词很长时，限制它的是算术，而不是显存：在第 20 关的示例 GPU 上，大约超过 100 个 token 就是这样。它还会填好 KV 缓存。"
+crossover:
+  term: 交叉点
+  aliases: [crossover, crossover point]
+  def: "用户数 B 达到多少时，一步解码的算术耗时和读权重的耗时一样长。低于它，读取是瓶颈；高于它，算术是瓶颈。它取决于 GPU 和每个权重占的字节数，与模型大小无关。"

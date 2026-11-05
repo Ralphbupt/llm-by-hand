@@ -10,6 +10,45 @@
   import { reducedMotion } from '@lib/settings'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is the step count below, so the translator is `tl`
+  const tl = useT({
+    'Three optimizers, one valley': '三个优化器，一个山谷',
+    'All three start at (−4, 1). Take steps or press Play and see which one reaches the minimum first.': '三个都从 (−4, 1) 出发。一步步走，或者按“播放 60 步”，看哪个先到达最低点。',
+    'Map': '平面图',
+    'momentum': '动量',
+    'minimum': '最低点',
+    'start': '起点',
+    'loss': '损失',
+    "The valley loss as a 3D surface, with the three optimizers' paths on it": '山谷形状的损失画成 3D 曲面，上面是三个优化器走过的路径',
+    'Height is ln(1 + loss), so the very high parts don’t hide the bottom of the valley.': '高度是 ln(1 + loss)，这样很高的部分不会挡住谷底。',
+    'Press Play to start the race.': '按“播放 60 步”开始比赛。',
+    'Ravine loss as a contour map with three optimizer paths': '山谷形状的损失画成等高线图，上面有三个优化器的路径',
+    'minimum (0, 0)': '最低点 (0, 0)',
+    'start (−4, 1)': '起点 (−4, 1)',
+    'Each ring is one loss level. The rings are squeezed: the valley is 25 times steeper across (w2) than along (w1).': '每个圈是一个损失等高线。这些圈被压扁了：山谷横向（w2）比纵向（w1）陡 25 倍。',
+    'to (0, 0)': '到 (0, 0) 的距离',
+    'grew very large: each step jumps past the lowest point and lands farther away': '变得非常大：每一步都跳过最低点，落得更远',
+    'last update: —': '上一次更新：—',
+    'step = {s}·m̂/√v̂ per weight;': '每个权重的步长 = {s}·m̂/√v̂；',
+    'One step': '走一步',
+    '10 steps': '走 10 步',
+    'Pause': '暂停',
+    'Play 60 steps': '播放 60 步',
+    'steps: {n}': '步数：{n}',
+    'SGD and momentum lr': 'SGD 和动量的 lr',
+    'momentum β': '动量 β',
+    'Adam lr': 'Adam 的 lr',
+    'After {n} step,': '走了 {n} 步，',
+    'After {n} steps,': '走了 {n} 步，',
+    'is closest to the bottom.': '离谷底最近。',
+    'The gradient is g = (w1, 25·w2): 25 times steeper across the valley than along it.': '梯度是 g = (w1, 25·w2)：横穿山谷的方向比顺着山谷的方向陡 25 倍。',
+    'Adam’s gradient on the last step was ({a}, {b}).': 'Adam 上一步的梯度是 ({a}, {b})。',
+  })
 
   const START: [number, number] = [-4, 1]
   const LR0 = 0.03, BETA0 = 0.9, ALR0 = 0.3
@@ -83,7 +122,7 @@
   const clampXY = ([a, b]: [number, number]) => ({ x: Math.max(RX[0], Math.min(RX[1], a)), y: Math.max(RY[0], Math.min(RY[1], b)) })
   const paths3d = $derived([
     { points: runs.sgd.path.map(clampXY), color: 'cat-5' as const, label: 'SGD' },
-    { points: runs.mom.path.map(clampXY), color: 'cat-3' as const, label: 'momentum' },
+    { points: runs.mom.path.map(clampXY), color: 'cat-3' as const, label: tl('momentum') },
     { points: runs.adam.path.map(clampXY), color: 'cat-1' as const, label: 'Adam' },
   ])
 
@@ -101,9 +140,9 @@
 </script>
 
 <LabFrame
-  title="Three optimizers, one valley"
-  hint="All three start at (−4, 1). Take steps or press Play and see which one reaches the minimum first."
-  views={[{ id: 'map', label: 'Map' }, { id: '3d', label: '3D' }]}
+  title={tl('Three optimizers, one valley')}
+  hint={tl('All three start at (−4, 1). Take steps or press Play and see which one reaches the minimum first.')}
+  views={[{ id: 'map', label: tl('Map') }, { id: '3d', label: '3D' }]}
   bind:view
   onreset={reset}
   resetDisabled={!changed}
@@ -111,14 +150,14 @@
   {#if view === '3d'}
     <Surface3D
       f={ravine} xRange={RX} yRange={RY} zTransform={Math.log1p} res={60}
-      paths={paths3d} best={{ x: 0, y: 0 }} bestLabel="minimum" start={{ x: START[0], y: START[1] }} height={0.75} view={{ azimuth: 6, elevation: 44 }}
+      paths={paths3d} best={{ x: 0, y: 0 }} bestLabel={tl('minimum')} start={{ x: START[0], y: START[1] }} height={0.75} view={{ azimuth: 6, elevation: 44 }}
       aspect={(RY[1] - RY[0]) / (RX[1] - RX[0])}
-      axes={{ x: 'w1', y: 'w2', z: 'loss' }}
-      ariaLabel="The valley loss as a 3D surface, with the three optimizers' paths on it"
+      axes={{ x: 'w1', y: 'w2', z: tl('loss') }}
+      ariaLabel={tl("The valley loss as a 3D surface, with the three optimizers' paths on it")}
     />
-    <p class="cap">Height is ln(1 + loss), so the very high parts don’t hide the bottom of the valley. {#if t === 0}Press Play to start the race.{/if}</p>
+    <p class="cap">{tl('Height is ln(1 + loss), so the very high parts don’t hide the bottom of the valley.')} {#if t === 0}{tl('Press Play to start the race.')}{/if}</p>
   {:else}
-    <svg viewBox="-7 -3 109 70" use:readable aria-label="Ravine loss as a contour map with three optimizer paths">
+    <svg viewBox="-7 -3 109 70" use:readable aria-label={tl('Ravine loss as a contour map with three optimizer paths')}>
       <rect x="0" y="0" width="100" height="60" class="plot" />
       <defs><clipPath id="opt-plot"><rect x="0" y="0" width="100" height="60" /></clipPath></defs>
       <g clip-path="url(#opt-plot)">
@@ -134,13 +173,13 @@
         <polyline points={clampPath(runs.mom.path)} class="p mom" />
         <polyline points={clampPath(runs.adam.path)} class="p adam" />
       </g>
-      <text x={px(0) - 2} y={py(0) + 4.6} class="tick ok halo end">minimum (0, 0)</text>
+      <text x={px(0) - 2} y={py(0) + 4.6} class="tick ok halo end">{tl('minimum (0, 0)')}</text>
       <circle cx={px(0)} cy={py(0)} r="1.3" class="best" />
       <circle cx={px(START[0])} cy={py(START[1])} r="1.6" class="start" />
       {#each rows as [, run, k]}
         {#if !run.dead}<circle cx={px(head(run)[0])} cy={py(head(run)[1])} r="1.2" class="hd {k}" />{/if}
       {/each}
-      <text x={px(START[0]) + 2.5} y={py(START[1]) - 1.8} class="tick lbl">start (−4, 1)</text>
+      <text x={px(START[0]) + 2.5} y={py(START[1]) - 1.8} class="tick lbl">{tl('start (−4, 1)')}</text>
       {#each [-4, -2, 0, 2, 4] as tx}
         <line x1={px(tx)} x2={px(tx)} y1="60" y2="61.5" class="tk" />
         <text x={px(tx)} y="64.2" class="tick mid">{String(tx).replace('-', '−')}</text>
@@ -152,28 +191,28 @@
       <text x="100" y="66.5" class="tick end name">w1</text>
       <text x="-2.3" y="-0.5" class="tick end name">w2</text>
     </svg>
-    <p class="cap">Each ring is one loss level. The rings are squeezed: the valley is 25 times steeper across (w2) than along (w1).</p>
+    <p class="cap">{tl('Each ring is one loss level. The rings are squeezed: the valley is 25 times steeper across (w2) than along (w1).')}</p>
   {/if}
 
   <div class="tbl">
     <table>
-      <thead><tr><th></th><th>w1</th><th>w2</th><th>loss</th><th>to (0, 0)</th></tr></thead>
+      <thead><tr><th></th><th>w1</th><th>w2</th><th>{tl('loss')}</th><th>{tl('to (0, 0)')}</th></tr></thead>
       <tbody>
         {#each rows as [name, run, k]}
           <tr class:lead={leader === name} class="main">
-            <td class="nm"><i class="sw {k}"></i>{name}</td>
+            <td class="nm"><i class="sw {k}"></i>{tl(name)}</td>
             {#if run.dead}
-              <td colspan="4" class="bad">grew very large: each step jumps past the lowest point and lands farther away</td>
+              <td colspan="4" class="bad">{tl('grew very large: each step jumps past the lowest point and lands farther away')}</td>
             {:else}
               <td>{f(run.s.w[0])}</td><td>{f(run.s.w[1])}</td><td>{f(ravine(...run.s.w))}</td><td>{f(dist(run), 3)}</td>
             {/if}
           </tr>
           {#if !run.dead}
             <tr class="eqrow"><td colspan="5">
-              {#if t === 0}last update: —
+              {#if t === 0}{tl('last update: —')}
               {:else if k === 'sgd'}w ← w − {lr.toFixed(2)}·g
               {:else if k === 'mom'}u ← {beta.toFixed(2)}·u + g = ({f(run.s.m[0], 3)}, {f(run.s.m[1], 3)}); w ← w − {lr.toFixed(2)}·u
-              {:else}step = {alr.toFixed(2)}·m̂/√v̂ per weight; m = ({f(run.s.m[0], 3)}, {f(run.s.m[1], 3)}), v = ({f(run.s.v[0], 3)}, {f(run.s.v[1], 3)})
+              {:else}{tl('step = {s}·m̂/√v̂ per weight;', { s: alr.toFixed(2) })} m = ({f(run.s.m[0], 3)}, {f(run.s.m[1], 3)}), v = ({f(run.s.v[0], 3)}, {f(run.s.v[1], 3)})
               {/if}
             </td></tr>
           {/if}
@@ -183,29 +222,29 @@
   </div>
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => step(1)}>One step</button>
-    <button class="lab-btn" onclick={() => step(10)}>10 steps</button>
-    <button class="lab-btn" onclick={play}>{playing ? 'Pause' : 'Play 60 steps'}</button>
-    <span class="count">steps: {t}</span>
+    <button class="lab-btn primary" onclick={() => step(1)}>{tl('One step')}</button>
+    <button class="lab-btn" onclick={() => step(10)}>{tl('10 steps')}</button>
+    <button class="lab-btn" onclick={play}>{playing ? tl('Pause') : tl('Play 60 steps')}</button>
+    <span class="count">{tl('steps: {n}', { n: t })}</span>
     <div class="knobs">
-      <label>SGD and momentum lr <input type="range" min="0.01" max="0.1" step="0.01" bind:value={lr} oninput={restart} /> <b>{lr.toFixed(2)}</b></label>
-      <label>momentum β <input type="range" min="0" max="0.99" step="0.01" bind:value={beta} oninput={restart} /> <b>{beta.toFixed(2)}</b></label>
-      <label>Adam lr <input type="range" min="0.05" max="1" step="0.05" bind:value={alr} oninput={restart} /> <b>{alr.toFixed(2)}</b></label>
+      <label>{tl('SGD and momentum lr')} <input type="range" min="0.01" max="0.1" step="0.01" bind:value={lr} oninput={restart} /> <b>{lr.toFixed(2)}</b></label>
+      <label>{tl('momentum β')} <input type="range" min="0" max="0.99" step="0.01" bind:value={beta} oninput={restart} /> <b>{beta.toFixed(2)}</b></label>
+      <label>{tl('Adam lr')} <input type="range" min="0.05" max="1" step="0.05" bind:value={alr} oninput={restart} /> <b>{alr.toFixed(2)}</b></label>
     </div>
   {/snippet}
 
   {#snippet readout()}
-    {#if leader}After {t} step{t === 1 ? '' : 's'}, <b>{leader}</b> is closest to the bottom.{/if}
-    The gradient is g = (w1, 25·w2): 25 times steeper across the valley than along it.
-    {#if lastG}Adam’s gradient on the last step was ({f(lastG[0], 3)}, {f(lastG[1], 3)}).{/if}
+    {#if leader}{tl(t === 1 ? 'After {n} step,' : 'After {n} steps,', { n: t })} <b>{tl(leader)}</b> {tl('is closest to the bottom.')}{/if}
+    {tl('The gradient is g = (w1, 25·w2): 25 times steeper across the valley than along it.')}
+    {#if lastG}{tl('Adam’s gradient on the last step was ({a}, {b}).', { a: f(lastG[0], 3), b: f(lastG[1], 3) })}{/if}
   {/snippet}
 
   {#snippet legend()}
     <span><i class="sw sgd"></i>SGD</span>
-    <span><i class="sw mom"></i>momentum</span>
+    <span><i class="sw mom"></i>{tl('momentum')}</span>
     <span><i class="sw adam"></i>Adam</span>
-    <span><i class="sw ok round"></i>minimum</span>
-    <span><i class="sw ring round"></i>start</span>
+    <span><i class="sw ok round"></i>{tl('minimum')}</span>
+    <span><i class="sw ring round"></i>{tl('start')}</span>
   {/snippet}
 </LabFrame>
 

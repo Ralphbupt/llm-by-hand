@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useT } from '@lib/i18nSvelte'
+  const t = useT()
   /** Matrix grid: editable cells, hover highlights the row and column, recomputes live from upstream data */
   type Props = {
     value: number[][]
@@ -58,7 +60,7 @@
               {#if masked.some((c) => c.i === i && c.j === j)}
                 <span class="masked">?</span>
               {:else if editable}
-                <input value={fmt(v)} inputmode="decimal" aria-label={`${label ?? 'matrix'} row ${i} column ${j}`} onchange={(e) => edit(i, j, e.currentTarget.value)} />
+                <input value={fmt(v)} inputmode="decimal" aria-label={t('{m} row {i} column {j}', { m: label ?? t('matrix'), i, j })} onchange={(e) => edit(i, j, e.currentTarget.value)} />
               {:else}
                 {fmt(v)}
               {/if}

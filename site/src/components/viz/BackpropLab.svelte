@@ -9,10 +9,44 @@
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A gradient that a question on the page asks for stays "?" until that question is solved.
   type Key = 'dLda' | 'dLdz' | 'dLdw'
-  let { hide = {} }: { hide?: Partial<Record<Key, string>> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Partial<Record<Key, string>>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Forward pass done. Press “Step back” to start the gradient at L.': '前向传播完成。按“往回一步”，让梯度从 L 出发。',
+    'Step 1 of 4: the gradient leaves L and reaches a.': '第 1 步（共 4 步）：梯度离开 L，到达 a。',
+    'Step 2 of 4: at a, multiply by the local gradient a(1 − a). Compute ∂L/∂z.': '第 2 步（共 4 步）：在 a 处，乘上局部梯度 a(1 − a)。算出 ∂L/∂z。',
+    'Step 3 of 4: the gradient reaches z.': '第 3 步（共 4 步）：梯度到达 z。',
+    'Step 4 of 4: the gradient reaches w, x and b. Done.': '第 4 步（共 4 步）：梯度到达 w、x 和 b。完成。',
+    'Send the gradient back from L, one link at a time': '把梯度从 L 送回去，一次一环',
+    'Press “Step back” to move the gradient one box further back. The numbers in w, x, b and the target y can be edited.': '按“往回一步”，梯度就再往回走一个方框。w、x、b 和目标值 y 里的数都可以改。',
+    'Computation graph: z = w·x + b, a = σ(z), L = (a − y)²': '计算图：z = w·x + b，a = σ(z)，L = (a − y)²',
+    '{name} (editable)': '{name}（可编辑）',
+    'target y': '目标值 y',
+    'Forward:': '前向：',
+    'At L: local gradient': '在 L 处：局部梯度',
+    'At a: local gradient': '在 a 处：局部梯度',
+    'Chain rule:': '链式法则：',
+    '(compute it, then step back)': '（先算出来，再往回一步）',
+    'At z: local gradients': '在 z 处：局部梯度',
+    'So': '所以',
+    '.': '。',
+    '← Step back': '← 往回一步',
+    'Undo step →': '撤销一步 →',
+    'step {k} / {n}': '第 {k} / {n} 步',
+    'forward value': '前向的值',
+    'gradient, flowing back': '梯度，往回流',
+    'where the gradient is now': '梯度现在所在的位置',
+    'Check ∂L/∂w with a small change': '用一个小改动检验 ∂L/∂w',
+    'Change w by ε both ways and compare the slope with the chain-rule answer. Move ε to change the size of the change.': '把 w 往两个方向各改 ε，拿得到的斜率和链式法则的答案比较。移动 ε 来改变改动的大小。',
+    'chain rule': '链式法则',
+    'epsilon, as a power of ten': 'ε，以 10 的幂表示',
+    'difference': '差距',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -88,7 +122,7 @@
     'Step 2 of 4: at a, multiply by the local gradient a(1 − a). Compute ∂L/∂z.',
     'Step 3 of 4: the gradient reaches z.',
     'Step 4 of 4: the gradient reaches w, x and b. Done.',
-  ]
+  ].map((s) => t(s))
 </script>
 
 {#snippet grad(sym: string, g: number | null)}
@@ -98,18 +132,18 @@
 {#snippet gv(k: Key, v: number)}<b class="gv" class:ask={locked(k)}>{gf(k, v)}</b>{/snippet}
 
 <LabFrame
-  title="Send the gradient back from L, one link at a time"
-  hint="Press “Step back” to move the gradient one box further back. The numbers in w, x, b and the target y can be edited."
+  title={t('Send the gradient back from L, one link at a time')}
+  hint={t('Press “Step back” to move the gradient one box further back. The numbers in w, x, b and the target y can be edited.')}
   onreset={resetAll}
   resetDisabled={!changed}
 >
   <div class="bp">
-    <div class="chain" role="group" aria-label="Computation graph: z = w·x + b, a = σ(z), L = (a − y)²">
+    <div class="chain" role="group" aria-label={t('Computation graph: z = w·x + b, a = σ(z), L = (a − y)²')}>
       <div class="leaves" class:reached={show(4)} class:cur={cur === 'leaves'}>
         {#each [['w', w, (v: number) => (w = v)], ['x', x, (v: number) => (x = v)], ['b', b, (v: number) => (b = v)]] as [name, v, set]}
           <div class="node leaf">
             <label class="nm" for="bp-{name}">{name}</label>
-            <input id="bp-{name}" class="val in" type="number" step="0.1" value={v} aria-label="{name} (editable)"
+            <input id="bp-{name}" class="val in" type="number" step="0.1" value={v} aria-label={t('{name} (editable)', { name: name as string })}
               oninput={(ev) => edit(set as (v: number) => void, ev)} />
             {@render grad(name as string, leafG[name as 'w' | 'x' | 'b'])}
           </div>
@@ -139,50 +173,50 @@
         <span class="nm">L = (a − y)²</span>
         <span class="val">{f(fw.L)}</span>
         {@render grad('L', lG)}
-        <label class="tgt">target y <input class="in" type="number" step="0.1" value={y} oninput={(ev) => edit((v) => (y = v), ev)} /></label>
+        <label class="tgt">{t('target y')} <input class="in" type="number" step="0.1" value={y} oninput={(ev) => edit((v) => (y = v), ev)} /></label>
       </div>
     </div>
 
     <ol class="log">
-      <li>Forward: z = {f(w)}·{f(x)} + {f(b)} = <b>{f(fw.z)}</b>, a = σ({f(fw.z)}) = <b>{f(fw.a)}</b>, L = ({f(fw.a)} − {f(y)})² = <b>{f(fw.L)}</b></li>
-      {#if show(1)}<li>At L: local gradient ∂L/∂a = 2(a − y) = 2 × ({f(fw.a - y)}) = {@render gv('dLda', fw.dLda)}</li>{/if}
-      {#if show(2)}<li>At a: local gradient ∂a/∂z = a(1 − a) = {f(fw.a)} × {f(1 - fw.a)} = <b class="gv">{f(fw.dadz)}</b>.
-        Chain rule: ∂L/∂z = ∂L/∂a × ∂a/∂z = {gf('dLda', fw.dLda)} × {f(fw.dadz)} = {#if show(3)}{@render gv('dLdz', fw.dLdz)}{:else}<b class="gv ask">?</b> <span class="dim">(compute it, then step back)</span>{/if}</li>{/if}
-      {#if show(4)}<li>At z: local gradients ∂z/∂w = x = {f(x)}, ∂z/∂b = 1, ∂z/∂x = w = {f(w)}.
-        So ∂L/∂w = {gf('dLdz', fw.dLdz)} × {f(x)} = {@render gv('dLdw', fw.dLdw)}, ∂L/∂b = {@render gv('dLdz', fw.dLdb)}</li>{/if}
+      <li>{t('Forward:')} z = {f(w)}·{f(x)} + {f(b)} = <b>{f(fw.z)}</b>, a = σ({f(fw.z)}) = <b>{f(fw.a)}</b>, L = ({f(fw.a)} − {f(y)})² = <b>{f(fw.L)}</b></li>
+      {#if show(1)}<li>{t('At L: local gradient')} ∂L/∂a = 2(a − y) = 2 × ({f(fw.a - y)}) = {@render gv('dLda', fw.dLda)}</li>{/if}
+      {#if show(2)}<li>{t('At a: local gradient')} ∂a/∂z = a(1 − a) = {f(fw.a)} × {f(1 - fw.a)} = <b class="gv">{f(fw.dadz)}</b>{t('.')}
+        {t('Chain rule:')} ∂L/∂z = ∂L/∂a × ∂a/∂z = {gf('dLda', fw.dLda)} × {f(fw.dadz)} = {#if show(3)}{@render gv('dLdz', fw.dLdz)}{:else}<b class="gv ask">?</b> <span class="dim">{t('(compute it, then step back)')}</span>{/if}</li>{/if}
+      {#if show(4)}<li>{t('At z: local gradients')} ∂z/∂w = x = {f(x)}, ∂z/∂b = 1, ∂z/∂x = w = {f(w)}{t('.')}
+        {t('So')} ∂L/∂w = {gf('dLdz', fw.dLdz)} × {f(x)} = {@render gv('dLdw', fw.dLdw)}, ∂L/∂b = {@render gv('dLdz', fw.dLdb)}</li>{/if}
     </ol>
 
   </div>
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => (stage = Math.min(STEPS, stage + 1))} disabled={stage >= STEPS}>← Step back</button>
-    <button class="lab-btn" onclick={() => (stage = Math.max(0, stage - 1))} disabled={stage <= 0}>Undo step →</button>
-    <span class="count">step {stage} / {STEPS}</span>
+    <button class="lab-btn primary" onclick={() => (stage = Math.min(STEPS, stage + 1))} disabled={stage >= STEPS}>{t('← Step back')}</button>
+    <button class="lab-btn" onclick={() => (stage = Math.max(0, stage - 1))} disabled={stage <= 0}>{t('Undo step →')}</button>
+    <span class="count">{t('step {k} / {n}', { k: stage, n: STEPS })}</span>
   {/snippet}
 
   {#snippet readout()}{STEP_TEXT[stage]}{/snippet}
 
   {#snippet legend()}
-    <span><b class="sw fwd">0.5</b> forward value</span>
-    <span><b class="sw gr">∂L/∂·</b> gradient, flowing back</span>
-    <span><span class="sw cur-sw"></span> where the gradient is now</span>
+    <span><b class="sw fwd">0.5</b> {t('forward value')}</span>
+    <span><b class="sw gr">∂L/∂·</b> {t('gradient, flowing back')}</span>
+    <span><span class="sw cur-sw"></span> {t('where the gradient is now')}</span>
   {/snippet}
 </LabFrame>
 
 <LabFrame
-  title="Check ∂L/∂w with a small change"
-  hint="Change w by ε both ways and compare the slope with the chain-rule answer. Move ε to change the size of the change."
+  title={t('Check ∂L/∂w with a small change')}
+  hint={t('Change w by ε both ways and compare the slope with the chain-rule answer. Move ε to change the size of the change.')}
   onreset={() => (logEps = -5)}
   resetDisabled={logEps === -5}
 >
   <div class="mono">
     <div>(L(w + ε) − L(w − ε)) / 2ε = <b>{locked('dLdw') ? '?' : numeric.toPrecision(10)}</b></div>
-    <div>chain rule ∂L/∂w = <b>{locked('dLdw') ? '?' : fw.dLdw.toPrecision(10)}</b></div>
+    <div>{t('chain rule')} ∂L/∂w = <b>{locked('dLdw') ? '?' : fw.dLdw.toPrecision(10)}</b></div>
   </div>
   {#snippet controls()}
-    <label class="eps">ε = <b>{e(eps)}</b> <input type="range" min="-14" max="0" step="1" bind:value={logEps} aria-label="epsilon, as a power of ten" /></label>
+    <label class="eps">ε = <b>{e(eps)}</b> <input type="range" min="-14" max="0" step="1" bind:value={logEps} aria-label={t('epsilon, as a power of ten')} /></label>
   {/snippet}
-  {#snippet readout()}difference = <b class:okc={gap < 1e-8} class:badc={gap > 1e-6}>{e(gap)}</b>{/snippet}
+  {#snippet readout()}{t('difference')} = <b class:okc={gap < 1e-8} class:badc={gap > 1e-6}>{e(gap)}</b>{/snippet}
 </LabFrame>
 
 <style>

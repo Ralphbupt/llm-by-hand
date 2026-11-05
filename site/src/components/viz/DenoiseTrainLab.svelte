@@ -11,6 +11,31 @@
     rng, makeShape, SITE_SCHEDULE as S, addNoise, timeFeatures, initLayers, adamFor, trainStep,
     predictNoise, guessClean, prepCanvas, drawAxes, drawPoints, themeColors, canvasFont, type Pt, type Layer, type Adam,
   } from '@lib/diffusion'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is the noise step here, so the translator is `tx`
+  const tx = useT({
+    'always guess 0': '永远猜 0',
+    'lower limit ≈ 0.32': '下限 ≈ 0.32',
+    'Train a noise-guessing network in your browser': '在浏览器里训练一个猜噪声的网络',
+    'Press Train. Then drag t to see how well it guesses at each amount of noise.': '按“训练”。然后拖动 t，看它在不同噪声量下猜得有多准。',
+    "Noisy points and the network's guess of where each one started": '加噪后的点，以及网络猜的每个点的起点',
+    'Loss curve': '损失曲线',
+    'Flat is normal. From a noisy point alone, nobody can tell exactly which noise was added, so some error always stays.': '曲线变平是正常的。只看一个加噪后的点，谁也说不准加的到底是哪份噪声，所以总会留下一些误差。',
+    'look at step': '查看步数',
+    'Noise step t to look at': '要查看的加噪步数 t',
+    '❚❚ Pause': '❚❚ 暂停',
+    '▶ Keep training': '▶ 继续训练',
+    '▶ Train': '▶ 训练',
+    'step {steps} of {MAX} · loss (average of the last 50 steps) {loss}': '第 {steps} / {MAX} 步 · 损失（最近 50 步的平均）{loss}',
+    'noisy points at step t': '第 t 步加噪后的点',
+    'the network’s guess of where each started: (x_t − √(1 − ᾱ)·guess) / √ᾱ': '网络猜的每个点的起点：(x_t − √(1 − ᾱ)·guess) / √ᾱ',
+    'always guessing 0': '永远猜 0',
+    'the lowest loss this data allows': '这份数据允许的最低损失',
+  })
 
   const SPAN = 3.2, BATCH = 128, LR = 3e-3, MAX = 4000
   const data = makeShape('spiral', 2000, rng(1))
@@ -91,11 +116,11 @@
     const fs = canvasFont(0.72)
     g.fillStyle = c.dim; g.font = `${fs}px ui-monospace, monospace`
     g.textAlign = 'right'; g.fillText('1.0', 26, Y(1) + fs * 0.35); g.fillText('0', 26, Y(0) + fs * 0.35)
-    g.fillText('always guess 0', X(n), Y(1) - 4)
+    g.fillText(tx('always guess 0'), X(n), Y(1) - 4)
     // the floor: shown once the curve has flattened, so it doesn't answer the "where does it end?" guess in advance
     if (steps >= FLOOR_AFTER) {
       g.setLineDash([2, 3]); g.strokeStyle = c.ok; g.beginPath(); g.moveTo(X(0), Y(FLOOR)); g.lineTo(X(n), Y(FLOOR)); g.stroke(); g.setLineDash([])
-      g.fillStyle = c.ok; g.fillText('lower limit ≈ 0.32', X(n), Y(FLOOR) + fs + 2)
+      g.fillStyle = c.ok; g.fillText(tx('lower limit ≈ 0.32'), X(n), Y(FLOOR) + fs + 2)
     }
     g.strokeStyle = c.accent; g.lineWidth = 2; g.beginPath()
     curve.forEach((v, k) => (k ? g.lineTo(X(k + 1), Y(v)) : g.moveTo(X(k + 1), Y(v))))
@@ -115,36 +140,36 @@
 </script>
 
 <LabFrame
-  title="Train a noise-guessing network in your browser"
-  hint="Press Train. Then drag t to see how well it guesses at each amount of noise."
+  title={tx('Train a noise-guessing network in your browser')}
+  hint={tx('Press Train. Then drag t to see how well it guesses at each amount of noise.')}
   onreset={reset}
   resetDisabled={steps === 0}
 >
   <div class="grid">
-    <canvas bind:this={cv} class="board" aria-label="Noisy points and the network's guess of where each one started"></canvas>
+    <canvas bind:this={cv} class="board" aria-label={tx("Noisy points and the network's guess of where each one started")}></canvas>
     <div class="side">
-      <canvas bind:this={chart} class="chart" aria-label="Loss curve"></canvas>
-      {#if steps >= FLOOR_AFTER}<p class="flat">Flat is normal. From a noisy point alone, nobody can tell exactly which noise was added, so some error always stays.</p>{/if}
+      <canvas bind:this={chart} class="chart" aria-label={tx('Loss curve')}></canvas>
+      {#if steps >= FLOOR_AFTER}<p class="flat">{tx('Flat is normal. From a noisy point alone, nobody can tell exactly which noise was added, so some error always stays.')}</p>{/if}
       <label class="slider">
-        <span>look at step t = <b>{t}</b></span>
-        <input type="range" min="1" max={S.T} step="1" bind:value={t} aria-label="Noise step t to look at" />
+        <span>{tx('look at step')} t = <b>{t}</b></span>
+        <input type="range" min="1" max={S.T} step="1" bind:value={t} aria-label={tx('Noise step t to look at')} />
       </label>
     </div>
   </div>
 
   {#snippet controls()}
-    <button type="button" class="lab-btn primary" onclick={start}>{running ? '❚❚ Pause' : steps ? '▶ Keep training' : '▶ Train'}</button>
+    <button type="button" class="lab-btn primary" onclick={start}>{running ? tx('❚❚ Pause') : steps ? tx('▶ Keep training') : tx('▶ Train')}</button>
   {/snippet}
 
   {#snippet readout()}
-    step {steps} of {MAX} · loss (average of the last 50 steps) {lastLoss === null ? '—' : lastLoss.toFixed(3)}
+    {tx('step {steps} of {MAX} · loss (average of the last 50 steps) {loss}', { steps, MAX, loss: lastLoss === null ? '—' : lastLoss.toFixed(3) })}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw noisy"></i>noisy points at step t</span>
-    <span><i class="sw guess"></i>the network’s guess of where each started: (x_t − √(1 − ᾱ)·guess) / √ᾱ</span>
-    <span><i class="ln ref"></i>always guessing 0</span>
-    {#if steps >= FLOOR_AFTER}<span><i class="ln floor"></i>the lowest loss this data allows</span>{/if}
+    <span><i class="sw noisy"></i>{tx('noisy points at step t')}</span>
+    <span><i class="sw guess"></i>{tx('the network’s guess of where each started: (x_t − √(1 − ᾱ)·guess) / √ᾱ')}</span>
+    <span><i class="ln ref"></i>{tx('always guessing 0')}</span>
+    {#if steps >= FLOOR_AFTER}<span><i class="ln floor"></i>{tx('the lowest loss this data allows')}</span>{/if}
   {/snippet}
 </LabFrame>
 

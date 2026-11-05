@@ -7,6 +7,39 @@
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
   import { softmax, topK, topP, sampleIndex, followsRules, type Trigram } from '@lib/generation'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is a loop counter below, so the translator is `tx`
+  const tx = useT({
+    'greedy': '贪心',
+    'temperature': '温度',
+    'Different or correct? You can’t have both at the maximum': '不同还是正确？两者不能同时达到最大',
+    'Faint curves: each strategy at every value of its setting. Pick a strategy, set it, and write 200 continuations to add your own point.': '浅色曲线：每种策略在它的设置取各个值时的结果。选一种策略，调好设置，写 200 个续写，加上你自己的点。',
+    'Loading the counting model…': '正在加载计数模型…',
+    'Each strategy as a curve: different continuations across, fraction that follows the rules up; your runs as labeled points': '每种策略画成一条曲线：横轴是不同续写的个数，纵轴是符合规则的比例；你的每次运行是带标签的点',
+    'different continuations (of 200) →': '不同的续写（共 200 个）→',
+    '↑ fraction that follows the rules': '↑ 符合规则的比例',
+    'ideal': '理想',
+    '{a} {b}: {d} different, {v}% follow the rules': '{a} {b}：{d} 个不同，{v}% 符合规则',
+    'greedy: {d} different, {v}%': '贪心：{d} 个不同，{v}%',
+    '/ 200 different': '/ 200 个不同',
+    '(diversity)': '（多样性）',
+    'follow the sentence rules': '符合句子规则',
+    '(quality)': '（质量）',
+    'Strategy': '策略',
+    'Write 200 continuations': '写 200 个续写',
+    '{name}: {d} of 200 different · {v}% follow the rules': '{name}：200 个里有 {d} 个不同 · {v}% 符合规则',
+    'Press “Write 200 continuations” to add a point for {name}.': '按“写 200 个续写”，为 {name} 加一个点。',
+    'temperature sweep': '温度扫描',
+    'top-k sweep': 'top-k 扫描',
+    'top-p sweep': 'top-p 扫描',
+    'your runs': '你的运行',
+    'underlined': '带下划线的',
+    ' words break the rules · each run uses fresh random numbers': '词不符合规则 · 每次运行都用新的随机数',
+  })
 
   let model = $state<Trigram | null>(null)
   onMount(() => { fetch('/data/generation/trigram.json').then((r) => r.json()).then((m) => { model = m; sweep(); generate() }) })
@@ -19,7 +52,7 @@
   let result = $state<{ distinct: number; valid: number; examples: { words: string[]; ok: boolean[] }[] } | null>(null)
   // every run lands on the chart, so the trade-off between the two numbers shows up as you try strategies
   let runs = $state<{ name: string; distinct: number; valid: number }[]>([])
-  const nameOf = () => (strat === 'greedy' ? 'greedy' : strat === 'temp' ? `T ${T.toFixed(1)}` : strat === 'topk' ? `top-k ${k}` : `top-p ${p.toFixed(2)}`)
+  const nameOf = () => (strat === 'greedy' ? tx('greedy') : strat === 'temp' ? `T ${T.toFixed(1)}` : strat === 'topk' ? `top-k ${k}` : `top-p ${p.toFixed(2)}`)
 
   type Setting = { strat: Strat; T: number; k: number; p: number }
   const current = (): Setting => ({ strat, T, k, p })
@@ -59,7 +92,7 @@
     const mk = (strat: Strat, label: string, list: number[], f: (v: number) => Setting, tag: (v: number) => string): Curve =>
       ({ strat, label, pts: list.map((v) => ({ ...runWith(f(v)), tag: tag(v) })) })
     curves = [
-      mk('temp', 'temperature', T_, (v) => ({ strat: 'temp', T: v, k, p }), (v) => `T ${v}`),
+      mk('temp', tx('temperature'), T_, (v) => ({ strat: 'temp', T: v, k, p }), (v) => `T ${v}`),
       mk('topk', 'top-k', K_, (v) => ({ strat: 'topk', T, k: v, p }), (v) => `k ${v}`),
       mk('topp', 'top-p', P_, (v) => ({ strat: 'topp', T, k, p: v }), (v) => `p ${v}`),
     ]
@@ -83,29 +116,29 @@
 </script>
 
 <LabFrame
-  title="Different or correct? You can’t have both at the maximum"
-  hint="Faint curves: each strategy at every value of its setting. Pick a strategy, set it, and write 200 continuations to add your own point."
+  title={tx('Different or correct? You can’t have both at the maximum')}
+  hint={tx('Faint curves: each strategy at every value of its setting. Pick a strategy, set it, and write 200 continuations to add your own point.')}
   onreset={reset}
   resetDisabled={runs.length <= 1 && strat === 'temp' && T === 1}
 >
   {#if !model}
     <div class="skeleton" aria-hidden="true"></div>
-    <p class="dim">Loading the counting model…</p>
+    <p class="dim">{tx('Loading the counting model…')}</p>
   {:else}
-    <svg class="chart" use:readable viewBox="0 0 {CW} {CH}" role="img" aria-label="Each strategy as a curve: different continuations across, fraction that follows the rules up; your runs as labeled points">
+    <svg class="chart" use:readable viewBox="0 0 {CW} {CH}" role="img" aria-label={tx('Each strategy as a curve: different continuations across, fraction that follows the rules up; your runs as labeled points')}>
       {#each [0, 0.25, 0.5, 0.75, 1] as v}<line x1={L} y1={cy(v)} x2={CW - 8} y2={cy(v)} class="gl" /><text x={L - 6} y={cy(v) + 3.5} class="tk end">{v * 100}%</text>{/each}
       {#each [0, 50, 100, 150, 200] as d}<line x1={cx(d)} y1={cy(0)} x2={cx(d)} y2={cy(0) + 4} class="ax" /><text x={cx(d)} y={cy(0) + 15} class="tk mid">{d}</text>{/each}
       <line x1={L} y1={cy(0)} x2={CW - 8} y2={cy(0)} class="ax" />
       <line x1={L} y1={cy(0)} x2={L} y2={TOP - 8} class="ax" />
-      <text x={(L + CW - 8) / 2} y={CH - 6} class="tk mid axt">different continuations (of 200) →</text>
-      <text x={L - 30} y="12" class="tk axt">↑ fraction that follows the rules</text>
+      <text x={(L + CW - 8) / 2} y={CH - 6} class="tk mid axt">{tx('different continuations (of 200) →')}</text>
+      <text x={L - 30} y="12" class="tk axt">{tx('↑ fraction that follows the rules')}</text>
       <rect x={cx(150)} y={cy(1)} width={cx(200) - cx(150)} height={cy(0.85) - cy(1)} class="goal" />
-      <text x={cx(175)} y={cy(0.925) + 3.5} class="tk mid goal-t">ideal</text>
+      <text x={cx(175)} y={cy(0.925) + 3.5} class="tk mid goal-t">{tx('ideal')}</text>
       {#each curves as c}
         <polyline points={c.pts.map((q) => `${cx(q.distinct)},${cy(q.valid)}`).join(' ')} class="curve" style:--c={curveColor[c.strat]} />
-        {#each c.pts as q}<circle cx={cx(q.distinct)} cy={cy(q.valid)} r="2.2" class="cpt" style:--c={curveColor[c.strat]}><title>{c.label} {q.tag}: {q.distinct} different, {Math.round(q.valid * 100)}% follow the rules</title></circle>{/each}
+        {#each c.pts as q}<circle cx={cx(q.distinct)} cy={cy(q.valid)} r="2.2" class="cpt" style:--c={curveColor[c.strat]}><title>{tx('{a} {b}: {d} different, {v}% follow the rules', { a: c.label, b: q.tag, d: q.distinct, v: Math.round(q.valid * 100) })}</title></circle>{/each}
       {/each}
-      {#if greedyPt}<rect x={cx(greedyPt.distinct) - 3} y={cy(greedyPt.valid) - 3} width="6" height="6" class="gpt"><title>greedy: {greedyPt.distinct} different, {Math.round(greedyPt.valid * 100)}%</title></rect>{/if}
+      {#if greedyPt}<rect x={cx(greedyPt.distinct) - 3} y={cy(greedyPt.valid) - 3} width="6" height="6" class="gpt"><title>{tx('greedy: {d} different, {v}%', { d: greedyPt.distinct, v: Math.round(greedyPt.valid * 100) })}</title></rect>{/if}
       {#each runs as r, i}
         {@const cur = i === runs.length - 1}
         <circle cx={cx(r.distinct)} cy={cy(r.valid)} r={cur ? 5.5 : 4} class="pt" class:cur />
@@ -115,8 +148,8 @@
 
     {#if result}
       <div class="score">
-        <div><span class="big">{result.distinct}</span> / 200 different <span class="dim">(diversity)</span></div>
-        <div><span class="big">{Math.round(result.valid * 100)}%</span> follow the sentence rules <span class="dim">(quality)</span></div>
+        <div><span class="big">{result.distinct}</span> {tx('/ 200 different')} <span class="dim">{tx('(diversity)')}</span></div>
+        <div><span class="big">{Math.round(result.valid * 100)}%</span> {tx('follow the sentence rules')} <span class="dim">{tx('(quality)')}</span></div>
       </div>
       <ul class="ex">
         {#each result.examples as e}
@@ -127,9 +160,9 @@
   {/if}
 
   {#snippet controls()}
-    <div class="strats" role="group" aria-label="Strategy">
+    <div class="strats" role="group" aria-label={tx('Strategy')}>
       {#each [['greedy', 'greedy'], ['temp', 'temperature'], ['topk', 'top-k'], ['topp', 'top-p']] as [v, name]}
-        <button type="button" class:on={strat === v} aria-pressed={strat === v} onclick={() => { strat = v as Strat; result = null }}>{name}</button>
+        <button type="button" class:on={strat === v} aria-pressed={strat === v} onclick={() => { strat = v as Strat; result = null }}>{tx(name)}</button>
       {/each}
     </div>
     {#if strat === 'temp'}
@@ -139,20 +172,20 @@
     {:else if strat === 'topp'}
       <label class="knob">p <b>{p.toFixed(2)}</b><input type="range" min="0.05" max="1" step="0.05" value={p} oninput={(e) => { p = +e.currentTarget.value; result = null }} /></label>
     {/if}
-    <button type="button" class="lab-btn primary" onclick={generate} disabled={!model}>Write 200 continuations</button>
+    <button type="button" class="lab-btn primary" onclick={generate} disabled={!model}>{tx('Write 200 continuations')}</button>
   {/snippet}
 
   {#snippet readout()}
-    {#if result}{nameOf()}: {result.distinct} of 200 different · {Math.round(result.valid * 100)}% follow the rules{:else}<span class="idle">Press “Write 200 continuations” to add a point for {nameOf()}.</span>{/if}
+    {#if result}{tx('{name}: {d} of 200 different · {v}% follow the rules', { name: nameOf(), d: result.distinct, v: Math.round(result.valid * 100) })}{:else}<span class="idle">{tx('Press “Write 200 continuations” to add a point for {name}.', { name: nameOf() })}</span>{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="ln" style="--c: var(--cat-1)"></i>temperature sweep</span>
-    <span class="lg"><i class="ln" style="--c: var(--cat-3)"></i>top-k sweep</span>
-    <span class="lg"><i class="ln" style="--c: var(--cat-2)"></i>top-p sweep</span>
-    <span class="lg"><i class="sq"></i>greedy</span>
-    <span class="lg"><i class="dt"></i>your runs</span>
-    <span class="lg"><u>underlined</u> words break the rules · each run uses fresh random numbers</span>
+    <span class="lg"><i class="ln" style="--c: var(--cat-1)"></i>{tx('temperature sweep')}</span>
+    <span class="lg"><i class="ln" style="--c: var(--cat-3)"></i>{tx('top-k sweep')}</span>
+    <span class="lg"><i class="ln" style="--c: var(--cat-2)"></i>{tx('top-p sweep')}</span>
+    <span class="lg"><i class="sq"></i>{tx('greedy')}</span>
+    <span class="lg"><i class="dt"></i>{tx('your runs')}</span>
+    <span class="lg"><u>{tx('underlined')}</u>{tx(' words break the rules · each run uses fresh random numbers')}</span>
   {/snippet}
 </LabFrame>
 

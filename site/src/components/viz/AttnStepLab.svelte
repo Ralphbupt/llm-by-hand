@@ -9,8 +9,28 @@
   import { attendStep, argmax } from '@lib/seq2seq'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: { score?: string; weight?: string; ctx?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { score?: string; weight?: string; ctx?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'One attention step: the decoder state s looks at the encoder states': '注意力的一步：解码器状态 s 看向编码器状态',
+    'Drag s or h₀, h₁, h₂ (or focus one and use the arrow keys). Thicker arrows get more weight.': '拖动 s 或 h₀、h₁、h₂（也可以选中一个，用方向键移动）。箭头越粗，权重越大。',
+    'Encoder states h₀, h₁, h₂, the decoder state s, and the context vector': '编码器状态 h₀、h₁、h₂，解码器状态 s，以及上下文向量',
+    'context': '上下文',
+    '{h}: drag, or use the arrow keys': '{h}：拖动，或用方向键',
+    's, the decoder state: drag, or use the arrow keys': 's，解码器状态：拖动，或用方向键',
+    'state': '状态',
+    'score h·s': '分数 h·s',
+    'weight': '权重',
+    'context = weights @ E =': 'context（上下文）= weights @ E =',
+    'Drag s or the encoder states. Thicker arrows get more weight.': '拖动 s 或编码器状态。箭头越粗，权重越大。',
+    's looks at {h} with weight {w}. The context is the weighted average of h₀, h₁, h₂.': 's 以权重 {w} 看向 {h}。上下文是 h₀、h₁、h₂ 的加权平均。',
+    's, the decoder state': 's，解码器状态',
+    'encoder states (thicker = more weight)': '编码器状态（越粗 = 权重越大）',
+    'context, the weighted average': '上下文，即加权平均',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -75,15 +95,15 @@
 </script>
 
 <LabFrame
-  title="One attention step: the decoder state s looks at the encoder states"
-  hint="Drag s or h₀, h₁, h₂ (or focus one and use the arrow keys). Thicker arrows get more weight."
+  title={t('One attention step: the decoder state s looks at the encoder states')}
+  hint={t('Drag s or h₀, h₁, h₂ (or focus one and use the arrow keys). Thicker arrows get more weight.')}
   onreset={reset}
   resetDisabled={!changed}
 >
   <div class="row">
     <svg
       bind:this={svg} use:readable viewBox="0 0 100 100" class="plane" role="group"
-      aria-label="Encoder states h₀, h₁, h₂, the decoder state s, and the context vector"
+      aria-label={t('Encoder states h₀, h₁, h₂, the decoder state s, and the context vector')}
       onpointermove={move} onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)}
     >
       <defs>
@@ -105,11 +125,11 @@
       <line x1="50" y1="50" x2={px(s[0])} y2={py(s[1])} class="dec" />
       {#if !locked('ctx')}
         <line x1="50" y1="50" x2={px(r.ctx[0])} y2={py(r.ctx[1])} class="ctx" marker-end="url(#ah-fg-{uid})" />
-        <text x={px(r.ctx[0]) + 3} y={py(r.ctx[1]) + 7} class="lbl ctx-l">context</text>
+        <text x={px(r.ctx[0]) + 3} y={py(r.ctx[1]) + 7} class="lbl ctx-l">{t('context')}</text>
       {/if}
 
       {#each E as e, i}
-        <g class="h" role="slider" tabindex="0" aria-label={`${names[i]}: drag, or use the arrow keys`}
+        <g class="h" role="slider" tabindex="0" aria-label={t('{h}: drag, or use the arrow keys', { h: names[i] })}
           aria-valuenow={e[0]} aria-valuetext={`[${f1(e[0])}, ${f1(e[1])}]`}
           onpointerdown={(ev) => grab(i, ev)} onkeydown={(ev) => nudge(i, ev)}>
           <circle cx={px(e[0])} cy={py(e[1])} r="8" class="hit" />
@@ -117,7 +137,7 @@
         </g>
         <text x={px(e[0]) + 4} y={py(e[1]) - 4} class="lbl" class:strong={i === top}>{names[i]}</text>
       {/each}
-      <g class="h" role="slider" tabindex="0" aria-label="s, the decoder state: drag, or use the arrow keys"
+      <g class="h" role="slider" tabindex="0" aria-label={t('s, the decoder state: drag, or use the arrow keys')}
         aria-valuenow={s[0]} aria-valuetext={`[${f1(s[0])}, ${f1(s[1])}]`}
         onpointerdown={(ev) => grab(3, ev)} onkeydown={(ev) => nudge(3, ev)}>
         <circle cx={px(s[0])} cy={py(s[1])} r="8" class="hit" />
@@ -128,7 +148,7 @@
 
     <div class="nums">
       <table>
-        <thead><tr><th scope="col">state</th><th scope="col">h</th><th scope="col">score h·s</th><th scope="col">weight</th></tr></thead>
+        <thead><tr><th scope="col">{t('state')}</th><th scope="col">h</th><th scope="col">{t('score h·s')}</th><th scope="col">{t('weight')}</th></tr></thead>
         <tbody>
           {#each E as e, i}
             <tr class:top={i === top && !locked('weight')}>
@@ -145,23 +165,23 @@
         </tbody>
       </table>
       <p class="formula">s = [{f1(s[0])}, {f1(s[1])}]</p>
-      <p class="formula">context = weights @ E =
+      <p class="formula">{t('context = weights @ E =')}
         {#if locked('ctx')}<span class="q">?</span>{:else}<b>[{f2(r.ctx[0])}, {f2(r.ctx[1])}]</b>{/if}</p>
     </div>
   </div>
 
   {#snippet readout()}
     {#if locked('weight')}
-      <span class="idle">Drag s or the encoder states. Thicker arrows get more weight.</span>
+      <span class="idle">{t('Drag s or the encoder states. Thicker arrows get more weight.')}</span>
     {:else}
-      s looks at {names[top]} with weight {f2(r.weights[top])}. The context is the weighted average of h₀, h₁, h₂.
+      {t('s looks at {h} with weight {w}. The context is the weighted average of h₀, h₁, h₂.', { h: names[top], w: f2(r.weights[top]) })}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="ln acc"></i>s, the decoder state</span>
-    <span><i class="ln enc-sw"></i>encoder states (thicker = more weight)</span>
-    <span><i class="ln ctx-sw"></i>context, the weighted average</span>
+    <span><i class="ln acc"></i>{t('s, the decoder state')}</span>
+    <span><i class="ln enc-sw"></i>{t('encoder states (thicker = more weight)')}</span>
+    <span><i class="ln ctx-sw"></i>{t('context, the weighted average')}</span>
   {/snippet}
 </LabFrame>
 

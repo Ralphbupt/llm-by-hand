@@ -7,6 +7,26 @@
   import { onMount } from 'svelte'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Words placed by their neighbors': '按邻居摆放的词',
+    'Pick a word. Lines join it to the 3 words whose rows of counts are most alike.': '选一个词。连线把它和计数行最像的 3 个词连起来。',
+    'Could not load the vectors. Reload the page to try again.': '向量没能加载。请刷新页面再试一次。',
+    'Loading the vectors…': '正在加载向量……',
+    'The 12 words as points in 2D, grouped as animals, foods and vehicles': '12 个词画成二维平面上的点，分成动物、食物和交通工具三组',
+    'animals': '动物',
+    'foods': '食物',
+    'vehicles': '交通工具',
+    'Pick a word': '选一个词',
+    'Most frequent neighbors of “{w}” (within 2 words)': '“{w}”最常见的邻居（前后 2 个词以内）',
+    'A few of the {n} sentences': '{n} 个句子中的几句',
+    'closest to “{w}”: {list}': '和“{w}”最接近的：{list}',
+    'Similarities appear when the vectors have loaded.': '向量加载后会显示相似度。',
+    'Similarity is measured on the full rows of counts; the picture keeps the 2 directions in which the 12 rows differ most.': '相似度是在完整的计数行上算的；图上只保留了 12 行差别最大的 2 个方向。',
+  })
 
   type Data = {
     groups: Record<string, string[]>
@@ -63,18 +83,18 @@
 </script>
 
 <LabFrame
-  title="Words placed by their neighbors"
-  hint="Pick a word. Lines join it to the 3 words whose rows of counts are most alike."
+  title={t('Words placed by their neighbors')}
+  hint={t('Pick a word. Lines join it to the 3 words whose rows of counts are most alike.')}
   onreset={() => (pick = START)}
   resetDisabled={pick === START}
 >
   {#if failed}
-    <p class="state">Could not load the vectors. Reload the page to try again.</p>
+    <p class="state">{t('Could not load the vectors. Reload the page to try again.')}</p>
   {:else if !data}
-    <p class="state">Loading the vectors…</p>
+    <p class="state">{t('Loading the vectors…')}</p>
   {:else}
     <div class="grid">
-      <svg viewBox="0 0 {W} {H}" class="map" use:readable role="img" aria-label="The 12 words as points in 2D, grouped as animals, foods and vehicles">
+      <svg viewBox="0 0 {W} {H}" class="map" use:readable role="img" aria-label={t('The 12 words as points in 2D, grouped as animals, foods and vehicles')}>
         {#each near as o}
           <line x1={P(pick)[0]} y1={P(pick)[1]} x2={P(o)[0]} y2={P(o)[1]} class="link" />
         {/each}
@@ -83,7 +103,7 @@
         {/each}
         {#each groupNames as g}
           {@const L = groupLabel(g)}
-          <text x={L.x} y={L.y - 12} text-anchor={L.anchor} class="gname" fill={colorOf(g)}>{g}s</text>
+          <text x={L.x} y={L.y - 12} text-anchor={L.anchor} class="gname" fill={colorOf(g)}>{t(`${g}s`)}</text>
           {#each L.members as w, k}
             <text x={L.x} y={L.y + k * 11} text-anchor={L.anchor} class="wname" class:on={w === pick} class:nearw={near.includes(w)}>{w}</text>
           {/each}
@@ -94,7 +114,7 @@
       </svg>
 
       <div class="panel">
-        <div class="chips" role="group" aria-label="Pick a word">
+        <div class="chips" role="group" aria-label={t('Pick a word')}>
           {#each groupNames as g}
             <div class="crow">
               {#each data.groups[g] as w}
@@ -103,7 +123,7 @@
             </div>
           {/each}
         </div>
-        <p class="h">Most frequent neighbors of “{pick}” (within 2 words)</p>
+        <p class="h">{t('Most frequent neighbors of “{w}” (within 2 words)', { w: pick })}</p>
         <ul class="bars">
           {#each data.neighbors[pick] as [n, c]}
             <li><span class="w">{n}</span><span class="bar"><i style="width:{(c / maxN) * 100}%"></i></span><span class="c">{c}</span></li>
@@ -111,23 +131,23 @@
         </ul>
       </div>
     </div>
-    <details class="sample"><summary>A few of the {data.sentences.toLocaleString('en-US')} sentences</summary>
+    <details class="sample"><summary>{t('A few of the {n} sentences', { n: data.sentences.toLocaleString('en-US') })}</summary>
       <ul>{#each data.sample as s}<li>{s}</li>{/each}</ul>
     </details>
   {/if}
 
   {#snippet readout()}
     {#if data}
-      closest to “{pick}”: {data.closest[pick].map(([s, o]) => `${o} ${s.toFixed(2)}`).join(' · ')}
+      {t('closest to “{w}”: {list}', { w: pick, list: data.closest[pick].map(([s, o]) => `${o} ${s.toFixed(2)}`).join(' · ') })}
     {:else}
-      <span class="idle">Similarities appear when the vectors have loaded.</span>
+      <span class="idle">{t('Similarities appear when the vectors have loaded.')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
     {#if data}
-      {#each groupNames as g}<span><i class="dot" style="background: {colorOf(g)}"></i>{g}s</span>{/each}
-      <span>Similarity is measured on the full rows of counts; the picture keeps the 2 directions in which the 12 rows differ most.</span>
+      {#each groupNames as g}<span><i class="dot" style="background: {colorOf(g)}"></i>{t(`${g}s`)}</span>{/each}
+      <span>{t('Similarity is measured on the full rows of counts; the picture keeps the 2 directions in which the 12 rows differ most.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

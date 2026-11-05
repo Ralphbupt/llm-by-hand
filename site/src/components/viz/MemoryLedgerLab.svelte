@@ -10,6 +10,35 @@
    * The table under the controls gives each part's share; on a phone this keeps the sliders right under the bar.
    */
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` names a tick below, so the translator is `tl`
+  const tl = useT({
+    'Weights, gradients, Adam': '权重、梯度、Adam',
+    '16 bytes × 300 million': '16 字节 × 3 亿',
+    'Token activations': 'token 激活值',
+    '{n} × (B, L, d_model) × 24 layers': '{n} × (B, L, d_model) × 24 层',
+    'Attention weights': '注意力权重',
+    'none kept: recomputed': '一个都不保存：重新计算',
+    '(B, h, L, L) × 24 layers': '(B, h, L, L) × 24 层',
+    'What training keeps in GPU memory, and what grows with L': '训练在显存里保存什么，哪些随 L 增长',
+    'Move B and L, or switch recomputation on. The model stays the same: 24 layers, width 1000, 8 heads, 300 million parameters. Each mark on the scale is 10 times the one before.': '拖动 B 和 L，或者打开重计算。模型不变：24 层，宽度 1000，8 个头，3 亿个参数。刻度上每一格都是前一格的 10 倍。',
+    'total {x}, more than one 80 GB GPU': '总共 {x}，超过一块 80 GB GPU',
+    'total {x}, within one 80 GB GPU': '总共 {x}，一块 80 GB GPU 放得下',
+    'one 80 GB GPU': '一块 80 GB GPU',
+    'sequences': '个序列',
+    'tokens': '个 token',
+    'Recomputation': '重计算',
+    'Total': '总共',
+    ', more than one 80 GB GPU holds.': '，超过一块 80 GB GPU 能装下的量。',
+    ', within one 80 GB GPU.': '，一块 80 GB GPU 放得下。',
+    'At its peak, add one layer’s values while that layer is recomputed. The cost is one more forward pass per step.': '峰值时，还要加上正在重计算的那一层的值。代价是每一步多跑一次前向传播。',
+    'The attention weights are {n}% of it.': '其中注意力权重占 {n}%。',
+    'Token activations: the 16 tensors per layer that you counted above. On the scale, each boundary of the bar is the running total so far: the grey part always ends at 4.8 GB.': 'token 激活值：就是你在上面数出的每层 16 个张量。在刻度上，条的每条分界线都是到那里为止的累计总量：灰色部分总是在 4.8 GB 结束。',
+  })
 
   const LAYERS = 24, D = 1000, H = 8, PARAMS = 300e6, BYTES = 2, PER_LAYER = 16
   const BS = [1, 2, 4, 8, 16]
@@ -30,9 +59,9 @@
   const attn = $derived(recompute ? 0 : B * H * L * L * BYTES * LAYERS)
   const total = $derived(params + acts + attn)
   const rows = $derived([
-    { k: 'params', name: 'Weights, gradients, Adam', how: '16 bytes × 300 million', v: params },
-    { k: 'acts', name: 'Token activations', how: recompute ? '1 × (B, L, d_model) × 24 layers' : `${PER_LAYER} × (B, L, d_model) × 24 layers`, v: acts },
-    { k: 'attn', name: 'Attention weights', how: recompute ? 'none kept: recomputed' : '(B, h, L, L) × 24 layers', v: attn },
+    { k: 'params', name: tl('Weights, gradients, Adam'), how: tl('16 bytes × 300 million'), v: params },
+    { k: 'acts', name: tl('Token activations'), how: tl('{n} × (B, L, d_model) × 24 layers', { n: recompute ? 1 : PER_LAYER }), v: acts },
+    { k: 'attn', name: tl('Attention weights'), how: recompute ? tl('none kept: recomputed') : tl('(B, h, L, L) × 24 layers'), v: attn },
   ])
   const fmt = (b: number) => (b === 0 ? '0' : b < 1e9 ? `${Math.round(b / 1e6).toLocaleString()} MB` : `${(b / 1e9).toFixed(b < 1e11 ? 1 : 0)} GB`)
   const pct = (v: number) => (v / total) * 100
@@ -50,12 +79,12 @@
 </script>
 
 <LabFrame
-  title="What training keeps in GPU memory, and what grows with L"
-  hint="Move B and L, or switch recomputation on. The model stays the same: 24 layers, width 1000, 8 heads, 300 million parameters. Each mark on the scale is 10 times the one before."
+  title={tl('What training keeps in GPU memory, and what grows with L')}
+  hint={tl('Move B and L, or switch recomputation on. The model stays the same: 24 layers, width 1000, 8 heads, 300 million parameters. Each mark on the scale is 10 times the one before.')}
   onreset={() => { bi = B0; li = L0; recompute = false }}
   resetDisabled={!changed}
 >
-  <div class="scale" role="img" aria-label={`${rows.map((r) => `${r.name} ${fmt(r.v)}`).join(', ')}; total ${fmt(total)}, ${over ? 'more than' : 'within'} one 80 GB GPU`}>
+  <div class="scale" role="img" aria-label={`${rows.map((r) => `${r.name} ${fmt(r.v)}`).join(', ')}; ${tl(over ? 'total {x}, more than one 80 GB GPU' : 'total {x}, within one 80 GB GPU', { x: fmt(total) })}`}>
     <div class="track">
       <div class="bar" class:over style:width="{at(total)}%">
         {#each segs as r}
@@ -64,7 +93,7 @@
       </div>
       <span class="gpu" style:left="{at(GPU)}%"></span>
     </div>
-    <div class="gpu-t" style:left="{at(GPU)}%">one 80 GB GPU</div>
+    <div class="gpu-t" style:left="{at(GPU)}%">{tl('one 80 GB GPU')}</div>
     <div class="ticks">
       {#each TICKS as t}<span style:left="{at(t.v)}%">{t.t}</span>{/each}
     </div>
@@ -72,20 +101,20 @@
   {#snippet controls()}
     <div class="ctl">
       <label>
-        <span class="lbl">B = <b>{B}</b> sequences</span>
+        <span class="lbl">B = <b>{B}</b> {tl('sequences')}</span>
         <input type="range" min="0" max={BS.length - 1} step="1" bind:value={bi} aria-valuetext={`B = ${B}`} />
       </label>
       <label>
-        <span class="lbl">L = <b>{L.toLocaleString()}</b> tokens</span>
+        <span class="lbl">L = <b>{L.toLocaleString()}</b> {tl('tokens')}</span>
         <input type="range" min="0" max={LS.length - 1} step="1" bind:value={li} aria-valuetext={`L = ${L}`} />
       </label>
-      <div class="btn-row"><button type="button" class="lab-btn" aria-pressed={recompute} onclick={() => (recompute = !recompute)}>Recomputation</button></div>
+      <div class="btn-row"><button type="button" class="lab-btn" aria-pressed={recompute} onclick={() => (recompute = !recompute)}>{tl('Recomputation')}</button></div>
     </div>
   {/snippet}
 
   {#snippet readout()}
-    Total <b>{fmt(total)}</b>, {over ? 'more than one 80 GB GPU holds' : 'within one 80 GB GPU'}.
-    {#if recompute}At its peak, add one layer’s values while that layer is recomputed. The cost is one more forward pass per step.{:else}The attention weights are {Math.round(pct(attn))}% of it.{/if}
+    {tl('Total')} <b>{fmt(total)}</b>{tl(over ? ', more than one 80 GB GPU holds.' : ', within one 80 GB GPU.')}
+    {#if recompute}{tl('At its peak, add one layer’s values while that layer is recomputed. The cost is one more forward pass per step.')}{:else}{tl('The attention weights are {n}% of it.', { n: Math.round(pct(attn)) })}{/if}
   {/snippet}
 
   {#snippet after()}
@@ -101,7 +130,7 @@
         {/each}
       </tbody>
     </table>
-    <p class="note">Token activations: the 16 tensors per layer that you counted above. On the scale, each boundary of the bar is the running total so far: the grey part always ends at 4.8 GB.</p>
+    <p class="note">{tl('Token activations: the 16 tensors per layer that you counted above. On the scale, each boundary of the bar is the running total so far: the grey part always ends at 4.8 GB.')}</p>
   {/snippet}
 </LabFrame>
 

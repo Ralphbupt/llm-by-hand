@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './LatentSpaceLab.svelte'
 interface Props { start?: 'ae' | 'vae' }
 const { start = 'ae' } = Astro.props
 ---
-<Lab client:visible start={start} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible start={start} />

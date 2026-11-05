@@ -1,0 +1,227 @@
+---
+/**
+ * "Start here": the guide for a new learner. What you need to know first, what you need to have, how a level
+ * works, how to learn well with it, and the route. The prose is written once per language below (it is a page of
+ * text, not UI strings); the route list is built from the levels, so it stays right when levels change.
+ */
+import '../styles/global.css'
+import { settingsBootScript } from '@lib/settings'
+import { allLevels } from '@lib/levels'
+import { breadcrumbLd } from '@lib/seo'
+import { smart } from '@lib/typo'
+import { HTML_LANG, href, translator, type Lang } from '@lib/i18n'
+import SiteHeader from '../components/SiteHeader.astro'
+import SeoHead from '../components/SeoHead.astro'
+
+interface Props { lang?: Lang }
+const { lang = 'en' } = Astro.props
+const t = translator(lang)
+const L = (p: string) => href(lang, p)
+
+const all = await allLevels(lang)
+const main = all.filter((l) => !l.data.branch)
+const part = (p: string) => main.filter((l) => l.data.part === p)
+const first = main[0]
+const theory = part('theory')
+const title = (l: (typeof all)[number]) => smart(l.data.short ?? l.data.title)
+const zh = lang === 'zh'
+---
+<!doctype html>
+<html lang={HTML_LANG[lang]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <SeoHead title={`${t('Start here')} · LLM by Hand`}
+      description={zh ? '开始学之前：需要哪些背景知识，需要准备什么，一关是怎么进行的，怎样学效果最好，以及整条学习路线。'
+        : 'Before you begin: what you need to know, what you need to have, how a level works, how to learn well with it, and the route through the course.'}
+      jsonLd={breadcrumbLd([['LLM by Hand', L('/')], [t('Start here'), L('/start/')]])} page={{ kind: 'start' }}
+      alternates={{ en: '/start/', zh: '/zh/start/' }} />
+    <script is:inline set:html={settingsBootScript} />
+    <style>
+      .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+      h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0.3rem 0 0.2rem; }
+      .lede { color: var(--dim); margin: 0 0 1.2rem; max-width: 62ch; }
+      .toc { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.9rem; margin: 0 0 1rem; }
+      .toc a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+      .toc a:hover { color: var(--accent); border-color: var(--accent); }
+      h2 { font-size: 1.2rem; margin: 2.4rem 0 0.5rem; scroll-margin-top: 1rem; }
+      p, li { max-width: 66ch; }
+      li { margin: 0.25rem 0; }
+      /* what you need: three columns on a wide screen */
+      .need { display: grid; gap: 0.8rem; grid-template-columns: 1fr; margin: 0.8rem 0; }
+      @media (min-width: 680px) { .need { grid-template-columns: repeat(3, 1fr); } }
+      .need > div { border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; background: var(--card); }
+      .need h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+      .need p, .need ul { margin: 0; font-size: 0.9rem; }
+      .need ul { padding-left: 1.1rem; }
+      .need .no h3 { color: var(--dim); }
+      /* a level at a glance: the same tags as the real questions */
+      .glance { list-style: none; padding: 0; margin: 0.8rem 0; display: grid; gap: 0.45rem; }
+      .glance li { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.8rem; align-items: baseline; margin: 0; max-width: none; }
+      @media (max-width: 560px) { .glance li { grid-template-columns: 1fr; gap: 0.15rem; } }
+      .tag { justify-self: start; font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 3px; font-weight: 600; white-space: nowrap;
+        background: var(--accent); color: var(--on-solid); }
+      .tag.line { background: none; border: 1px solid var(--accent); color: var(--accent); }
+      .tag.dim { background: none; border: 1px dashed var(--line); color: var(--dim); }
+      .tips { padding-left: 1.2rem; }
+      .tips li { margin: 0.5rem 0; }
+      .tips b { color: var(--fg); }
+      .route { border-left: 3px solid var(--accent); padding: 0.2rem 0 0.2rem 0.9rem; margin: 0.8rem 0; }
+      .route h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+      .route ol { margin: 0; padding-left: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; font-size: 0.9rem; }
+      .route li { margin: 0; }
+      .route a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+      .route a:hover { color: var(--accent); border-color: var(--accent); }
+      .route .n { font-family: var(--mono); color: var(--dim); margin-right: 0.3rem; font-size: 0.82rem; }
+      .go { display: inline-flex; align-items: baseline; gap: 0.5rem; padding: 0.6rem 1.15rem; background: var(--accent); color: var(--on-solid);
+        border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1rem; min-height: 44px; box-sizing: border-box; }
+      .go small { font-weight: 400; opacity: 0.85; }
+    </style>
+  </head>
+  <body>
+    <SiteHeader current="start" />
+    <main class="wrap">
+      {zh ? (<>
+        <h1>开始之前</h1>
+        <p class="lede">LLM by Hand 用一种办法讲大语言模型：每一个数都由你亲手算出来。这一页说清楚开始前需要会什么、要准备什么、一关是怎么进行的，以及怎样学效果最好。</p>
+        <nav class="toc" aria-label="本页内容">
+          <a href="#need">需要会什么</a><a href="#level">一关怎么进行</a><a href="#how">怎样学效果最好</a><a href="#route">学习路线</a><a href="#progress">你的进度</a>
+        </nav>
+
+        <h2 id="need">需要会什么</h2>
+        <div class="need">
+          <div>
+            <h3>Python 基础</h3>
+            <p>变量、列表、<code>for</code> 循环、用 <code>def</code> 写函数。题目里要你补的代码都很短。NumPy 和 PyTorch 不用先会，课程会教：NumPy 从第 1 关开始用，PyTorch 在第 9 关。</p>
+          </div>
+          <div>
+            <h3>中学数学</h3>
+            <p>四则运算和初中代数就够了。其他用到的数学（e 和 ln、求和符号 Σ、均值和方差、导数、链式法则）都在<a href="/math/">数学页</a>上，每样配一个带数字的小例子。课程里用到时会链接过去。</p>
+          </div>
+          <div class="no">
+            <h3>不需要</h3>
+            <ul>
+              <li>先修线性代数或微积分</li>
+              <li>机器学习经验</li>
+              <li>GPU 或付费服务</li>
+            </ul>
+          </div>
+        </div>
+        <p>要准备的东西：一个浏览器（手机也能用，但写代码的题在电脑上更顺手），以及<b>纸和笔</b>。几乎所有内容都直接在浏览器里运行，包括 Python 代码题。只有少数部分要在你自己的电脑上跑：用 PyTorch 训练真模型的 Boss 关，和几个可选的实验。用到时，<a href="/setup/">本地运行指南</a>会带你装好，大约十分钟。</p>
+
+        <h2 id="level">一关怎么进行</h2>
+        <p>每一关回答一个问题，就写在标题下面。答案用一个小到能在纸上算的例子讲出来：两三个词、二维的向量、三个点。</p>
+        <ul class="glance">
+          <li><span class="tag dim">实验台</span><span>图和数字一起动。拖一拖、改一个数，看哪里跟着变。</span></li>
+          <li><span class="tag">数字 / 形状</span><span>填一个数或一个形状，比如 <code>(2, 3)</code>。答错了会给提示，提示一次比一次具体。</span></li>
+          <li><span class="tag line">先猜一猜</span><span>在看到结果之前先选一个答案。猜错没关系，重要的是先下判断。</span></li>
+          <li><span class="tag">代码</span><span>补全几行 Python，在浏览器里运行并通过测试。</span></li>
+          <li><span class="tag dim">🔒 解锁</span><span>答对上面的题，下一部分才打开。实在卡住了可以“先跳过”。</span></li>
+          <li><span class="tag dim">我卡在这里了</span><span>别的学习者在这里真实问过的问题和解答。“深入一点”则讲推导和设计原因，都可以不看。</span></li>
+          <li><span class="tag dim">小结</span><span>通关后展开：你学会了什么、要记住的公式和形状、常见错误。</span></li>
+        </ul>
+        <p>通关后会得到星：<b>★★★</b> 每题都是自己做出来的；<b>★★☆</b> 有题看了答案；<b>★☆☆</b> 有题没做完就过了。星只是给你自己看的。</p>
+        <p>从第 2 关开始，每关顶部有两道<b>热身</b>题，来自前面的关卡，帮你在忘掉之前复习一下。如果你已经会了，可以点“已经会了？用小测跳过”：独立答对几道题，这一关就算通关。</p>
+
+        <h2 id="how">怎样学效果最好</h2>
+        <ol class="tips">
+          <li><b>先在纸上算，再填答案。</b>例子特意做得很小，就是为了能手算。亲手算一遍，比读十遍都记得牢。</li>
+          <li><b>先猜再看。</b>“先猜一猜”只有在你真的下了判断时才有用。猜错的那一刻，正是学到东西的时候。</li>
+          <li><b>看提示，再试一次。</b>“显示答案”留到真的卡住时再用：看了答案，这一关最多两颗星。</li>
+          <li><b>玩实验台。</b>改一个数之前，先猜会发生什么，再动手验证。</li>
+          <li><b>按顺序走主线。</b>每一关都建立在前面的关卡上。支线是可选的，好奇时再去。</li>
+          <li><b>回头复习。</b>答错过的题会进<a href={L('/review/')}>错题本</a>，过几天再做一遍。热身题也会把旧题带回来。</li>
+          <li><b>想快速浏览？</b>在设置（⚙）里打开阅读模式：所有部分直接展开，不记录答题，也不给星。</li>
+        </ol>
+
+        <h2 id="route">学习路线</h2>
+        <p>主线有 {main.length} 关，分两部分。从第 1 关一直走到第 {main.at(-1)?.data.level} 关，你会亲手写出一个能学会两位数加法的 GPT。</p>
+        <div class="route">
+          <h3>基础 · 数字怎样学习</h3>
+          <ol>{part('foundations').map((l) => <li><a href={L(`/learn/${l.id}/`)}><span class="n">{l.data.level}</span>{title(l)}</a></li>)}</ol>
+        </div>
+        <div class="route">
+          <h3>原理 · 模型在算什么</h3>
+          <ol>{theory.map((l) => <li><a href={L(`/learn/${l.id}/`)}><span class="n">{l.data.level}</span>{title(l)}</a></li>)}</ol>
+        </div>
+        <p><b>支线</b>在主线上的某一关之后打开，侧栏和地图会把它们放在那一关旁边：<b>深入底层</b>（U1–U6）讲 PyTorch 替你藏起来的机制；<b>经典网络</b>（N1–N7）讲 Transformer 之前的网络，一直到 2017 年最早的 Transformer；<b>扩散模型</b>（D1–D3）讲另一种生成方式。主线从来不依赖支线。</p>
+        <p>已经熟悉神经网络了？可以直接<a href={L(`/learn/${theory[0].id}/`)}>从第 {theory[0].data.level} 关开始</a>，前面的关卡用小测跳过即可。</p>
+
+        <h2 id="progress">你的进度</h2>
+        <p>不用注册账号。答题记录和星只存在这个浏览器里。要换浏览器或换电脑，在设置（⚙）里导出进度文件，再在另一边导入。</p>
+
+        <a class="go" href={L(`/learn/${first.id}/`)}>从第 1 关开始 <small>{title(first)}</small></a>
+      </>) : (<>
+        <h1>Start here</h1>
+        <p class="lede">LLM by Hand teaches how large language models work in one way: you compute every number yourself. This page says what you need to know first, what you need to have, how a level works, and how to get the most out of it.</p>
+        <nav class="toc" aria-label="On this page">
+          <a href="#need">What you need</a><a href="#level">How a level works</a><a href="#how">How to learn well</a><a href="#route">The route</a><a href="#progress">Your progress</a>
+        </nav>
+
+        <h2 id="need">What you need to know</h2>
+        <div class="need">
+          <div>
+            <h3>Basic Python</h3>
+            <p>Variables, lists, <code>for</code> loops, and functions with <code>def</code>. The code you fill in is short. You don’t need NumPy or PyTorch yet: the course teaches them, NumPy from level 1 and PyTorch in level 9.</p>
+          </div>
+          <div>
+            <h3>School math</h3>
+            <p>Arithmetic and basic algebra are enough. Everything else the course uses (e and ln, the Σ sign, mean and variance, derivatives, the chain rule) is on the <a href="/math/">math page</a>, each with a small example in numbers. Lessons link to it where it comes up.</p>
+          </div>
+          <div class="no">
+            <h3>Not needed</h3>
+            <ul>
+              <li>A course in linear algebra or calculus</li>
+              <li>Machine learning experience</li>
+              <li>A GPU or a paid service</li>
+            </ul>
+          </div>
+        </div>
+        <p>What to have: a browser (a phone works, but the code questions are easier on a computer) and <b>pen and paper</b>. Almost everything runs in your browser, the Python questions included. Only a few parts run on your own computer: the bosses that train real models with PyTorch, and a few optional runs. When you get there, the <a href="/setup/">setup guide</a> walks you through it in about ten minutes.</p>
+
+        <h2 id="level">How a level works</h2>
+        <p>Each level answers one question, written under its title. The answer is built from an example small enough to compute on paper: two or three words, vectors with two numbers, three points.</p>
+        <ul class="glance">
+          <li><span class="tag dim">Lab</span><span>The picture and the numbers move together. Drag something or change a number, and watch what follows.</span></li>
+          <li><span class="tag">Number / Shape</span><span>Type a number, or a shape like <code>(2, 3)</code>. A wrong answer gets a hint, and each hint says a little more.</span></li>
+          <li><span class="tag line">Predict first</span><span>Pick an answer before you see what happens. Being wrong is fine; what matters is committing first.</span></li>
+          <li><span class="tag">Code</span><span>Fill in a few lines of Python, run them in the browser, and pass the tests.</span></li>
+          <li><span class="tag dim">🔒 Unlock</span><span>The next part opens once you answer the question above it. If you are really stuck, “Skip for now”.</span></li>
+          <li><span class="tag dim">I got stuck here</span><span>A real question a learner asked at that spot, with its answer. “Go deeper” boxes hold derivations and design reasons. Both are optional.</span></li>
+          <li><span class="tag dim">Recap</span><span>Opens when you clear the level: what you can now do, the formulas and shapes to keep, the common mistakes.</span></li>
+        </ul>
+        <p>Clearing a level gives stars: <b>★★★</b> every question solved on your own, <b>★★☆</b> some with the answer shown, <b>★☆☆</b> cleared with some questions left. The stars are for you.</p>
+        <p>From level 2 on, each level starts with a two-question <b>warm-up</b> from earlier levels, so you review before you forget. If you already know a level, use “Already know this? Skip it with a short test”: solve a few of its questions on your own and it counts as cleared.</p>
+
+        <h2 id="how">How to learn well</h2>
+        <ol class="tips">
+          <li><b>Compute on paper, then type.</b> The examples are small so that you can. Working one out by hand sticks better than reading it ten times.</li>
+          <li><b>Guess before you look.</b> A “Predict first” question only works if you really commit. The moment a guess turns out wrong is when you learn.</li>
+          <li><b>Read the hint and try again.</b> Keep “Show answer” for when you are truly stuck: a shown answer keeps the level at two stars at most.</li>
+          <li><b>Play with the labs.</b> Before you change a number, guess what will happen, then check.</li>
+          <li><b>Walk the main line in order.</b> Each level builds on the ones before it. Side trips are optional; take them when you are curious.</li>
+          <li><b>Come back.</b> Questions you missed go to <a href={L('/review/')}>Mistakes</a>; redo them a few days later. The warm-ups bring old questions back too.</li>
+          <li><b>Just want to read?</b> Turn on reading mode in settings (⚙): every part opens, nothing is recorded, and no stars are given.</li>
+        </ol>
+
+        <h2 id="route">The route</h2>
+        <p>The main line has {main.length} levels in two parts. From level 1 to level {main.at(-1)?.data.level} you end up writing a GPT that learns two-digit addition.</p>
+        <div class="route">
+          <h3>Foundations · how numbers learn</h3>
+          <ol>{part('foundations').map((l) => <li><a href={L(`/learn/${l.id}/`)}><span class="n">{l.data.level}</span>{title(l)}</a></li>)}</ol>
+        </div>
+        <div class="route">
+          <h3>Theory · what the model computes</h3>
+          <ol>{theory.map((l) => <li><a href={L(`/learn/${l.id}/`)}><span class="n">{l.data.level}</span>{title(l)}</a></li>)}</ol>
+        </div>
+        <p><b>Side trips</b> open after a level on the main line, and the sidebar and the map show them next to it: <b>Under the hood</b> (U1–U6) opens up what PyTorch hides; <b>Classic networks</b> (N1–N7) covers the networks before the Transformer, up to the first Transformer of 2017; <b>Diffusion</b> (D1–D3) is another way to generate. The main line never needs them.</p>
+        <p>Know neural networks already? You can <a href={L(`/learn/${theory[0].id}/`)}>start at level {theory[0].data.level}</a> and skip the earlier levels with their short tests.</p>
+
+        <h2 id="progress">Your progress</h2>
+        <p>There is no account. Your answers and stars are saved in this browser only. To move to another browser or computer, export a progress file in settings (⚙) and import it there.</p>
+
+        <a class="go" href={L(`/learn/${first.id}/`)}>Start with level 1 <small>{title(first)}</small></a>
+      </>)}
+    </main>
+  </body>
+</html>

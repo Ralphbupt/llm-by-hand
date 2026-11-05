@@ -8,6 +8,7 @@
     BUCKET_PX, flat, fmtNum, fmtShape, groupTones, itemsOf, layoutNet, looksAt, railY, segmentsOf,
     type Look, type Net3DSpec, type V3,
   } from '@lib/three/net'
+  import { useT } from '@lib/i18nSvelte'
 
   type Props = {
     spec: Net3DSpec
@@ -17,7 +18,10 @@
     ariaLabel?: string
     numbers?: boolean
   }
-  let { spec, step = -1, selected = null, onselect, ariaLabel = 'A network, drawn flat', numbers }: Props = $props()
+  let { spec, step = -1, selected = null, onselect, ariaLabel: ariaIn, numbers }: Props = $props()
+  // the language comes from the lab around it (provideLang); only the default label is ours, the spec arrives translated
+  const tx = useT({ 'A network, drawn flat': '一个网络，平面画法' })
+  const ariaLabel = $derived(ariaIn ?? tx('A network, drawn flat'))
 
   let width = $state(800)
   const vertical = $derived(width < 520)

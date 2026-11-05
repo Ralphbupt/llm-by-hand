@@ -8,20 +8,23 @@
  * on phones, or when they folded it before.
  */
 import { toJsonScript, warmData } from '@lib/score'
+import { translator, type Lang } from '@lib/i18n'
 
-interface Props { slug: string }
-const data = await warmData(Astro.props.slug)
+interface Props { slug: string; lang?: Lang }
+const { lang = 'en' } = Astro.props
+const t = translator(lang)
+const data = await warmData(Astro.props.slug, lang)
 ---
 {data.items.length > 0 && (
   <>
     <details class="warmup" data-warmup hidden>
       <summary>
-        <span class="wu-tag">Warm-up</span>
-        <span class="wu-sub" data-warm-count>2 questions from earlier levels</span>
+        <span class="wu-tag">{t('Warm-up')}</span>
+        <span class="wu-sub" data-warm-count>{t('{n} questions from earlier levels', { n: 2 })}</span>
         <span class="wu-chev" aria-hidden="true"></span>
       </summary>
       <div class="wu-body">
-        <p class="wu-lede">A quick review before you start. Optional. Nothing here locks the level.</p>
+        <p class="wu-lede">{t('A quick review before you start. Optional. Nothing here locks the level.')}</p>
         <div data-warm-slot></div>
       </div>
     </details>
@@ -35,6 +38,9 @@ const data = await warmData(Astro.props.slug)
   import Predict from './Predict.svelte'
   import { readingMode, snapshot } from '@lib/progress'
   import { pickWarmup, type WarmData } from '@lib/warmup'
+  import { href, pageLang, translator } from '@lib/i18n'
+  const lang = pageLang()
+  const t = translator(lang)
 
   const box = document.querySelector<HTMLDetailsElement>('[data-warmup]')
   const raw = document.getElementById('warm-data')?.textContent
@@ -48,8 +54,9 @@ const data = await warmData(Astro.props.slug)
       // jumped ahead: nothing tried on the main level just before this one
       const prevMain = [...data.levels].reverse().find((l) => l.main !== false)
       const jumped = !!prevMain && !Object.keys(progress).some((k) => k.startsWith(`${prevMain.slug}/`))
-      box.querySelector('[data-warm-count]')!.textContent =
-        `${picks.length === 1 ? 'One question' : `${picks.length} questions`} from earlier levels${jumped ? ' you may have skipped' : ''}`
+      box.querySelector('[data-warm-count]')!.textContent = jumped
+        ? t(picks.length === 1 ? 'One question from earlier levels you may have skipped' : '{n} questions from earlier levels you may have skipped', { n: picks.length })
+        : t(picks.length === 1 ? 'One question from earlier levels' : '{n} questions from earlier levels', { n: picks.length })
       const slot = box.querySelector<HTMLElement>('[data-warm-slot]')!
       for (const it of picks) {
         const l = levelOf.get(it.page)
@@ -57,14 +64,14 @@ const data = await warmData(Astro.props.slug)
         item.className = 'wu-item'
         const from = document.createElement('a')
         from.className = 'wu-from'
-        from.href = `/learn/${it.page}/`
-        from.textContent = l ? `From level ${l.level} · ${l.title}` : 'From an earlier level'
+        from.href = href(lang, `/learn/${it.page}/`)
+        from.textContent = l ? t('From level {l}', { l: `${l.level} · ${l.title}` }) : t('From an earlier level')
         const host = document.createElement('div')
         item.append(from, host)
         slot.append(item)
         const id = `${it.page}/${it.id}`
-        if (it.type === 'predict') mount(Predict, { target: host, props: { id, ex: it as any, practice: true } })
-        else mount(Blank, { target: host, props: { id, ex: it as any, practice: true } })
+        if (it.type === 'predict') mount(Predict, { target: host, props: { id, ex: it as any, practice: true, lang } })
+        else mount(Blank, { target: host, props: { id, ex: it as any, practice: true, lang } })
       }
       let closed = false
       try { closed = localStorage.getItem(CLOSED) === '1' } catch { /* ignore */ }

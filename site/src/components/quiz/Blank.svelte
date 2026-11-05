@@ -5,9 +5,11 @@
   import RevealAnswer from './RevealAnswer.svelte'
   import NoWrapText from './NoWrapText.svelte'
   import type { NumberEx, ShapeEx } from '@lib/quiz'
+  import { translator, type Lang } from '@lib/i18n'
 
   // practice: start fresh even if already solved (the mistake book's "redo"); solving never un-solves anything
-  let { id, ex, practice = false }: { id: string; ex: NumberEx | ShapeEx; practice?: boolean } = $props()
+  let { id, ex, practice = false, lang = 'en' }: { id: string; ex: NumberEx | ShapeEx; practice?: boolean; lang?: Lang } = $props()
+  const t = translator(lang)
 
   let value = $state('')
   let result = $state<{ ok: boolean; hint?: string } | null>(null)
@@ -40,7 +42,7 @@
     } else {
       misses++
       recordMiss(id)
-      const h = result.hint ?? 'Not quite. Try again.'
+      const h = t(result.hint ?? 'Not quite. Try again.')
       if (hints.at(-1) !== h) hints = [...hints, h]
     }
   }
@@ -56,7 +58,7 @@
 
 <div class="blank" class:done class:shown>
   <div class="prompt">
-    <span class="tag">{ex.type === 'shape' ? 'Shape' : 'Number'}</span>
+    <span class="tag">{t(ex.type === 'shape' ? 'Shape' : 'Number')}</span>
     <NoWrapText text={ex.prompt} />
   </div>
   <div class="row">
@@ -64,19 +66,19 @@
       bind:value
       aria-label={ex.prompt.replaceAll('`', '')}
       readonly={done}
-      placeholder={ex.type === 'shape' ? 'e.g. (3, 4)' : 'a number'}
+      placeholder={t(ex.type === 'shape' ? 'e.g. (3, 4)' : 'a number')}
       onkeydown={(e) => e.key === 'Enter' && check()}
     />
     {#if ex.type === 'number' && ex.unit}<span class="unit">{ex.unit}</span>{/if}
-    <button onclick={check} disabled={done}>{done ? (shown ? 'Answer shown' : '✓ Correct') : 'Check'}</button>
+    <button onclick={check} disabled={done}>{t(done ? (shown ? 'Answer shown' : '✓ Correct') : 'Check')}</button>
   </div>
   {#if hints.length && !done}
     <ol class="hints" aria-live="polite">
-      {#each hints as h, i}<li class:latest={i === hints.length - 1}><span class="hn">Hint {i + 1}</span> <NoWrapText text={h} /></li>{/each}
+      {#each hints as h, i}<li class:latest={i === hints.length - 1}><span class="hn">{t('Hint {n}', { n: i + 1 })}</span> <NoWrapText text={h} /></li>{/each}
     </ol>
   {/if}
   {#if !done && misses > 0}
-    <RevealAnswer onreveal={reveal} />
+    <RevealAnswer onreveal={reveal} {lang} />
   {/if}
   {#if showAnswer}
     <p class="dbg"><b>debug · answer:</b> {answerText}</p>

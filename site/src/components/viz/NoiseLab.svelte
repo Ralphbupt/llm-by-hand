@@ -13,6 +13,35 @@
   import Points3D from '../viz3d/Points3D.svelte'
   import LabFrame from './LabFrame.svelte'
   import { canvasFont } from '@lib/diffusion'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is the noise step here, so the translator is `tx`
+  const tx = useT({
+    'one point': '一个点',
+    'ᾱ (signal left)': 'ᾱ（剩下的信号）',
+    'The forward process: a spiral turning into noise': '前向过程：螺旋慢慢变成噪声',
+    'Drag t. Every point is mixed with its own fixed noise, so it moves smoothly.': '拖动 t。每个点都混入自己那份固定的噪声，所以它会平滑地移动。',
+    'Cloud at step t': '第 t 步的点云',
+    '3D: time going up': '3D：时间向上',
+    'Point cloud at step t': '第 t 步的点云',
+    "The point cloud through time: t goes up, each line is one point's path from the spiral into noise": '点云随时间的变化：t 向上增长，每条线是一个点从螺旋走进噪声的路径',
+    "Time goes up. The faint spiral at the bottom is t = 0; the slice of colored points is the cloud at t = {t}. Each gray line is one point's whole path; the highlighted line is the point we follow. Drag t to move the slice.": '时间向上走。底部淡淡的螺旋是 t = 0；那一层彩色的点是 t = {t} 时的点云。每条灰线是一个点的完整路径；高亮的那条是我们跟踪的点。拖动 t 可以移动这一层。',
+    'of {T}': '/ {T}',
+    'Noise step t': '加噪步数 t',
+    'alpha-bar, the signal left, against t': 'alpha-bar（剩下的信号）随 t 的变化',
+    'Schedule': '噪声调度',
+    'Spiral · 50 steps': '螺旋 · 50 步',
+    'Hand example · 3 steps': '手算例子 · 3 步',
+    't = 0: nothing added yet, every point is still on the spiral.': 't = 0：还没加任何噪声，每个点都还在螺旋上。',
+    't = {t}: the numbers the page asks for appear once you have answered them.': 't = {t}：页面上要你算的数，等你答完才会显示。',
+    't = {t}: signal × {a} + noise × {b} ({p}% of the variance is still signal)': 't = {t}：信号 × {a} + 噪声 × {b}（方差里还有 {p}% 是信号）',
+    'the cloud at step t': '第 t 步的点云',
+    'where the point started': '这个点的起点',
+    'the point we follow, and its path': '我们跟踪的点，和它的路径',
+  })
 
   const SPAN = 3.2
   const site = schedule(linearBetas(50))
@@ -67,7 +96,7 @@
       const q = at(k * 2, t)
       return { p: [q[0], q[1], tz(t)] as [number, number, number], color: cloudColor, size: 0.025 }
     }),
-    { p: [at(0, t)[0], at(0, t)[1], tz(t)] as [number, number, number], tone: 'accent' as const, size: 0.05, label: 'one point' },
+    { p: [at(0, t)[0], at(0, t)[1], tz(t)] as [number, number, number], tone: 'accent' as const, size: 0.05, label: tx('one point') },
   ])
 
   function draw() {
@@ -99,7 +128,7 @@
     if (!(hideAb && t > 0)) { g.fillStyle = c.accent; g.beginPath(); g.arc(X(t), Y(ab), 4.5, 0, 7); g.fill() }
     const fs = canvasFont(0.72)
     g.fillStyle = c.dim; g.font = `${fs}px ui-monospace, monospace`
-    g.textAlign = 'right'; g.fillText('ᾱ (signal left)', X(s.T), Y(1) + fs); g.fillText(`t = ${s.T}`, X(s.T), H - 2)
+    g.textAlign = 'right'; g.fillText(tx('ᾱ (signal left)'), X(s.T), Y(1) + fs); g.fillText(`t = ${s.T}`, X(s.T), H - 2)
     g.textAlign = 'left'; g.fillText('0', X(0), H - 2)
   }
 
@@ -120,29 +149,28 @@
 </script>
 
 <LabFrame
-  title="The forward process: a spiral turning into noise"
-  hint="Drag t. Every point is mixed with its own fixed noise, so it moves smoothly."
-  views={mode === 'site' ? [{ id: '2d', label: 'Cloud at step t' }, { id: '3d', label: '3D: time going up' }] : undefined}
+  title={tx('The forward process: a spiral turning into noise')}
+  hint={tx('Drag t. Every point is mixed with its own fixed noise, so it moves smoothly.')}
+  views={mode === 'site' ? [{ id: '2d', label: tx('Cloud at step t') }, { id: '3d', label: tx('3D: time going up') }] : undefined}
   bind:view
   onreset={reset}
   resetDisabled={!changed}
 >
   <div class="grid">
     <div class="pic">
-      <canvas bind:this={cv} class="board" class:gone={view === '3d'} aria-label="Point cloud at step t"></canvas>
+      <canvas bind:this={cv} class="board" class:gone={view === '3d'} aria-label={tx('Point cloud at step t')}></canvas>
       {#if view === '3d'}
         <Points3D points={cloud3d} trails={trails3d} range={SPAN} axes={['x', 'y', 't']} height="min(30rem, 92vw)"
-          ariaLabel="The point cloud through time: t goes up, each line is one point's path from the spiral into noise" />
-        <p class="cap">Time goes up. The faint spiral at the bottom is t = 0; the slice of colored points is the cloud at t = {t}.
-          Each gray line is one point's whole path; the highlighted line is the point we follow. Drag t to move the slice.</p>
+          ariaLabel={tx("The point cloud through time: t goes up, each line is one point's path from the spiral into noise")} />
+        <p class="cap">{tx("Time goes up. The faint spiral at the bottom is t = 0; the slice of colored points is the cloud at t = {t}. Each gray line is one point's whole path; the highlighted line is the point we follow. Drag t to move the slice.", { t })}</p>
       {/if}
     </div>
     <div class="side">
       <label class="slider">
-        <span>t = <b>{t}</b> of {s.T}</span>
-        <input type="range" min="0" max={s.T} step="1" bind:value={t} aria-label="Noise step t" />
+        <span>t = <b>{t}</b> {tx('of {T}', { T: s.T })}</span>
+        <input type="range" min="0" max={s.T} step="1" bind:value={t} aria-label={tx('Noise step t')} />
       </label>
-      <canvas bind:this={chart} class="chart" aria-label="alpha-bar, the signal left, against t"></canvas>
+      <canvas bind:this={chart} class="chart" aria-label={tx('alpha-bar, the signal left, against t')}></canvas>
       <div class="calc">
         <div class="row"><span>ᾱ (ab)</span><b class:q={hideAb && t > 0}>{hideAb && t > 0 ? '?' : f(ab, 4)}</b></div>
         <div class="row"><span>x0</span><b>{fp(p0)}</b></div>
@@ -156,22 +184,22 @@
   </div>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="Schedule">
-      <button type="button" class="lab-btn" class:on={mode === 'site'} aria-pressed={mode === 'site'} onclick={() => setMode('site')}>Spiral · 50 steps</button>
-      <button type="button" class="lab-btn" class:on={mode === 'toy'} aria-pressed={mode === 'toy'} onclick={() => setMode('toy')}>Hand example · 3 steps</button>
+    <div class="seg" role="group" aria-label={tx('Schedule')}>
+      <button type="button" class="lab-btn" class:on={mode === 'site'} aria-pressed={mode === 'site'} onclick={() => setMode('site')}>{tx('Spiral · 50 steps')}</button>
+      <button type="button" class="lab-btn" class:on={mode === 'toy'} aria-pressed={mode === 'toy'} onclick={() => setMode('toy')}>{tx('Hand example · 3 steps')}</button>
     </div>
   {/snippet}
 
   {#snippet readout()}
-    {#if t === 0}t = 0: nothing added yet, every point is still on the spiral.
-    {:else if hideAb}t = {t}: the numbers the page asks for appear once you have answered them.
-    {:else}t = {t}: signal × {f(Math.sqrt(ab), 2)} + noise × {f(Math.sqrt(1 - ab), 2)} ({f(100 * ab, 0)}% of the variance is still signal){/if}
+    {#if t === 0}{tx('t = 0: nothing added yet, every point is still on the spiral.')}
+    {:else if hideAb}{tx('t = {t}: the numbers the page asks for appear once you have answered them.', { t })}
+    {:else}{tx('t = {t}: signal × {a} + noise × {b} ({p}% of the variance is still signal)', { t, a: f(Math.sqrt(ab), 2), b: f(Math.sqrt(1 - ab), 2), p: f(100 * ab, 0) })}{/if}
   {/snippet}
 
   {#snippet legend()}
-    {#if mode === 'site'}<span><i class="sw cloud"></i>the cloud at step t</span>{/if}
-    <span><i class="sw start"></i>where the point started</span>
-    <span><i class="sw you"></i>the point we follow, and its path</span>
+    {#if mode === 'site'}<span><i class="sw cloud"></i>{tx('the cloud at step t')}</span>{/if}
+    <span><i class="sw start"></i>{tx('where the point started')}</span>
+    <span><i class="sw you"></i>{tx('the point we follow, and its path')}</span>
   {/snippet}
 </LabFrame>
 

@@ -5,6 +5,10 @@
    */
   import { onMount, tick } from 'svelte'
   import { search, type Doc, type Result } from '@lib/search'
+  import { href, translator, type Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  const t = translator(lang)
 
   let open = $state(false)
   let q = $state('')
@@ -34,7 +38,7 @@
     if (!docs && !loading) {
       loading = true
       try {
-        docs = await (await fetch('/search.json')).json()
+        docs = await (await fetch(href(lang, '/search.json'))).json()
       } catch {
         docs = []
       }
@@ -93,10 +97,10 @@
     return () => document.removeEventListener('keydown', onKey)
   })
 
-  const kindLabel = (r: Result) => (r.doc.kind === 'term' ? 'Glossary' : `Level ${r.doc.level}`)
+  const kindLabel = (r: Result) => (r.doc.kind === 'term' ? t('Glossary') : t('Level {n}', { n: r.doc.level }))
 </script>
 
-<button class="search-btn" aria-label="Search (press /)" title="Search (/)" onclick={show}>
+<button class="search-btn" aria-label={t('Search (press /)')} title={t('Search (/)')} onclick={show}>
   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
     <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2" />
     <path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
@@ -105,7 +109,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 <dialog
-  class="dialog" aria-label="Search the course" bind:this={dialogEl}
+  class="dialog" aria-label={t('Search the course')} bind:this={dialogEl}
   onkeydown={trap}
   oncancel={(e) => { e.preventDefault(); hide() }}
   onclick={(e) => { if (e.target === dialogEl) hide() }}
@@ -122,22 +126,22 @@
         bind:value={q}
         oninput={run}
         onkeydown={key}
-        placeholder="Search levels and terms, e.g. softmax, mask, LayerNorm"
-        aria-label="Search"
+        placeholder={t('Search levels and terms, e.g. softmax, mask, LayerNorm')}
+        aria-label={t('Search')}
         aria-controls="search-results"
         autocomplete="off"
         spellcheck="false"
       />
-      <button class="close" onclick={hide} aria-label="Close search">Esc</button>
+      <button class="close" onclick={hide} aria-label={t('Close search')}>Esc</button>
     </div>
 
     <div class="results" id="search-results" bind:this={listEl} role="listbox">
       {#if loading}
-        <p class="empty">Loading the index…</p>
+        <p class="empty">{t('Loading the index…')}</p>
       {:else if !q.trim()}
-        <p class="empty">Type a word or two. Every word must appear. ↑ ↓ to move, Enter to open.</p>
+        <p class="empty">{t('Type a word or two. Every word must appear. ↑ ↓ to move, Enter to open.')}</p>
       {:else if !results.length}
-        <p class="empty">Nothing matches “{q}”. Try fewer or shorter words.</p>
+        <p class="empty">{t('Nothing matches “{q}”. Try fewer or shorter words.', { q })}</p>
       {:else}
         {#each results as r}
           {@const solo = r.hits.length === 1}
@@ -153,7 +157,7 @@
                 onclick={(e) => { e.preventDefault(); go(r.doc.url + (h.section.anchor ? `#${h.section.anchor}` : '')) }}
               >
                 {#if solo}<span class="ghead in"><span class="lv">{kindLabel(r)}</span> {r.doc.title}</span>{/if}
-                {#if h.section.heading || r.doc.kind === 'level'}<span class="sec">{h.section.heading || 'Intro'}</span>{/if}
+                {#if h.section.heading || r.doc.kind === 'level'}<span class="sec">{h.section.heading || t('Intro')}</span>{/if}
                 <span class="snip">{@html h.snippet}</span>
               </a>
             {/each}

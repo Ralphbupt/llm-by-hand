@@ -5,9 +5,30 @@
   import { has, subscribe } from '@lib/progress'
   import MatrixGrid from './MatrixGrid.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // hide: one cell of C stays "?" until the learner answers that question
-  let { hide }: { hide?: { id: string; i: number; j: number } } = $props()
+  let { hide, lang = 'en' }: { hide?: { id: string; i: number; j: number }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Multiply two matrices, one cell at a time': '两个矩阵相乘，一次算一格',
+    'Point at or tap a cell of C to see how it is computed. Every number in A and B can be edited.': '指向或点一下 C 的某一格，看它是怎么算出来的。A 和 B 里的每个数都可以改。',
+    'Shapes don’t match': '形状对不上',
+    '→ the two inner numbers must be equal': '→ 内侧的两个数必须相等',
+    'rows of A': 'A 的行数',
+    'fewer rows of A': '减少 A 的行数',
+    'more rows of A': '增加 A 的行数',
+    'inner size': '内侧大小',
+    'smaller inner size': '减小内侧大小',
+    'larger inner size': '增大内侧大小',
+    'columns of B': 'B 的列数',
+    'fewer columns of B': '减少 B 的列数',
+    'more columns of B': '增加 B 的列数',
+    'row {i} of A · column {j} of B': 'A 的第 {i} 行 · B 的第 {j} 列',
+    '? (answer the question below)': '?（先回答下面的问题）',
+    'Pick a cell of C.': '选 C 的一格。',
+  })
   let solved = $state(false)
   onMount(() => {
     if (!hide) return
@@ -53,8 +74,8 @@
 </script>
 
 <LabFrame
-  title="Multiply two matrices, one cell at a time"
-  hint="Point at or tap a cell of C to see how it is computed. Every number in A and B can be edited."
+  title={t('Multiply two matrices, one cell at a time')}
+  hint={t('Point at or tap a cell of C to see how it is computed. Every number in A and B can be edited.')}
   onreset={resetAll}
   resetDisabled={!changed}
 >
@@ -81,34 +102,34 @@
           onhover={(c) => (cell = c)}
         />
       {:else}
-        <span class="bad">Shapes don’t match</span>
+        <span class="bad">{t('Shapes don’t match')}</span>
       {/if}
     </div>
   </div>
   <div class="shapes">
     ({sa[0]}, <b>{sa[1]}</b>) @ (<b>{sb[0]}</b>, {sb[1]})
-    {#if C}→ ({sa[0]}, {sb[1]}){:else}→ the two inner numbers must be equal{/if}
+    {#if C}→ ({sa[0]}, {sb[1]}){:else}{t('→ the two inner numbers must be equal')}{/if}
   </div>
 
   {#snippet controls()}
-    <span class="knob">rows of A <b>{sa[0]}</b>
-      <button class="lab-btn" aria-label="fewer rows of A" onclick={() => setRows(Math.max(1, sa[0] - 1))}>−</button>
-      <button class="lab-btn" aria-label="more rows of A" onclick={() => setRows(Math.min(4, sa[0] + 1))}>+</button></span>
-    <span class="knob">inner size <b>{sa[1]}</b>
-      <button class="lab-btn" aria-label="smaller inner size" onclick={() => setK(Math.max(1, sa[1] - 1))}>−</button>
-      <button class="lab-btn" aria-label="larger inner size" onclick={() => setK(Math.min(4, sa[1] + 1))}>+</button></span>
-    <span class="knob">columns of B <b>{sb[1]}</b>
-      <button class="lab-btn" aria-label="fewer columns of B" onclick={() => setCols(Math.max(1, sb[1] - 1))}>−</button>
-      <button class="lab-btn" aria-label="more columns of B" onclick={() => setCols(Math.min(4, sb[1] + 1))}>+</button></span>
+    <span class="knob">{t('rows of A')} <b>{sa[0]}</b>
+      <button class="lab-btn" aria-label={t('fewer rows of A')} onclick={() => setRows(Math.max(1, sa[0] - 1))}>−</button>
+      <button class="lab-btn" aria-label={t('more rows of A')} onclick={() => setRows(Math.min(4, sa[0] + 1))}>+</button></span>
+    <span class="knob">{t('inner size')} <b>{sa[1]}</b>
+      <button class="lab-btn" aria-label={t('smaller inner size')} onclick={() => setK(Math.max(1, sa[1] - 1))}>−</button>
+      <button class="lab-btn" aria-label={t('larger inner size')} onclick={() => setK(Math.min(4, sa[1] + 1))}>+</button></span>
+    <span class="knob">{t('columns of B')} <b>{sb[1]}</b>
+      <button class="lab-btn" aria-label={t('fewer columns of B')} onclick={() => setCols(Math.max(1, sb[1] - 1))}>−</button>
+      <button class="lab-btn" aria-label={t('more columns of B')} onclick={() => setCols(Math.min(4, sb[1] + 1))}>+</button></span>
   {/snippet}
 
   {#snippet readout()}
     {#if cell && C}
-      C[{cell.i}][{cell.j}] = row {cell.i} of A · column {cell.j} of B =
+      C[{cell.i}][{cell.j}] = {t('row {i} of A · column {j} of B', { i: cell.i, j: cell.j })} =
       {#each terms as [a, b], k}{k ? ' + ' : ''}{a}×{b}{/each}
-      = <b>{isMasked(cell.i, cell.j) ? '? (answer the question below)' : C[cell.i][cell.j]}</b>
+      = <b>{isMasked(cell.i, cell.j) ? t('? (answer the question below)') : C[cell.i][cell.j]}</b>
     {:else}
-      <span class="idle">Pick a cell of C.</span>
+      <span class="idle">{t('Pick a cell of C.')}</span>
     {/if}
   {/snippet}
 </LabFrame>

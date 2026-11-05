@@ -8,6 +8,41 @@
    */
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'One GRU step: keep the old state, or take the new candidate': 'GRU 的一步：保留旧状态，还是取新的候选值',
+    'Move the gates. The new h always lands between h_prev and the candidate h̃; z says how close h is to h̃.': '拖动各个门。新的 h 总是落在 h_prev 和候选值 h̃ 之间；z 决定 h 离 h̃ 有多近。',
+    'The old state, the candidate and the new state as bars from −1 to 1': '旧状态、候选值和新状态，画成 −1 到 1 之间的条',
+    'old state h_prev': '旧状态 h_prev',
+    'candidate h̃': '候选值 h̃',
+    'new h': '新的 h',
+    'Gates (0 to 1)': '门（0 到 1）',
+    'r, reset': 'r，重置',
+    'z, update': 'z，更新',
+    'reset gate r': '重置门 r',
+    'update gate z': '更新门 z',
+    'Inputs': '输入',
+    'h_prev, old state': 'h_prev，旧状态',
+    'a, input part': 'a，输入部分',
+    'input part a': '输入部分 a',
+    ', and h =': '，h =',
+    'With z near 0, the old state passes through almost unchanged: the GRU’s “keep” path.': 'z 接近 0 时，旧状态几乎原样通过：这就是 GRU 的“保留”通路。',
+    'With r near 0, the candidate ignores the old state and uses only the input.': 'r 接近 0 时，候选值忽略旧状态，只用输入。',
+    'the way from h_prev to h̃': '从 h_prev 到 h̃ 的这段路',
+    'The LSTM and the GRU side by side': 'LSTM 和 GRU 对比',
+    'state carried between steps': '在步与步之间传递的状态',
+    'h and c': 'h 和 c',
+    'h only': '只有 h',
+    'gates': '门',
+    'forget, input, output': '遗忘门、输入门、输出门',
+    'update z, reset r': '更新门 z、重置门 r',
+    'weight blocks': '权重块',
+    '“keep” path': '“保留”通路',
+  })
 
   const START = { hPrev: 0.8, a: -0.6, z: 0.3, r: 1 }
   let hPrev = $state(START.hPrev)
@@ -30,26 +65,26 @@
 </script>
 
 <LabFrame
-  title="One GRU step: keep the old state, or take the new candidate"
-  hint="Move the gates. The new h always lands between h_prev and the candidate h̃; z says how close h is to h̃."
+  title={t('One GRU step: keep the old state, or take the new candidate')}
+  hint={t('Move the gates. The new h always lands between h_prev and the candidate h̃; z says how close h is to h̃.')}
   onreset={reset}
   resetDisabled={!changed}
 >
   <svg use:readable viewBox="0 0 {W} 168" class="bars" role="img"
-    aria-label="The old state, the candidate and the new state as bars from −1 to 1">
+    aria-label={t('The old state, the candidate and the new state as bars from −1 to 1')}>
     {#each [-1, -0.5, 0.5, 1] as g}<line x1={bx(g)} x2={bx(g)} y1="16" y2="136" class="grid" />{/each}
     <line x1={bx(0)} x2={bx(0)} y1="14" y2="138" class="zero" />
-    {#each [-1, 0, 1] as t}<text x={bx(t)} y="154" class="tick" text-anchor={t === -1 ? 'start' : t === 1 ? 'end' : 'middle'}>{t}</text>{/each}
+    {#each [-1, 0, 1] as v}<text x={bx(v)} y="154" class="tick" text-anchor={v === -1 ? 'start' : v === 1 ? 'end' : 'middle'}>{v}</text>{/each}
 
-    <text x="10" y={ROWS[0] - 2} class="name">old state h_prev</text>
+    <text x="10" y={ROWS[0] - 2} class="name">{t('old state h_prev')}</text>
     <text x="10" y={ROWS[0] + 12} class="val">{f(hPrev)}</text>
     <rect x={Math.min(bx(0), bx(hPrev))} y={ROWS[0] - BH / 2} width={Math.abs(bx(hPrev) - bx(0))} height={BH} rx="2" class="bar old" />
 
-    <text x="10" y={ROWS[1] - 2} class="name">candidate h̃</text>
+    <text x="10" y={ROWS[1] - 2} class="name">{t('candidate h̃')}</text>
     <text x="10" y={ROWS[1] + 12} class="val">{f(cand)}</text>
     <rect x={Math.min(bx(0), bx(cand))} y={ROWS[1] - BH / 2} width={Math.abs(bx(cand) - bx(0))} height={BH} rx="2" class="bar cand" />
 
-    <text x="10" y={ROWS[2] - 2} class="name strong">new h</text>
+    <text x="10" y={ROWS[2] - 2} class="name strong">{t('new h')}</text>
     <text x="10" y={ROWS[2] + 12} class="val strong">{f(h)}</text>
     <!-- the way from h_prev to h̃; the new h sits z of the way along it -->
     <line x1={bx(hPrev)} x2={bx(cand)} y1={ROWS[2]} y2={ROWS[2]} class="way" />
@@ -61,39 +96,39 @@
 
   {#snippet controls()}
     <fieldset class="group">
-      <legend>Gates (0 to 1)</legend>
-      <label><span>r, reset</span> <b>{f(r)}</b> <input type="range" min="0" max="1" step="0.05" bind:value={r} aria-label="reset gate r" /></label>
-      <label><span>z, update</span> <b>{f(z)}</b> <input type="range" min="0" max="1" step="0.05" bind:value={z} aria-label="update gate z" /></label>
+      <legend>{t('Gates (0 to 1)')}</legend>
+      <label><span>{t('r, reset')}</span> <b>{f(r)}</b> <input type="range" min="0" max="1" step="0.05" bind:value={r} aria-label={t('reset gate r')} /></label>
+      <label><span>{t('z, update')}</span> <b>{f(z)}</b> <input type="range" min="0" max="1" step="0.05" bind:value={z} aria-label={t('update gate z')} /></label>
     </fieldset>
     <fieldset class="group">
-      <legend>Inputs</legend>
-      <label><span>h_prev, old state</span> <b>{f(hPrev)}</b> <input type="range" min="-1" max="1" step="0.05" bind:value={hPrev} aria-label="old state h_prev" /></label>
-      <label><span>a, input part</span> <b>{f(a)}</b> <input type="range" min="-2" max="2" step="0.1" bind:value={a} aria-label="input part a" /></label>
+      <legend>{t('Inputs')}</legend>
+      <label><span>{t('h_prev, old state')}</span> <b>{f(hPrev)}</b> <input type="range" min="-1" max="1" step="0.05" bind:value={hPrev} aria-label={t('old state h_prev')} /></label>
+      <label><span>{t('a, input part')}</span> <b>{f(a)}</b> <input type="range" min="-2" max="2" step="0.1" bind:value={a} aria-label={t('input part a')} /></label>
     </fieldset>
   {/snippet}
 
   {#snippet readout()}
-    h̃ = tanh({f(a)} + {f(r)} × {f(hPrev)}) = {f(cand)}, and h = {f(1 - z)} × {f(hPrev)} + {f(z)} × {f(cand)} = <b>{f(h)}</b>.
-    {#if z < 0.1}<span class="note">With z near 0, the old state passes through almost unchanged: the GRU’s “keep” path.</span>{:else if r < 0.1}<span class="note">With r near 0, the candidate ignores the old state and uses only the input.</span>{/if}
+    h̃ = tanh({f(a)} + {f(r)} × {f(hPrev)}) = {f(cand)}{t(', and h =')} {f(1 - z)} × {f(hPrev)} + {f(z)} × {f(cand)} = <b>{f(h)}</b>.
+    {#if z < 0.1}<span class="note">{t('With z near 0, the old state passes through almost unchanged: the GRU’s “keep” path.')}</span>{:else if r < 0.1}<span class="note">{t('With r near 0, the candidate ignores the old state and uses only the input.')}</span>{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw old"></i>old state h_prev</span>
-    <span><i class="sw cand"></i>candidate h̃</span>
-    <span><i class="sw new"></i>new h</span>
-    <span><i class="sw way"></i>the way from h_prev to h̃</span>
+    <span><i class="sw old"></i>{t('old state h_prev')}</span>
+    <span><i class="sw cand"></i>{t('candidate h̃')}</span>
+    <span><i class="sw new"></i>{t('new h')}</span>
+    <span><i class="sw way"></i>{t('the way from h_prev to h̃')}</span>
   {/snippet}
 </LabFrame>
 
 <figure class="cmp">
   <table>
-    <caption>The LSTM and the GRU side by side</caption>
+    <caption>{t('The LSTM and the GRU side by side')}</caption>
     <thead><tr><th scope="col"></th><th scope="col">LSTM</th><th scope="col">GRU</th></tr></thead>
     <tbody>
-      <tr><th scope="row">state carried between steps</th><td>h and c</td><td>h only</td></tr>
-      <tr><th scope="row">gates</th><td>forget, input, output</td><td>update z, reset r</td></tr>
-      <tr><th scope="row">weight blocks</th><td>4 (f, i, g, o)</td><td>3 (z, r, h̃)</td></tr>
-      <tr><th scope="row">“keep” path</th><td>c = f · c + i · g</td><td>h = (1 − z) · h + z · h̃</td></tr>
+      <tr><th scope="row">{t('state carried between steps')}</th><td>{t('h and c')}</td><td>{t('h only')}</td></tr>
+      <tr><th scope="row">{t('gates')}</th><td>{t('forget, input, output')}</td><td>{t('update z, reset r')}</td></tr>
+      <tr><th scope="row">{t('weight blocks')}</th><td>4 (f, i, g, o)</td><td>3 (z, r, h̃)</td></tr>
+      <tr><th scope="row">{t('“keep” path')}</th><td>c = f · c + i · g</td><td>h = (1 − z) · h + z · h̃</td></tr>
     </tbody>
   </table>
 </figure>

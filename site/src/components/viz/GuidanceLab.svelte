@@ -12,6 +12,39 @@
     rng, makeShape, loadCondNet, predictNoiseCond, reverseStep, guide, shapeScore,
     prepCanvas, drawAxes, drawPoints, themeColors, type CondNet, type Pt, type ShapeName,
   } from '@lib/diffusion'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // the loops below use `t` for the noise step, so the translator is `tx`
+  const tx = useT({
+    'Spiral': '螺旋',
+    'Ring': '圆环',
+    'Moons': '双月',
+    'Guidance: how strongly w moves points toward the shape': '引导：w 把点往形状上推得有多用力',
+    'Drag w. The same starting noise is used every time, so only w changes.': '拖动 w。每次都用同一份起始噪声，所以只有 w 在变。',
+    '300 samples drawn with guidance w, over the target shape': '用引导强度 w 采出的 300 个样本，叠在目标形状上',
+    'Loading the trained network…': '正在加载训练好的网络…',
+    'Could not load the trained network: {error}': '加载训练好的网络失败：{error}',
+    'guidance w =': '引导 w =',
+    'Guidance strength w': '引导强度 w',
+    '0: ignore the shape': '0：不管形状',
+    '1: plain': '1：原样',
+    '10: push hard': '10：用力推',
+    'on the shape': '落在形状上',
+    'shape covered': '形状覆盖',
+    'On the shape and shape covered, for w from 0 to 10': 'w 从 0 到 10 时的“落在形状上”和“形状覆盖”',
+    'computing the curve…': '正在计算曲线…',
+    'Shape to ask for': '要的形状',
+    'point 0 at t = 25: eps_free {a} + w·(eps_shape {b} − eps_free) = {c}': '第 0 个点在 t = 25：eps_free {a} + w·(eps_shape {b} − eps_free) = {c}',
+    'sampling…': '采样中…',
+    'the true shape': '真实形状',
+    'samples at this w': '这个 w 下的样本',
+    'on the shape: samples within 0.15 of it': '落在形状上：离形状不到 0.15 的样本',
+    'shape covered: parts of it with a sample within 0.15': '形状覆盖：形状上 0.15 以内有样本的部分',
+    'the curve is a quicker run with 120 points, so it differs a little from the boxes': '曲线是用 120 个点快速跑出来的，所以和上面两个方框里的数略有不同',
+  })
 
   const SPAN = 3.2, N = 300
   const SHAPE_LIST: ShapeName[] = ['spiral', 'ring', 'moons']
@@ -107,29 +140,29 @@
 </script>
 
 <LabFrame
-  title="Guidance: how strongly w moves points toward the shape"
-  hint="Drag w. The same starting noise is used every time, so only w changes."
+  title={tx('Guidance: how strongly w moves points toward the shape')}
+  hint={tx('Drag w. The same starting noise is used every time, so only w changes.')}
   onreset={resetAll}
   resetDisabled={cls === 0 && w === 1}
 >
   <div class="grid">
     <div class="boardwrap">
-      <canvas bind:this={cv} class="board" aria-label="300 samples drawn with guidance w, over the target shape"></canvas>
-      {#if !m && !error}<p class="loading">Loading the trained network…</p>{/if}
+      <canvas bind:this={cv} class="board" aria-label={tx('300 samples drawn with guidance w, over the target shape')}></canvas>
+      {#if !m && !error}<p class="loading">{tx('Loading the trained network…')}</p>{/if}
     </div>
     <div class="side">
-      {#if error}<p class="err">Could not load the trained network: {error}</p>{/if}
+      {#if error}<p class="err">{tx('Could not load the trained network: {error}', { error: error ?? '' })}</p>{/if}
       <label class="slider">
-        <span>guidance w = <b>{w.toFixed(1)}</b></span>
-        <input type="range" min="0" max="10" step="0.5" bind:value={w} onchange={() => sample()} aria-label="Guidance strength w" />
+        <span>{tx('guidance w =')} <b>{w.toFixed(1)}</b></span>
+        <input type="range" min="0" max="10" step="0.5" bind:value={w} onchange={() => sample()} aria-label={tx('Guidance strength w')} />
       </label>
-      <div class="scale"><span>0: ignore the shape</span><span>1: plain</span><span>10: push hard</span></div>
+      <div class="scale"><span>{tx('0: ignore the shape')}</span><span>{tx('1: plain')}</span><span>{tx('10: push hard')}</span></div>
       <div class="stats">
-        <div class="stat"><span>on the shape</span><b class="s1">{score && !busy ? pct(score.onShape) : '…'}</b></div>
-        <div class="stat"><span>shape covered</span><b class="s2">{score && !busy ? pct(score.covered) : '…'}</b></div>
+        <div class="stat"><span>{tx('on the shape')}</span><b class="s1">{score && !busy ? pct(score.onShape) : '…'}</b></div>
+        <div class="stat"><span>{tx('shape covered')}</span><b class="s2">{score && !busy ? pct(score.covered) : '…'}</b></div>
       </div>
       <figure class="trade">
-        <svg viewBox="0 0 {CW} {CH}" use:readable role="img" aria-label="On the shape and shape covered, for w from 0 to 10">
+        <svg viewBox="0 0 {CW} {CH}" use:readable role="img" aria-label={tx('On the shape and shape covered, for w from 0 to 10')}>
           {#each [0, 0.5, 1] as v}
             <line x1={PL} x2={CW - PR} y1={cy(v)} y2={cy(v)} class="gl" />
             <text x={PL - 5} y={cy(v) + 3.5} class="tick" text-anchor="end">{Math.round(v * 100)}%</text>
@@ -142,7 +175,7 @@
             <path d={line(sweep[cls].map((p) => ({ w: p.w, v: p.covered })))} class="l2" />
             {#each sweep[cls] as p}<circle cx={cx(p.w)} cy={cy(p.onShape)} r="2.6" class="d1" /><circle cx={cx(p.w)} cy={cy(p.covered)} r="2.6" class="d2" />{/each}
           {:else if m}
-            <text x={(CW + PL) / 2} y={CH / 2} class="tick" text-anchor="middle">computing the curve…</text>
+            <text x={(CW + PL) / 2} y={CH / 2} class="tick" text-anchor="middle">{tx('computing the curve…')}</text>
           {/if}
         </svg>
       </figure>
@@ -150,23 +183,23 @@
   </div>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="Shape to ask for">
+    <div class="seg" role="group" aria-label={tx('Shape to ask for')}>
       {#each SHAPE_LIST as sh, i}
-        <button type="button" class="lab-btn" class:on={cls === i} aria-pressed={cls === i} onclick={() => pickShape(i)}>{sh[0].toUpperCase() + sh.slice(1)}</button>
+        <button type="button" class="lab-btn" class:on={cls === i} aria-pressed={cls === i} onclick={() => pickShape(i)}>{tx(sh[0].toUpperCase() + sh.slice(1))}</button>
       {/each}
     </div>
   {/snippet}
 
   {#snippet readout()}
-    {#if watch}point 0 at t = 25: eps_free {fp(watch.free)} + w·(eps_shape {fp(watch.cond)} − eps_free) = {fp(watch.g)}{:else}sampling…{/if}
+    {#if watch}{tx('point 0 at t = 25: eps_free {a} + w·(eps_shape {b} − eps_free) = {c}', { a: fp(watch.free), b: fp(watch.cond), c: fp(watch.g) })}{:else}{tx('sampling…')}{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw target"></i>the true shape</span>
-    <span><i class="sw you"></i>samples at this w</span>
-    <span><i class="ln l1"></i>on the shape: samples within 0.15 of it</span>
-    <span><i class="ln l2"></i>shape covered: parts of it with a sample within 0.15</span>
-    <span>the curve is a quicker run with 120 points, so it differs a little from the boxes</span>
+    <span><i class="sw target"></i>{tx('the true shape')}</span>
+    <span><i class="sw you"></i>{tx('samples at this w')}</span>
+    <span><i class="ln l1"></i>{tx('on the shape: samples within 0.15 of it')}</span>
+    <span><i class="ln l2"></i>{tx('shape covered: parts of it with a sample within 0.15')}</span>
+    <span>{tx('the curve is a quicker run with 120 points, so it differs a little from the boxes')}</span>
   {/snippet}
 </LabFrame>
 

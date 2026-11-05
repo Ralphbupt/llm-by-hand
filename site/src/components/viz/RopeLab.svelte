@@ -8,8 +8,30 @@
   import { readable } from '@lib/readable'
   import { has, subscribe } from '@lib/progress'
   import { rotate, dot } from '@lib/modern'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: { qx?: string; score?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { qx?: string; score?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'RoPE turns q and k by their positions; the score depends only on m − n': 'RoPE 按位置旋转 q 和 k；分数只取决于 m − n',
+    'Move the two positions. Then use “both +1” and watch the score stay the same.': '移动两个位置。然后按“两个都 +1”，看分数保持不变。',
+    'q at position {m} and k at position {n}, rotated on the unit circle': 'q 在位置 {m}，k 在位置 {n}，在单位圆上旋转',
+    '[1, 0] turned by {m} × 0.5 = {a} rad': '[1, 0] 旋转 {m} × 0.5 = {a} 弧度',
+    '[0, 1] turned by {n} × 0.5 = {a} rad': '[0, 1] 旋转 {n} × 0.5 = {a} 弧度',
+    'The arc is the angle between q and k (in radians); the score is its cosine, so it only changes when m − n does.': '圆弧是 q 和 k 之间的夹角（单位是弧度）；分数是它的余弦，所以只有 m − n 变了，分数才会变。',
+    'Without RoPE the score is always [1, 0]·[0, 1] = 0, wherever the words are.': '没有 RoPE 时，不管词在哪里，分数总是 [1, 0]·[0, 1] = 0。',
+    'q’s position m =': 'q 的位置 m =',
+    'k’s position n =': 'k 的位置 n =',
+    'Move both positions': '同时移动两个位置',
+    'both +1': '两个都 +1',
+    'both −1': '两个都 −1',
+    'score q·k =': '分数 q·k =',
+    '· distance m − n = {d}': '· 距离 m − n = {d}',
+    'q, turned by m × 0.5': 'q，旋转 m × 0.5',
+    'k, turned by n × 0.5': 'k，旋转 n × 0.5',
+    'before turning': '旋转之前',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -55,12 +77,12 @@
 </script>
 
 <LabFrame
-  title="RoPE turns q and k by their positions; the score depends only on m − n"
-  hint="Move the two positions. Then use “both +1” and watch the score stay the same."
+  title={t('RoPE turns q and k by their positions; the score depends only on m − n')}
+  hint={t('Move the two positions. Then use “both +1” and watch the score stay the same.')}
   onreset={() => { m = 0; n = 0 }} resetDisabled={m === 0 && n === 0}
 >
   <div class="wrap">
-    <svg use:readable viewBox="0 0 200 200" role="img" aria-label={`q at position ${m} and k at position ${n}, rotated on the unit circle`}>
+    <svg use:readable viewBox="0 0 200 200" role="img" aria-label={t('q at position {m} and k at position {n}, rotated on the unit circle', { m, n })}>
       <circle cx={C} cy={C} r={R} fill="none" stroke="var(--line)" />
       <line x1={C - R - 8} y1={C} x2={C + R + 8} y2={C} stroke="var(--line)" />
       <line x1={C} y1={C - R - 8} x2={C} y2={C + R + 8} stroke="var(--line)" />
@@ -81,36 +103,36 @@
     <div class="nums">
       <div class="row" style:--c="var(--cat-1)">
         <span class="nm">q</span>
-        <span class="mono">[1, 0] turned by {m} × 0.5 = {hideQ ? '?' : (m * THETA).toFixed(1)} rad</span>
+        <span class="mono">{t('[1, 0] turned by {m} × 0.5 = {a} rad', { m, a: hideQ ? '?' : (m * THETA).toFixed(1) })}</span>
         <span class="mono res">→ [{hideQ ? '?' : f(qr[0])}, {hideQ ? '?' : f(qr[1])}]</span>
       </div>
       <div class="row" style:--c="var(--cat-3)">
         <span class="nm">k</span>
-        <span class="mono">[0, 1] turned by {n} × 0.5 = {(n * THETA).toFixed(1)} rad</span>
+        <span class="mono">{t('[0, 1] turned by {n} × 0.5 = {a} rad', { n, a: (n * THETA).toFixed(1) })}</span>
         <span class="mono res">→ [{f(kr[0])}, {f(kr[1])}]</span>
       </div>
-      <p class="note">The arc is the angle between q and k (in radians); the score is its cosine, so it only changes when m − n does.
-        Without RoPE the score is always [1, 0]·[0, 1] = 0, wherever the words are.</p>
+      <p class="note">{t('The arc is the angle between q and k (in radians); the score is its cosine, so it only changes when m − n does.')}
+        {t('Without RoPE the score is always [1, 0]·[0, 1] = 0, wherever the words are.')}</p>
     </div>
   </div>
 
   {#snippet controls()}
-    <label class="knob" style:--c="var(--cat-1)"><span>q’s position m = <b>{m}</b></span><input type="range" min="0" max="12" step="1" value={m} oninput={(e) => (m = +e.currentTarget.value)} /></label>
-    <label class="knob" style:--c="var(--cat-3)"><span>k’s position n = <b>{n}</b></span><input type="range" min="0" max="12" step="1" value={n} oninput={(e) => (n = +e.currentTarget.value)} /></label>
-    <span class="pair" role="group" aria-label="Move both positions">
-      <button type="button" class="lab-btn primary" onclick={() => shift(1)} disabled={m >= 12 || n >= 12}>both +1</button>
-      <button type="button" class="lab-btn" onclick={() => shift(-1)} disabled={m <= 0 || n <= 0}>both −1</button>
+    <label class="knob" style:--c="var(--cat-1)"><span>{t('q’s position m =')} <b>{m}</b></span><input type="range" min="0" max="12" step="1" value={m} oninput={(e) => (m = +e.currentTarget.value)} /></label>
+    <label class="knob" style:--c="var(--cat-3)"><span>{t('k’s position n =')} <b>{n}</b></span><input type="range" min="0" max="12" step="1" value={n} oninput={(e) => (n = +e.currentTarget.value)} /></label>
+    <span class="pair" role="group" aria-label={t('Move both positions')}>
+      <button type="button" class="lab-btn primary" onclick={() => shift(1)} disabled={m >= 12 || n >= 12}>{t('both +1')}</button>
+      <button type="button" class="lab-btn" onclick={() => shift(-1)} disabled={m <= 0 || n <= 0}>{t('both −1')}</button>
     </span>
   {/snippet}
 
   {#snippet readout()}
-    score q·k = <b>{hideScore ? '?' : f(score)}</b> <span class="dim">· distance m − n = {m - n}</span>
+    {t('score q·k =')} <b>{hideScore ? '?' : f(score)}</b> <span class="dim">{t('· distance m − n = {d}', { d: m - n })}</span>
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="ln" style="border-color: var(--cat-1)"></i>q, turned by m × 0.5</span>
-    <span class="lg"><i class="ln" style="border-color: var(--cat-3)"></i>k, turned by n × 0.5</span>
-    <span class="lg"><i class="ln dash"></i>before turning</span>
+    <span class="lg"><i class="ln" style="border-color: var(--cat-1)"></i>{t('q, turned by m × 0.5')}</span>
+    <span class="lg"><i class="ln" style="border-color: var(--cat-3)"></i>{t('k, turned by n × 0.5')}</span>
+    <span class="lg"><i class="ln dash"></i>{t('before turning')}</span>
   {/snippet}
 </LabFrame>
 

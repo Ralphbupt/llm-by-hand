@@ -7,6 +7,7 @@ import { loadExercises } from './quiz'
 import { pointsAtPage, warmEligible, type WarmData, type WarmItem } from './warmup'
 import { OPENS_AFTER } from './nav'
 import { idsInSideBoxes, sectionOf } from './lessonScan'
+import type { Lang } from './i18n'
 
 /**
  * `optional`: ids that never cost a star (see levelScore): flagged `optional: true` in exercises.yaml, or placed
@@ -15,9 +16,9 @@ import { idsInSideBoxes, sectionOf } from './lessonScan'
  */
 export type LevelIndex = Record<string, { ids: string[]; checkpoint: string; mustSolve?: string[]; optional?: string[]; mustWhere?: Record<string, string> }>
 
-export async function levelIndex(): Promise<LevelIndex> {
+export async function levelIndex(lang: Lang = 'en'): Promise<LevelIndex> {
   const out: LevelIndex = {}
-  for (const l of await allLevels()) {
+  for (const l of await allLevels(lang)) {
     const exs = loadExercises(l.id)
     const body = l.body ?? ''
     const boxed = new Set(idsInSideBoxes(body))
@@ -45,8 +46,8 @@ export const toJsonScript = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u
  * - A side-trip level: only its prerequisites, i.e. the main line up to the level it opens after
  *   (lib/nav.ts), and the earlier levels of its own branch.
  */
-export async function warmData(slug: string): Promise<WarmData> {
-  const all = await allLevels()
+export async function warmData(slug: string, lang: Lang = 'en'): Promise<WarmData> {
+  const all = await allLevels(lang)
   const here = all.find((l) => l.id === slug)
   const orderOf = (id: string) => all.find((l) => l.id === id)?.data.order ?? Infinity
   // the main-line point a level hangs on: its own order (main) or the order of the level it opens after (branch)
@@ -60,7 +61,7 @@ export async function warmData(slug: string): Promise<WarmData> {
   }
   const items: WarmItem[] = []
   for (const l of earlier) {
-    for (const [id, ex] of Object.entries(loadExercises(l.id))) {
+    for (const [id, ex] of Object.entries(loadExercises(l.id, lang))) {
       if (!warmEligible(ex) || ex.type === 'code') continue
       // away from its page, the question needs the version that stands alone (the one the test-out uses too)
       const it: WarmItem = { id, page: l.id, type: ex.type, prompt: ex.promptShort ?? ex.prompt, answer: ex.answer! }

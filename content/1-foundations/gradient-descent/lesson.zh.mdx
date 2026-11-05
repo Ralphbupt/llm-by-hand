@@ -1,0 +1,165 @@
+---
+recap:
+  can:
+    - "对几个点，手算均方误差损失。"
+    - "对一条直线算出 $\\partial L/\\partial w$ 和 $\\partial L/\\partial b$，并逆着它们走一步。"
+    - "写出完整的训练循环：预测、算梯度、走一步、重复。"
+  keys:
+    - "$L = \\text{mean}\\big((w x + b - y)^2\\big)$"
+    - "$\\partial L/\\partial w = \\text{mean}(2 \\cdot \\text{error} \\cdot x)$，$\\partial L/\\partial b = \\text{mean}(2 \\cdot \\text{error})$"
+    - "$w \\leftarrow w - \\text{lr} \\cdot \\partial L/\\partial w$：逆着梯度走一步"
+    - "学习率太大，会越过最低点，损失反而变大"
+  mistakes:
+    - "把梯度加上去，而不是减掉：减去一个负的梯度，等于加。"
+    - "w 的梯度里忘了乘 `x`，或者损失取的是平均，你却求了和。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import GradientLab from '@viz/GradientLab.astro'
+
+模型就是一个公式，里面有一些可以调的数，叫作**参数**（parameter），也叫权重。学习，就是不断调整参数，直到公式给出的答案和数据对上。
+这一关用的是最小的模型：一条直线，只有两个参数：
+
+$$
+\hat y = w \cdot x + b
+$$
+
+$\hat y$（读作“y hat”）是这条直线对输入 $x$ 的预测。这里两个单独的数之间的“·”就是普通的乘法。
+（在第 1 关里，它把两个列表连起来；用在单独的数上，它就是 ×。）
+
+数据是三个点：(1, 2)、(2, 4)、(3, 6)。你一眼就能看出答案是 w = 2，b = 0。机器看不出来。
+它从一个猜测出发，w = 0.5，b = 0，要一步一步走到答案。
+
+## 1. 衡量错了多少
+
+对每个点，**误差**（error）是预测值减去真实值。把每个误差平方，这样往哪个方向偏都算错，然后取平均。
+这一个数就是**损失**（loss）：
+
+$$
+L = \text{mean}\big((w x + b - y)^2\big)
+$$
+
+<GradientLab hide={{ loss: "loss-start", grad: "grad-w", step: "new-w" }} />
+
+<Blank id="loss-start" />
+
+<Gate requires="loss-start">
+
+## 2. 哪边是下坡？
+
+损失是 (w, b) 上的一个曲面：实验台右边的面板画的就是它。在 3D 视图里，高度不是损失本身，而是由损失算出的一个更小的数：损失越大，位置仍然越高，但大的值被压小了很多，这样低处还能看得清。（如果你好奇：高度是 $\ln(1 + \text{loss})$，ln 的介绍在[数学页](/math/#exp-ln)。）
+想让损失变小，你得知道：把 w 调大一点，损失是变大还是变小？变得有多快？
+这个变化率就是**梯度**（gradient）。说白了：w 每挪一小步，L 变多少。
+它写作 $\partial L/\partial w$，读作“L 对 w 的偏导数”。
+“偏”的意思是只让 w 动，其他都不变。$\partial L/\partial b$ 也一样，只是换成只让 b 动。
+对只有一个输入的函数，斜率有个简短的写法：$f'(x)$，读作“f 撇 x”。它是 $f$ 在 $x$ 处的斜率。
+（第一次接触导数？[数学页](/math/#derivative)用数字演示了一个例子。）对这个损失，两个梯度是：
+
+$$
+\frac{\partial L}{\partial w} = \text{mean}(2 \cdot \text{error} \cdot x) \qquad \frac{\partial L}{\partial b} = \text{mean}(2 \cdot \text{error})
+$$
+
+在纸上算一算。你答完之后，实验台下面的表格会列出每一项，方便你核对。
+
+<Blank id="grad-w" />
+
+</Gate>
+
+<Gate requires="grad-w">
+
+## 3. 走一步
+
+把每个参数**逆着**它的梯度挪一小段。“一小段”有多大，由**学习率**（learning rate）决定：
+
+$$
+w \leftarrow w - \text{lr} \cdot \frac{\partial L}{\partial w} \qquad b \leftarrow b - \text{lr} \cdot \frac{\partial L}{\partial b}
+$$
+
+学习率取 0.05，手算新的 w。算完后，实验台里走一步的按钮就会解锁，“走一步”会帮你核对。
+
+<Blank id="new-w" />
+
+</Gate>
+
+<Gate requires="new-w">
+
+<Stuck q="w 的梯度是 −14。为什么是负的？它说明了什么？">
+
+负的意思是：w 变大，损失就**变小**。现在每个预测都偏低
+（0.5、1、1.5，而目标是 2、4、6），所以直线陡一点会更好。
+
+大小 14 说明此刻损失对 w 有多敏感。它这么大，是因为我们离答案还很远。
+快到谷底时，梯度会缩向 0，步子也会自己变小，学习率不用改。
+
+</Stuck>
+
+走了一步，损失就从 10.5 降到了约 2.117。多按几次“10 步”，看路径沿着曲面往下走，
+走向最低点 w = 2，b = 0。
+
+<Predict id="lr-too-big" />
+
+<Deeper title="梯度公式是怎么来的">
+
+只看一个点。它的损失是 $(wx + b - y)^2$。把括号里的部分记作 $e = wx + b - y$，也就是误差。
+
+损失是 $e^2$，$e$ 变化时，$e^2$ 以 $2e$ 的速率变化。
+$w$ 变化时，$e$ 以 $x$ 的速率变化（因为 $w$ 乘着 $x$）；$b$ 变化时，$e$ 以 $1$ 的速率变化。
+
+把两个速率乘起来：$\partial L/\partial w = 2e \cdot x$，$\partial L/\partial b = 2e \cdot 1$。
+因为损失是平均值，再对所有点取平均。整个公式就是这样来的。
+
+“沿路把速率乘起来”叫作**链式法则**（chain rule）。第 6 关就是把这个想法用到整个网络上。
+
+</Deeper>
+
+## 4. 自己写一遍
+
+写出 w 的梯度。`x` 和 `y` 是 NumPy 数组，所以 `np.mean` 会对所有点取平均。
+
+有一个 Python 写法，后面每一关都会用到：乘方写作 `**`。所以损失写成
+`np.mean(error ** 2)`，其中 `error ** 2` 把每个元素都平方。不要用 `^` 表示乘方：在 Python 里它是另一个意思，
+用在小数上还会报错。（更多内容见[数学页](/math/#powers)。）
+
+<CodeBlank id="grads" />
+
+</Gate>
+
+<Gate requires="grads">
+
+## 5. 为什么要逆着梯度走？
+
+<Stuck q="为什么要减去梯度？加上它不也能改变参数吗？">
+
+梯度指向损失增长最快的方向。
+我们想让损失变小，所以往反方向走。如果加上梯度，就是在往曲面上爬，损失每一步都会变大。
+
+</Stuck>
+
+<TryIt>
+
+走到损失曲面上一个很远的角落，比如 w = −1，b = 3（在 3D 曲面上选一个点，或者在“平面图”视图里拖动），
+从那里开始走几步。然后把学习率调到 0.15，再走一遍。哪条路径在山谷两侧来回跳？为什么？
+
+</TryIt>
+
+## 6. 完整的循环
+
+把三步合在一起：预测，算出两个梯度，把两个参数各走一步。然后重复。这门课里每一个模型
+都是用这个循环训练的；变的只是梯度的公式越来越大。
+
+<CodeBlank id="gd-loop" />
+
+</Gate>
+
+<Gate requires="gd-loop">
+
+最后检查一次：同样的步骤，换一组数据。
+
+<Blank id="final-w" />
+
+</Gate>

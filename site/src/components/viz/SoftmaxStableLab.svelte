@@ -8,8 +8,28 @@
   import { has, subscribe } from '@lib/progress'
   import { roundTo, show, type Fmt } from '@lib/floatbits'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: Record<string, string> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string>; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Softmax two ways': '两种算法的 softmax',
+    'Pick two scores and a format. Watch where inf and nan appear.': '选两个分数和一种格式。看 inf 和 nan 在哪里出现。',
+    'score 0': '分数 0',
+    'score 1': '分数 1',
+    'sum': '和',
+    'directly from e': '直接从 e',
+    'subtract the largest score first ({m})': '先减去最大的分数（{m}）',
+    'format': '格式',
+    'straight:': '直接算：',
+    'subtract max first:': '先减去最大值：',
+    'answer the question below to see p': '回答下面的问题才能看到 p',
+    'both ways give': '两种算法都得到',
+    'the same p (answer the question below to see it)': '同样的 p（回答下面的问题才能看到）',
+    'too big for {fmt}, or a result of inf / inf': '对 {fmt} 来说太大，或者是 inf / inf 的结果',
+    'the probabilities that softmax should give': 'softmax 应该给出的概率',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -55,18 +75,18 @@
   function reset() { preset(START.z); fmt = START.fmt }
 </script>
 
-<LabFrame title="Softmax two ways" hint="Pick two scores and a format. Watch where inf and nan appear." onreset={reset} resetDisabled={!changed}>
+<LabFrame title={tx('Softmax two ways')} hint={tx('Pick two scores and a format. Watch where inf and nan appear.')} onreset={reset} resetDisabled={!changed}>
   <div class="tw">
     <table>
       <thead>
-        <tr><th></th><th>score 0</th><th>score 1</th><th>sum</th></tr>
+        <tr><th></th><th>{tx('score 0')}</th><th>{tx('score 1')}</th><th>{tx('sum')}</th></tr>
       </thead>
       <tbody>
-        <tr class="grp"><th colspan="4">directly from e<sup>z</sup></th></tr>
+        <tr class="grp"><th colspan="4">{tx('directly from e')}<sup>z</sup></th></tr>
         <tr><th>z</th><td>{fmtZ(z[0])}</td><td>{fmtZ(z[1])}</td><td></td></tr>
         <tr><th>e<sup>z</sup></th>{#each calc.e as v}<td class:bad={bad(v)}>{fmtV(v)}</td>{/each}<td class:bad={bad(calc.s)}>{fmtV(calc.s)}</td></tr>
         <tr><th>p</th>{#each calc.p as v}<td class:bad={bad(v)}><b>{fmtV(v)}</b></td>{/each}<td></td></tr>
-        <tr class="grp"><th colspan="4">subtract the largest score first ({fmtZ(calc.m)})</th></tr>
+        <tr class="grp"><th colspan="4">{tx('subtract the largest score first ({m})', { m: fmtZ(calc.m) })}</th></tr>
         <tr><th>z − max</th>{#each calc.d as v}<td>{fmtZ(v)}</td>{/each}<td></td></tr>
         <tr><th>e<sup>z − max</sup></th>{#each calc.e2 as v}<td>{fmtV(v)}</td>{/each}<td>{fmtV(calc.s2)}</td></tr>
         <tr><th>p</th>{#each calc.p2 as v}<td class="good" class:q={hideP}><b>{hideP ? '?' : fmtV(v)}</b></td>{/each}<td></td></tr>
@@ -76,14 +96,14 @@
 
   {#snippet controls()}
     <div class="ctl">
-      <div class="row" role="group" aria-label="format">
+      <div class="row" role="group" aria-label={tx('format')}>
         {#each ['float32', 'float16'] as f}
           <button class="lab-btn fmt" class:on={fmt === f} aria-pressed={fmt === f} onclick={() => (fmt = f as Fmt)}>{f}</button>
         {/each}
       </div>
       <div class="row">
-        <label>score 0 <input type="text" inputmode="decimal" value={texts[0]} oninput={(e) => setText(0, e.currentTarget.value)} /></label>
-        <label>score 1 <input type="text" inputmode="decimal" value={texts[1]} oninput={(e) => setText(1, e.currentTarget.value)} /></label>
+        <label>{tx('score 0')} <input type="text" inputmode="decimal" value={texts[0]} oninput={(e) => setText(0, e.currentTarget.value)} /></label>
+        <label>{tx('score 1')} <input type="text" inputmode="decimal" value={texts[1]} oninput={(e) => setText(1, e.currentTarget.value)} /></label>
       </div>
       <div class="row">
         {#each PRESETS as p}
@@ -95,15 +115,15 @@
 
   {#snippet readout()}
     {#if bad(calc.p[0]) || bad(calc.p[1])}
-      straight: <span class="bad">p = [{calc.p.map(fmtV).join(', ')}]</span> · subtract max first: {hideP ? 'answer the question below to see p' : `p = [${calc.p2.map(fmtV).join(', ')}]`}
+      {tx('straight:')} <span class="bad">p = [{calc.p.map(fmtV).join(', ')}]</span> · {tx('subtract max first:')} {hideP ? tx('answer the question below to see p') : `p = [${calc.p2.map(fmtV).join(', ')}]`}
     {:else}
-      both ways give {hideP ? 'the same p (answer the question below to see it)' : `p = [${calc.p2.map(fmtV).join(', ')}]`}
+      {tx('both ways give')} {hideP ? tx('the same p (answer the question below to see it)') : `p = [${calc.p2.map(fmtV).join(', ')}]`}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><b class="bad">inf, nan</b> too big for {fmt}, or a result of inf / inf</span>
-    <span class="key"><b class="good">0.73</b> the probabilities that softmax should give</span>
+    <span class="key"><b class="bad">inf, nan</b> {tx('too big for {fmt}, or a result of inf / inf', { fmt })}</span>
+    <span class="key"><b class="good">0.73</b> {tx('the probabilities that softmax should give')}</span>
   {/snippet}
 </LabFrame>
 

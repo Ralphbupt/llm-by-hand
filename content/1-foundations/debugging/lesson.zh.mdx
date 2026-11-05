@@ -1,0 +1,260 @@
+---
+recap:
+  can:
+    - "在形状 bug 毁掉损失之前，通过打印形状，找出这种不报错的 bug。"
+    - "用数值斜率检查梯度公式，并通过过拟合一个批来测试整个循环。"
+    - "读懂损失曲线：发散、NaN、卡住不动、来回摆动，或者降得快得可疑。"
+  keys:
+    - "一列 `(n, 1)` 减去一个扁平的 `(n,)`，得到一个 `(n, n)` 的方阵：不报错，但损失是错的"
+    - "数值斜率 $\\approx \\dfrac{f(w+h) - f(w-h)}{2h}$"
+    - "inf − inf = NaN，0 × inf = NaN，NaN 会传染给它碰到的一切"
+    - "下一个 token 的目标值就是输入错开一位：输入去掉最后一列，目标值去掉第一列"
+  mistakes:
+    - "还没确认模型能记住一个批，就去改学习率或模型大小。"
+    - "相信一个降得飞快的损失：输入里可能已经包含了答案。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import BugLab from '@viz/BugLab.astro'
+
+模型代码里的大多数 bug 不会让程序崩溃。脚本照常运行，损失照常打印，只是模型学得很差，或者学错了东西。
+这一关是应对这种情况的一张检查清单。每一步都配一个坏掉的小例子。
+
+1. **检查形状。**
+2. **过拟合一个批。**
+3. 用数值斜率**检查梯度**。
+4. **找到第一个 inf 或 NaN。**
+5. **读懂损失曲线：**不下降、来回摆动，或者降得太快。
+
+最后的 Boss 是三个坏掉的脚本。最后一个在你自己的电脑上运行；如果你还没装 Python
+和 PyTorch，请看[安装页](/setup/)。
+
+所有例子都用第 7 关的四个点：(1, 3)、(2, 3)、(3, 7)、(4, 7)，用直线 $\hat y = w x + b$ 来拟合，从
+w = 0.5、b = 0 开始。最好的直线是 w = 1.6、b = 1，损失为 0.8。
+
+## 1. 检查形状
+
+模型代码常常把预测值做成一列，形状 `(4, 1)`，因为它是 `X @ W` 的结果。
+而目标值常常是一个扁平的列表，形状 `(4,)`。损失那一行 `((pred - y) ** 2).mean()` 运行时不会报错。
+
+<Blank id="bcast-shape" />
+
+<Gate requires="bcast-shape">
+
+所以这个损失把每个预测值和每个目标值都比了一遍，是 16 对，而不是 4 对。模型仍然会把这个损失降下来，
+但这个损失问的是一个错误的问题。
+
+<Blank id="bcast-b" />
+
+</Gate>
+
+<Gate requires="bcast-b">
+
+实验台实时训练这条直线，用的是真实训练时的数（32 位浮点数，和 PyTorch 一样）。
+勾选**形状 bug**，然后训练：直线最后变成水平的，损失停在 4，而不是 0.8。
+
+<BugLab />
+
+修复只要一行：让两边形状相同，`pred[:, 0] - y` 或 `pred - y.reshape(-1, 1)`。
+能发现它的习惯是：**把损失里每个数组的形状都打印一次**，并在旁边写下你期望的形状。
+
+<Stuck q="为什么 NumPy（或 PyTorch）在这里不报错？">
+
+广播是一个特性：`X @ W + b` 就是靠它把一行偏置加到每一行上的（第 1 关）。
+NumPy 无法知道你到底想不想广播。所以形状 bug 不会给出报错信息，只有你自己能发现它们。
+在损失函数里写上 `assert pred.shape == y.shape`，就能把这个 bug 变成一个看得见的报错。
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="bcast-b">
+
+## 2. 过拟合一个批
+
+在全部数据上训练之前，先在**一个小批**上训练很多次，比如 4 个样本。
+一个有几百个权重的模型能记住 4 个样本，所以损失应该降到接近它可能的最低值。
+（对直线来说，这个最低值是 0.8；对 MLP 来说，接近 0。）
+
+这一次就测试了整个循环：模型、损失、梯度和更新。
+只要几秒钟，而且这样一来，问题就不可能出在数据量上。
+
+<Predict id="pred-overfit" />
+
+</Gate>
+
+<Gate requires="pred-overfit">
+
+## 3. 检查梯度
+
+第 6 关用数值梯度检查过手写的梯度。$w$ 处的数值斜率只需要损失本身：
+
+$$
+\frac{dL}{dw} \approx \frac{L(w + h) - L(w - h)}{2h}, \quad h \text{ small}
+$$
+
+<Blank id="numgrad" />
+
+<Gate requires="numgrad">
+
+有好几个权重时，每次只动一个权重，其他的保持不动。对 w = 0.5、b = 0 处的直线拟合，
+数值梯度是 dw = −21.5，db = −7.5。正确的公式会给出同样的两个数。
+
+<Predict id="pred-gradbug" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pred-gradbug">
+
+现在写出适用于任意个权重的数值梯度。有一个 NumPy 细节：`w[i] += h` 会**原地**修改数组 `w` 的第 `i` 项，
+所以紧接着的 `f(w)` 看到的是移动后的值。算完之后，要把 `w[i]` 放回原处：
+调用者还需要原来的 `w`。
+
+<CodeBlank id="numgrad-code" />
+
+<Deeper title="多接近才算够接近？">
+
+数值斜率不是精确的。在 64 位浮点数里取 $h = 10^{-5}$，正确的公式通常能对上 6 位或更多
+有效数字。比较的是**相对**差，$|a - b| / \max(|a|, |b|)$：大约 $10^{-7}$ 没问题，$10^{-2}$ 就是 bug。
+在 32 位浮点数里，这个检查要粗糙得多，所以梯度检验要用 64 位（`torch.float64`）来做。
+`torch.autograd.gradcheck` 对任意 PyTorch 函数做的正是这件事。
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="numgrad-code">
+
+## 4. 找到第一个 inf 或 NaN
+
+学习率太大时，每一步都会跳过最低点，落到更远的地方。
+
+<Blank id="diverge-w" />
+
+<Gate requires="diverge-w">
+
+这些数会一直变大，直到浮点数装不下。32 位浮点数最大约为 $3.4 \times 10^{38}$；比这更大的都是
+**inf**（无穷大）。在实验台上把学习率设成 0.2，训练 200 步：读数会显示损失
+第一次变成 inf 的那一步，以及它变成 **NaN**（“不是一个数”）的那一步。
+
+<Predict id="pred-nan" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="pred-nan">
+
+另一个常见来源是对数：`np.log(0)` 是 −inf，所以如果交叉熵对一个被舍入成 0 的概率取对数，
+马上就会得到 inf。这就是为什么 PyTorch 的 `F.cross_entropy` 接收的是 logit，并自己安全地计算对数。
+支线 U2 会讲浮点数怎样舍入，以及为什么。
+
+习惯是：每一步都检查 `np.isfinite(loss)`（或 `torch.isfinite`），并在**第一个**坏掉的步停下。等你在打印出来的结果里
+注意到 NaN 时，每个权重都已经是 NaN 了，而原因在几百步之前。
+
+<TryIt>
+
+在实验台上试试学习率 0.001、0.01、0.05 和 0.2，每个训练 200 步。哪个最慢，哪个正好，
+哪个发散了？正好和发散之间的分界线大概在哪里？
+
+</TryIt>
+
+## 5. 读懂损失曲线
+
+有些 bug 只会体现在损失曲线的形状上。
+
+**它上下摆动，永远稳定不下来。**常见原因是梯度从来没有清零。`loss.backward()` 会把梯度**加**到
+`.grad` 上（第 9 关），所以没有 `opt.zero_grad()` 的话，每一步用的都是到目前为止所有梯度的和。
+
+<Blank id="zero-grad-sum" />
+
+</Gate>
+
+<Gate requires="zero-grad-sum">
+
+在实验台上，学习率设为 0.01，勾选**忘记 `zero_grad`**：损失一步接一步地在大约 1 和 17 之间来回摆动。
+
+**它降得比预期快得多，然后模型却毫无用处。**通常是输入里已经包含了答案。
+一个**下一个 token 模型**（第 11 关会做一个）读入一串 token（代表单词或字符的数），
+在每个位置上猜下一个 token 是什么。`<bos>` 是一个标记序列开始的 token。
+模型必须根据位置 $t$ 及之前的 token 预测 token $t + 1$，所以目标值就是输入**错开一位**：
+对 token `[<bos>, a, b, c]`，输入是 `[<bos>, a, b]`，目标值是 `[a, b, c]`。
+
+<Predict id="pred-shift" />
+
+</Gate>
+
+<Gate requires="pred-shift">
+
+错误的因果掩码也会造成同样的结果：如果一个词能看到它后面的词（第 15 关），它就能读到答案。
+训练损失看起来好极了；生成出来的却是胡言乱语。
+
+**它根本不下降。**从第 1 步开始，再把清单过一遍：形状、一个批、梯度。然后是学习率：
+试试小 10 倍和大 10 倍的值。
+
+<Deeper title="检查清单，按使用顺序排列">
+
+1. 打印损失里所有东西的形状。在每个旁边写下你期望的形状。
+2. 亲眼看一个批：输入、目标值、掩码。目标值错开了吗？每个标签都属于它的输入吗？
+3. 检查第 0 步的损失。对 $V$ 个类别和随机权重，它应该约等于 $\ln V$（第 10 关），比如 2 个类别时是 0.69。
+4. 过拟合一个批。
+5. 如果你手写了梯度，用数值方法检查它们。
+6. 盯住第一个 inf 或 NaN。
+7. 这之后才开始调参：学习率、批大小、模型大小。
+
+</Deeper>
+
+## Boss：三个坏掉的脚本
+
+每个脚本运行时都不报错。每个都学错了东西。用上这张检查清单。
+
+**A 部分。**一个有三个 bug 的直线拟合。为 `train_line` 写出能正常工作的函数体。
+
+<CodeBlank id="boss-line" />
+
+</Gate>
+
+<Gate requires="boss-line">
+
+**B 部分。**一个用于下一个 token 训练的批，有两个 bug。用上支线 U4 的整理函数和
+第 5 节的错位。`keep` 是那些计入损失的目标值的掩码：真正的 token 为 `True`，PAD 为 `False`。
+（它和填充掩码正好相反：这里的 `True` 表示“计入”。）
+
+<CodeBlank id="boss-lm" />
+
+</Gate>
+
+<Gate requires="boss-lm">
+
+**C 部分，在你的电脑上。**一个 PyTorch 脚本，本该学会哪些点在圆内。它有四个 bug，
+`split`、`batches`、`MLP.forward` 和 `train_step` 里各一个。其他部分都是对的。
+
+1. 把 [`broken_train.py`](/files/debugging/broken_train.py) 和 [check.py](/files/debugging/check.py) 下载到同一个文件夹里。
+2. 把 `broken_train.py` 复制成 `my_train.py`。先运行一次 `python my_train.py`，看看损失和准确率。
+3. 一次修一个 bug。每修一个，就运行 `python check.py my_train.py`。它会做五项检查。没通过的检查
+   只说明它测量了什么，不说 bug 在哪里：找出原因是你的事。
+4. 五项全部通过后，把它打印的最后一行（`U5 PASS …`）粘贴到这里。卡在某项检查上了？就粘贴 `U5 FAIL …` 那一行：
+   页面会针对第一项没通过的检查给出提示，每试一次多给一点。
+
+行末的代码只能说明你原样粘贴了它；这一部分靠的是你的诚实。
+
+<Stuck q="有一项检查没通过，我不知道从哪里下手。">
+
+读一读这项检查打印的数，然后按顺序对照上面的清单，一次查一项。对每个函数，打印它
+对几个点返回了什么，并和它的文档字符串比较。每项检查对应一个函数：split、batches、forward、
+`train_step`。
+
+</Stuck>
+
+上面的 A、B 两部分和这一行都通过后，这一关就算通关。
+
+<CodeBlank id="boss-report" />
+
+</Gate>

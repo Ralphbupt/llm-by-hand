@@ -10,8 +10,42 @@
   import { decode, gauss, loadDecoder, type Decoder, type ModelsJSON } from '@lib/autoencoders'
   import { onThemeChange } from '@lib/settings'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { start = 'ae' }: { start?: 'ae' | 'vae' } = $props()
+  let { start = 'ae', lang = 'en' }: { start?: 'ae' | 'vae'; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'The code space: every point is a picture': '编码空间：每个点都是一张图',
+    'Drag on the map (or focus it and use the arrow keys) to pick a 2-number code. The trained decoder draws it, here in your browser.': '在平面图上拖动（也可以选中它，用方向键移动），选一个由 2 个数组成的编码。训练好的解码器会把它画出来，就在你的浏览器里。',
+    'code ({x}, {y})': '编码 ({x}, {y})',
+    'Code space: drag or use the arrow keys to choose a 2-number code': '编码空间：拖动或用方向键，选一个由 2 个数组成的编码',
+    'Loading the trained decoders…': '正在加载训练好的解码器……',
+    'the decoder’s picture': '解码器画出的图',
+    'The decoder’s picture for the chosen code': '解码器为所选编码画出的图',
+    'code': '编码',
+    'Model': '模型',
+    'Plain autoencoder': '普通自编码器',
+    'Random code': '随机编码',
+    'Draw 200': '抽 200 个',
+    'Loading…': '正在加载……',
+    '{a} of {n} random codes landed in empty regions ({p}%).': '{n} 个随机编码里有 {a} 个落在空白区域（{p}%）。',
+    ': {p}%.': '：{p}%。',
+    'Switch to the VAE and draw 200 again to compare.': '切换到 VAE，再抽 200 个比较一下。',
+    'Switch to the plain autoencoder and draw 200 again to compare.': '切换到普通自编码器，再抽 200 个比较一下。',
+    'Random code landed in an empty region: no real digit has a code nearby.': '随机编码落在了空白区域：附近没有任何真实数字的编码。',
+    'Random code landed among real codes (nearest: a {d}).': '随机编码落在了真实编码之间（最近的是一个 {d}）。',
+    'nearest real code: a': '最近的真实编码是',
+    '.': '。',
+    'codes of 400 real test digits': '400 个真实测试数字的编码',
+    'each digit’s average code': '每个数字的平均编码',
+    '1 and 2 std of N(0, 1), where the VAE draws new codes': 'N(0, 1) 的 1 倍和 2 倍标准差，VAE 从这里抽新的编码',
+    '1 and 2 std of this model’s codes, where you would draw random ones': '这个模型的编码的 1 倍和 2 倍标准差，你会从这里抽随机编码',
+    'your code': '你的编码',
+    'a random code among real codes': '落在真实编码之间的随机编码',
+    'a random code in an empty region': '落在空白区域的随机编码',
+    'Highlighted dots: the digit nearest your code.': '高亮的点：离你的编码最近的那个数字。',
+  })
 
   let data = $state<ModelsJSON | null>(null)
   let model = $state<'ae' | 'vae'>('ae')
@@ -269,59 +303,59 @@
 </script>
 
 <LabFrame
-  title="The code space: every point is a picture"
-  hint="Drag on the map (or focus it and use the arrow keys) to pick a 2-number code. The trained decoder draws it, here in your browser."
+  title={t('The code space: every point is a picture')}
+  hint={t('Drag on the map (or focus it and use the arrow keys) to pick a 2-number code. The trained decoder draws it, here in your browser.')}
   onreset={() => { share = {}; setModel(start) }}
   resetDisabled={!moved && model === start}
 >
   <div class="row">
     <div class="planewrap">
       <canvas bind:this={plane} width="720" height="720" class="plane" tabindex="0" role="slider"
-        aria-valuenow={Number(z[0].toFixed(2))} aria-valuetext={`code (${f(z[0])}, ${f(z[1])})`}
-        aria-label="Code space: drag or use the arrow keys to choose a 2-number code"
+        aria-valuenow={Number(z[0].toFixed(2))} aria-valuetext={t('code ({x}, {y})', { x: f(z[0]), y: f(z[1]) })}
+        aria-label={t('Code space: drag or use the arrow keys to choose a 2-number code')}
         onpointerdown={(e) => { dragging = true; (e.currentTarget as Element).setPointerCapture(e.pointerId); fromPointer(e) }}
         onpointermove={(e) => dragging && fromPointer(e)} onpointerup={() => (dragging = false)} onpointercancel={() => (dragging = false)}
         onkeydown={key}></canvas>
-      {#if !data}<p class="loading">Loading the trained decoders…</p>{/if}
+      {#if !data}<p class="loading">{t('Loading the trained decoders…')}</p>{/if}
     </div>
     <div class="side">
-      <div class="cap">the decoder’s picture</div>
-      <canvas bind:this={pic} width="28" height="28" class="pic" class:off={sampled && empty} aria-label="The decoder’s picture for the chosen code"></canvas>
-      <p class="mono">code (<b>{f(z[0])}</b>, <b>{f(z[1])}</b>)</p>
+      <div class="cap">{t('the decoder’s picture')}</div>
+      <canvas bind:this={pic} width="28" height="28" class="pic" class:off={sampled && empty} aria-label={t('The decoder’s picture for the chosen code')}></canvas>
+      <p class="mono">{t('code')} (<b>{f(z[0])}</b>, <b>{f(z[1])}</b>)</p>
     </div>
   </div>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="Model">
-      <button type="button" aria-pressed={model === 'ae'} class:on={model === 'ae'} onclick={() => setModel('ae')}>Plain autoencoder</button>
+    <div class="seg" role="group" aria-label={t('Model')}>
+      <button type="button" aria-pressed={model === 'ae'} class:on={model === 'ae'} onclick={() => setModel('ae')}>{t('Plain autoencoder')}</button>
       <button type="button" aria-pressed={model === 'vae'} class:on={model === 'vae'} onclick={() => setModel('vae')}>VAE</button>
     </div>
-    <button type="button" class="lab-btn primary" onclick={randomCode} disabled={!data}>Random code</button>
-    <button type="button" class="lab-btn" onclick={() => drawMany()} disabled={!data}>Draw 200</button>
+    <button type="button" class="lab-btn primary" onclick={randomCode} disabled={!data}>{t('Random code')}</button>
+    <button type="button" class="lab-btn" onclick={() => drawMany()} disabled={!data}>{t('Draw 200')}</button>
   {/snippet}
 
   {#snippet readout()}
     {#if !data}
-      <span class="idle">Loading…</span>
+      <span class="idle">{t('Loading…')}</span>
     {:else if batch.length && share[model]}
       {@const m = share[model]!}
       {@const other = share[model === 'ae' ? 'vae' : 'ae']}
-      <span>{m.miss} of {m.n} random codes landed in empty regions ({pct(m)}%).</span>
-      {#if other}<span class="idle"> {model === 'ae' ? 'VAE' : 'Plain autoencoder'}: {pct(other)}%.</span>{:else}<span class="idle"> Switch to the {model === 'ae' ? 'VAE' : 'plain autoencoder'} and draw 200 again to compare.</span>{/if}
+      <span>{t('{a} of {n} random codes landed in empty regions ({p}%).', { a: m.miss, n: m.n, p: pct(m) })}</span>
+      {#if other}<span class="idle"> {model === 'ae' ? 'VAE' : t('Plain autoencoder')}{t(': {p}%.', { p: pct(other) })}</span>{:else}<span class="idle"> {t(model === 'ae' ? 'Switch to the VAE and draw 200 again to compare.' : 'Switch to the plain autoencoder and draw 200 again to compare.')}</span>{/if}
     {:else if sampled}
-      <span class:warn={empty}>{empty ? 'Random code landed in an empty region: no real digit has a code nearby.' : `Random code landed among real codes (nearest: a ${nearest.label}).`}</span>
+      <span class:warn={empty}>{empty ? t('Random code landed in an empty region: no real digit has a code nearby.') : t('Random code landed among real codes (nearest: a {d}).', { d: nearest.label })}</span>
     {:else}
-      code ({f(z[0])}, {f(z[1])}) · nearest real code: a <b>{nearest.label}</b>.
+      {t('code')} ({f(z[0])}, {f(z[1])}) · {t('nearest real code: a')} <b>{nearest.label}</b>{t('.')}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="dot"></i>codes of 400 real test digits</span>
-    <span><b class="big">3</b>each digit’s average code</span>
-    <span><i class="ring"></i>1 and 2 std of {model === 'vae' ? 'N(0, 1), where the VAE draws new codes' : 'this model’s codes, where you would draw random ones'}</span>
-    <span><i class="cross"></i>your code</span>
-    {#if batch.length}<span><i class="hit"></i>a random code among real codes</span><span><i class="miss">×</i>a random code in an empty region</span>{/if}
-    <span>Highlighted dots: the digit nearest your code.</span>
+    <span><i class="dot"></i>{t('codes of 400 real test digits')}</span>
+    <span><b class="big">3</b>{t('each digit’s average code')}</span>
+    <span><i class="ring"></i>{t(model === 'vae' ? '1 and 2 std of N(0, 1), where the VAE draws new codes' : '1 and 2 std of this model’s codes, where you would draw random ones')}</span>
+    <span><i class="cross"></i>{t('your code')}</span>
+    {#if batch.length}<span><i class="hit"></i>{t('a random code among real codes')}</span><span><i class="miss">×</i>{t('a random code in an empty region')}</span>{/if}
+    <span>{t('Highlighted dots: the digit nearest your code.')}</span>
   {/snippet}
 </LabFrame>
 

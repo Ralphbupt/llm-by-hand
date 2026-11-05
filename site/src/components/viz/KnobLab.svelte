@@ -9,9 +9,37 @@
   import { readable } from '@lib/readable'
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Attention is learned: gradient descent changes one number, c, in W_Q': '注意力是学出来的：梯度下降改变 W_Q 里的一个数 c',
+    'Press a step button and let training change c, or set c yourself with the slider.': '按一个“步”按钮，让训练来改 c；或者用滑块自己设 c。',
+    'weights (who looks at whom)': '权重（谁看谁）',
+    'steps': '步数',
+    'sweet’s query': 'sweet 的查询',
+    'sweet’s output': 'sweet 的输出',
+    'target': '目标值',
+    'loss': '损失',
+    'loss for every value of the number c': '数 c 取每个值时的损失',
+    'The loss as a function of c: it falls toward 0 as c grows but never reaches it. The ball is the current c.': '损失随 c 变化的曲线：c 越大，损失越接近 0，但永远到不了 0。小球是当前的 c。',
+    'The curve appears as far as the ball has gone.': '小球走到哪里，曲线就画到哪里。',
+    'Training rolls the ball right; the curve keeps flattening, so the steps keep shrinking.': '训练让小球往右滚；曲线越来越平，所以每一步越来越小。',
+    'The gradient is negative, so each step makes c larger. It never stops: the weight only reaches 1 when c is infinite.': '梯度是负的，所以每一步都让 c 变大。它永远不会停：只有 c 无穷大时，权重才会等于 1。',
+    '1 step': '1 步',
+    '10 steps': '10 步',
+    '200 steps': '200 步',
+    'set c yourself': '自己设 c',
+    'the number c': '数 c',
+    'c = {c} · loss {l} · slope': 'c = {c} · 损失 {l} · 斜率',
+    ', so the next step moves c by {d}': '，所以下一步让 c 变化 {d}',
+    'the current c (a step moves it)': '当前的 c（每一步都会移动它）',
+    'its slope, d loss / d c (the gradient)': '它的斜率，d 损失 / d c（梯度）',
+    'loss 0: the target, never quite reached': '损失 0：目标，永远到不了',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -76,8 +104,8 @@
 </script>
 
 <LabFrame
-  title="Attention is learned: gradient descent changes one number, c, in W_Q"
-  hint="Press a step button and let training change c, or set c yourself with the slider."
+  title={tx('Attention is learned: gradient descent changes one number, c, in W_Q')}
+  hint={tx('Press a step button and let training change c, or set c yourself with the slider.')}
   onreset={reset}
   resetDisabled={step === 0 && c === 0}
 >
@@ -88,56 +116,56 @@
           <div class="label">W_Q</div>
           <table><tbody><tr><td>0</td><td>0</td></tr><tr><td class="knob">c = {f(c, 2)}</td><td>0</td></tr></tbody></table>
         </div>
-        <Heatmap value={weights} label="weights (who looks at whom)" rowLabels={['apple', 'sweet']} colLabels={['apple', 'sweet']} hiRows={[1]} hiCols={[0]} masked={locked('start') ? [{ i: 1, j: 0 }, { i: 1, j: 1 }] : []} />
+        <Heatmap value={weights} label={tx('weights (who looks at whom)')} rowLabels={['apple', 'sweet']} colLabels={['apple', 'sweet']} hiRows={[1]} hiCols={[0]} masked={locked('start') ? [{ i: 1, j: 0 }, { i: 1, j: 1 }] : []} />
       </div>
       <dl>
-        <div><dt>steps</dt><dd>{step}</dd></div>
-        <div><dt>sweet’s query</dt><dd>[{f(c, 2)}, 0]</dd></div>
-        <div><dt>sweet’s output</dt><dd>{locked('start') ? '[?, ?]' : `[${f(p)}, ${f(1 - p)}]`}</dd></div>
-        <div><dt>target</dt><dd class="target">[1, 0]</dd></div>
-        <div><dt>loss</dt><dd>{f(loss, 5)}</dd></div>
+        <div><dt>{tx('steps')}</dt><dd>{step}</dd></div>
+        <div><dt>{tx('sweet’s query')}</dt><dd>[{f(c, 2)}, 0]</dd></div>
+        <div><dt>{tx('sweet’s output')}</dt><dd>{locked('start') ? '[?, ?]' : `[${f(p)}, ${f(1 - p)}]`}</dd></div>
+        <div><dt>{tx('target')}</dt><dd class="target">[1, 0]</dd></div>
+        <div><dt>{tx('loss')}</dt><dd>{f(loss, 5)}</dd></div>
         <div><dt>d loss / d c</dt><dd class="g">{f(grad, 4)}</dd></div>
       </dl>
     </div>
 
     <div class="col">
-      <div class="label">loss for every value of the number c</div>
-      <svg viewBox="0 0 {W} {H}" use:readable role="img" aria-label="The loss as a function of c: it falls toward 0 as c grows but never reaches it. The ball is the current c.">
+      <div class="label">{tx('loss for every value of the number c')}</div>
+      <svg viewBox="0 0 {W} {H}" use:readable role="img" aria-label={tx('The loss as a function of c: it falls toward 0 as c grows but never reaches it. The ball is the current c.')}>
         <line x1={PADL} y1={py(0)} x2={W - 4} y2={py(0)} class="axis" />
         <line x1={PADL} y1={py(0)} x2={PADL} y2={4} class="axis" />
         {#each [0, 0.5, 1, 1.5] as l}<text x={PADL - 4} y={py(l) + 3} class="tk end">{l}</text>{/each}
         {#each [-2, 0, 2, 4, 6, 8] as v}<text x={px(v)} y={H - 10} class="tk mid">{v}</text>{/each}
         <text x={W - 4} y={py(0) - 6} class="tk end">c →</text>
-        <text x={PADL + 4} y="10" class="tk">loss</text>
+        <text x={PADL + 4} y="10" class="tk">{tx('loss')}</text>
         <path d={land} class="land" />
         <line x1={px(C0)} y1={py(0)} x2={px(C1)} y2={py(0)} class="zero" />
         {#each cs.slice(0, -1) as v}<circle cx={px(v)} cy={py(lossAt(v))} r="2" class="trail" />{/each}
         {#if Math.abs(grad) > 1e-4}<line {...tan} class="tan" />{/if}
         <circle cx={px(Math.min(C1, Math.max(C0, c)))} cy={py(loss)} r="5" class="ball" />
       </svg>
-      <p class="cap">{#if locked('forever')}The curve appears as far as the ball has gone.{:else}Training rolls the ball right; the curve keeps flattening, so the steps keep shrinking.{/if}</p>
-      {#if !locked('forever')}<p class="cap">The gradient is negative, so each step makes c larger. It never stops: the weight only reaches 1 when c is infinite.</p>{/if}
+      <p class="cap">{#if locked('forever')}{tx('The curve appears as far as the ball has gone.')}{:else}{tx('Training rolls the ball right; the curve keeps flattening, so the steps keep shrinking.')}{/if}</p>
+      {#if !locked('forever')}<p class="cap">{tx('The gradient is negative, so each step makes c larger. It never stops: the weight only reaches 1 when c is infinite.')}</p>{/if}
     </div>
   </div>
 
   {#snippet controls()}
-    <button type="button" class="lab-btn primary" onclick={() => train(1)}>1 step</button>
-    <button type="button" class="lab-btn" onclick={() => train(10)}>10 steps</button>
-    <button type="button" class="lab-btn" onclick={() => train(200)}>200 steps</button>
+    <button type="button" class="lab-btn primary" onclick={() => train(1)}>{tx('1 step')}</button>
+    <button type="button" class="lab-btn" onclick={() => train(10)}>{tx('10 steps')}</button>
+    <button type="button" class="lab-btn" onclick={() => train(200)}>{tx('200 steps')}</button>
     <label class="slider">
-      <span>set c yourself</span>
-      <input type="range" min="-3" max="8" step="0.01" value={c} oninput={(e) => setC(Number(e.currentTarget.value))} aria-label="the number c" />
+      <span>{tx('set c yourself')}</span>
+      <input type="range" min="-3" max="8" step="0.01" value={c} oninput={(e) => setC(Number(e.currentTarget.value))} aria-label={tx('the number c')} />
     </label>
   {/snippet}
 
   {#snippet readout()}
-    c = {f(c, 2)} · loss {f(loss, 5)} · slope <span class="g">{f(grad, 4)}</span>, so the next step moves c by {sgn(-LR * grad, 4)}
+    {tx('c = {c} · loss {l} · slope', { c: f(c, 2), l: f(loss, 5) })} <span class="g">{f(grad, 4)}</span>{tx(', so the next step moves c by {d}', { d: sgn(-LR * grad, 4) })}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="dot"></i>the current c (a step moves it)</span>
-    <span class="key"><i class="ln tan-sw"></i>its slope, d loss / d c (the gradient)</span>
-    <span class="key"><i class="ln zero-sw"></i>loss 0: the target, never quite reached</span>
+    <span class="key"><i class="dot"></i>{tx('the current c (a step moves it)')}</span>
+    <span class="key"><i class="ln tan-sw"></i>{tx('its slope, d loss / d c (the gradient)')}</span>
+    <span class="key"><i class="ln zero-sw"></i>{tx('loss 0: the target, never quite reached')}</span>
   {/snippet}
 </LabFrame>
 

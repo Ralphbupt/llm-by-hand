@@ -1,0 +1,356 @@
+---
+recap:
+  can:
+    - "说出编码器层和解码器层各有哪些子层，并说出交叉注意力的 Q、K、V 分别从哪里来。"
+    - "说出编码器–解码器里每一种注意力的分数和掩码的形状，`<bos>` 也算在内。"
+    - "用 NumPy 为一个例子构造三种掩码。"
+  keys:
+    - "交叉注意力：Q 来自解码器，K 和 V 来自 memory；分数是 `(B, h, L_tgt, L_src)`"
+    - "`tgt_in = <bos> + 答案`，`tgt_out = 答案 + <eos>`：位置 t 猜第 t + 1 个词"
+    - "只有解码器的自注意力是因果的；编码器的自注意力和交叉注意力只挡住源序列里的 PAD token"
+    - "2017 年的放法把每个子层包成 `LayerNorm(x + sublayer(x))`（post-norm）"
+  mistakes:
+    - "用源序列的长度来构造解码器的因果掩码：它应该跟着解码器的输入走，`<bos>` 也算在内。"
+    - "把交叉注意力的两个轴弄反：行是解码器的 token（Q），列是源序列的 token（K）。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import LayerFlowLab from '@viz/LayerFlowLab.astro'
+import FullModelLab from '@viz/FullModelLab.astro'
+import DecodeLab from '@viz/DecodeLab.astro'
+import MicroscopeLab from '@viz/MicroscopeLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+import ThreeMasks from '@viz/ThreeMasks.astro'
+
+学完这一关，你就能读懂 2017 年最早的 Transformer 设计。它的结构图里有两摞层，这一关把两摞都搭出来。
+
+第 17 关的模型只有一摞：数字、`=`、然后是英文单词，全都在同一个序列里，每一处都用带掩码的自注意力。
+2017 年的第一个 Transformer 搭法不同。它是为**翻译**做的：读一个语言的**源句子**，写出另一个语言的**目标句子**。
+所以它有两摞层：负责读的**编码器**（encoder）和负责写的**解码器**（decoder）。
+（在这一页上，“目标”指要写出来的句子，不是训练用的目标值 y。）
+
+这一关搭出这种设计，并让它做第 17 关的任务：把一个数用英文读出来。训练用的还是那 900 个数，留出的还是那 100 个：
+
+```
+"427"  →  four hundred twenty seven
+```
+
+如果你做过支线 N5，你在那里用两个 LSTM 加上它们之间的注意力解过这种任务。这个模型沿用那个方案（一个编码器、一个解码器、
+从一边到另一边的注意力），只是把 LSTM 换成了注意力层。N5 是可选的，这一关用不到它。
+
+[`demo.py`](/files/encoder-decoder/demo.py) 会打印出这一页上的每个数字。想自己运行的话，把它下载到一个单独的文件夹里，
+在那里运行 `python demo.py`（[环境配置](/setup/)）。它需要 PyTorch，大约运行 20 秒。
+
+## 1. 两摞层
+
+两摞层各管一部分工作：
+
+- **编码器**一次读完整个源序列：每个源 token 都可以看其他所有源 token；
+- **解码器**一次写一个词。它看已经写出来的词，也看源序列。
+
+编码器的一层是自注意力加 FFN。解码器的一层有三个子层：对已写出的词做带掩码的自注意力，用**交叉注意力**（cross-attention）读源序列，
+再加 FFN。
+
+交叉注意力就是普通的注意力，只有一点不同：它的 Q 来自一个序列，K 和 V 来自另一个序列。
+编码器最后的输出叫 **memory**：每个源 token 一个向量。解码器读的就是它。
+
+<Predict id="cross-kv" />
+
+<Gate requires="cross-kv">
+
+2017 年的设计还把 LayerNorm 放在和第 17 关不同的位置。每个子层都包成
+`LayerNorm(x + sublayer(x))`，也就是“相加并归一化”（add & norm）：先加上残差，再归一化。这就是第 16 关第 3 节的包法，
+叫 post-norm。第 17 关则是把*进入*每个子层的东西归一化（pre-norm），
+[第 19 关](/learn/modern-llm/)会讲为什么这样训练深的堆叠效果更好。
+
+<LayerFlowLab variant="encdec" />
+
+<Stuck q="“memory”到底是什么？">
+
+它是最后一个编码器层的输出：每个源 token 一个向量，形状是 `(B, L_src, d_model)`。
+每个源序列只算一次。每个解码器层都通过自己的交叉注意力读同一个 memory，用它来算 K 和 V。
+它里面不存东西，也不训练。它只是“编码器的答案”的名字。
+它不是 RNN 的隐藏状态（支线 N3）。在这一页上，单说“memory”就是指编码器的输出。
+U6 和第 20 关里的“GPU 显存”（GPU memory）是另一回事。
+
+</Stuck>
+
+和第 14 关一样，Q 决定注意力权重的行，K 决定列。在交叉注意力里，Q 来自解码器的输入，K 来自 memory。
+
+解码器的输入总是以一个**起始 token** 开头，写作 `<bos>`（“beginning of sequence”，序列开头）。在还没写出任何词之前，
+它给解码器提供第一个输入。第 4 节会讲解码器怎么用它。
+
+<Blank id="cross-weights" />
+
+</Gate>
+
+<Gate requires="cross-weights">
+
+现在手算一次交叉注意力。步骤和第 14 关一样：每个键一个分数，做 softmax，再对值求加权平均。
+新的只是每张表从哪里来。
+
+<Blank id="cross-out" />
+
+</Gate>
+
+<Gate requires="cross-out">
+
+## 2. 整台机器
+
+编码器读数字，解码器写英文单词。解码器一边写，一边通过交叉注意力读编码器的输出（memory）。
+选中一个方块，可以看到它的输入、输出和它有多少参数。这里的形状对应一个数（“427”），
+解码器输入有 5 个 token：起始 token `<bos>` 和最多 4 个词。
+
+<FullModelLab variant="encdec" />
+
+<Blank id="memory-shape" />
+
+<Gate requires="memory-shape">
+
+<Predict id="dec-extra" />
+
+<Gate requires="dec-extra">
+
+<Deeper title="171,232 个参数都在哪里">
+
+默认大小下（`d_model` 64，4 个头，2 层，`d_ff` 128）：
+
+| 部件 | 参数 |
+|---|---|
+| 一个注意力块：W<sub>Q</sub>、W<sub>K</sub>、W<sub>V</sub>（各 64 × 64）+ W<sub>O</sub>（64 × 64 + 64） | 16,448 |
+| 一个 FFN | 16,576 |
+| 一个编码器层：注意力 + FFN + 2 个 LayerNorm（各 128） | 33,280 |
+| 一个解码器层：2 个注意力块 + FFN + 3 个 LayerNorm | 49,856 |
+| 两张嵌入表：(13 + 32) × 64 | 2,880 |
+| 输出层：64 × 32 + 32 | 2,080 |
+| **合计：2 个编码器层 + 2 个解码器层 + 嵌入 + 输出** | **171,232** |
+
+位置数值是直接加上去的，不是学出来的，所以没有参数。
+头的个数在这张表里哪儿都没出现。它只决定 64 列怎么切成几份，所以用 8 个头代替 4 个，参数还是 171,232。
+这里编码器和解码器各有 2 层，但这两个数互不相关，可以不同。
+嵌入表有两张：一张给 13 个源 token（数字和 3 个特殊 token），一张给 32 个目标词。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="dec-extra">
+
+## 3. 放到显微镜下
+
+下面是这个模型的一个迷你版（1 层，1 个头，`d_model` = 6，`d_ff` = 12），它读入“89”，写出下一个词。
+所有的大小都不一样，所以每个轴都能靠大小认出来。每一步都显示张量带轴名的形状、
+它的数值，以及同一个张量在这一页的完整模型里的形状。
+
+<MicroscopeLab data="encoder-decoder" />
+
+下面是同一个迷你模型的编码器层画成的图，数值和显微镜里的一样。方块下面那条线是残差通路。
+在这种 2017 年的层里，每次相加之后都跟一个 LayerNorm。
+
+<ArchLab which="encdec" />
+
+<Stuck q="为什么加位置之前，要先把嵌入乘一个系数？">
+
+看显微镜里的第 3 步和第 4 步。每个位置数值都在 −1 和 1 之间。这个系数决定 token 和它的位置相比有多强。
+
+这个模型的 token 表一开始的数值大小约为 1/√d<sub>model</sub>，和第 17 关一样。乘以
+√d<sub>model</sub> 后，它们的大小约为 1，和位置数值一样。所以两者谁也不比谁大很多。`d_model` = 64 时，
+系数是 √64 = 8。和第 17 关一样，这样一个 token 的那一行长度约为 8，一个位置的那一行长度约为 5.7。
+
+人们通常也是这样解释 2017 年的设计的。在那里，输出层和嵌入表共享权重。
+这是让表里的数值小的一个原因。
+
+这很重要。假设表一开始的数值大小是 1。那么一个 token 的那一行长度约为 64，是它位置那一行的 11 倍，和第 17 关一样。
+下面是每个模型答对没见过的数的比例：
+
+- 第 17 关的单摞模型，训练 60 轮后：用大小为 1 的表是 55% 到 79%，用小数值的表是 99% 到 100%；
+- 这个两摞模型，训练 20 轮后：用大小为 1 的表是 71%，用小数值的表是 98%；
+- 这个两摞模型，训练 60 轮后：用大小为 1 的表是 99%，用小数值的表是 100%。
+
+所以用大小为 1 的表，这个模型要多训练几轮才能达到同样的结果。
+
+</Stuck>
+
+有多个头时，注意力分数的形状是 `(B, h, L_q, L_k)`：批、头，然后是 Q 的长度和 K 的长度。
+
+<Blank id="cross-shape" />
+
+</Gate>
+
+<Gate requires="cross-shape">
+
+## 4. 一次一个词，带着源序列
+
+解码器写的方式和第 17 关的模型一样：运行，取最后一行，挑出概率最高的词，接到后面，再运行。
+只有一点是新的。第 17 关的模型从数字和 `=` 开始，它们本来就在它的序列里。这个解码器的
+输入只有词，所以它从起始 token `<bos>` 开始。数字只能通过交叉注意力到达它，编码器在写第一个词之前把它们读一次。
+
+按 **下一步**，看每个阶段。数字下面的条形显示交叉注意力在写每个词时看的是哪个数字。
+
+<DecodeLab data="encoder-decoder" />
+
+<Blank id="step-rows" />
+
+<Gate requires="step-rows">
+
+<Blank id="cross-cache" />
+
+<Gate requires="cross-cache">
+
+这个解码器用两个缓存。交叉注意力的缓存存的是 memory 的键和值：每个源 token 一行，只算一次。
+自注意力的缓存每一步多一行。[第 20 关](/learn/inference-cost/)会算这样一个缓存在显存和时间上的开销。
+
+</Gate>
+
+</Gate>
+
+<TryIt>
+
+把模型切换到 **训练 2 轮后**，让它读 896。它说的是“six hundred eighty”。
+它学会了答案的样子（一个数字、“hundred”、一个表示几十的词），但还没学会哪个数字放在哪里。
+看交叉注意力的条形。它们很分散，几乎一样高。
+
+然后切回 **训练 60 轮后**，再读一次 896。现在每个词都看着自己的那个数字：“eight”把全部权重放在 8 上，
+“six”把 0.92 放在 6 上。训练好的模型把 100 个没见过的数全读对了。
+
+</TryIt>
+
+</Gate>
+
+<Gate requires="step-rows">
+
+## 5. 三种注意力和三种掩码
+
+训练时，解码器一次拿到整个正确答案，错开一位：
+
+```
+427:    tgt_in   <bos>  four     hundred  twenty  seven
+        tgt_out  four   hundred  twenty   seven   <eos>
+```
+
+<Stuck q="为什么解码器的输入和它的目标是同样的词，只是错开一位？">
+
+因为位置 t 要猜下一个词。把它们上下对齐写出来：`<bos>` 下面的答案是“four”；
+“four”下面的答案是“hundred”。`tgt_out` 就是 `tgt_in` 往左移一步，
+末尾再加上 `<eos>`。第 17 关在它的单个序列上做同样的错位；这里错位只涉及那些词。
+
+</Stuck>
+
+模型用到三种注意力，每种都有自己的掩码。掩码的形状总是和它要挡的分数一样，
+即（Q 的长度，K 的长度）。`L_src` 是源序列的长度，`L_tgt` 是解码器输入的长度，`<bos>` 也算在内。
+所有的头都用同一个掩码：
+
+| 注意力 | Q 来自 | K 和 V 来自 | 掩码 |
+|---|---|---|---|
+| 编码器<span class="vec-nw">自注意力</span> | 数字 | 数字 | 只挡住 PAD 数字 |
+| 解码器<span class="vec-nw">自注意力</span> | `tgt_in` | `tgt_in` | 因果，并挡住 PAD 词 |
+| <span class="vec-nw">交叉注意力</span> | `tgt_in` | memory | 只挡住 PAD 数字 |
+
+它们的分数形状是：
+
+- 编码器自注意力：`(B, h, L_src, L_src)`；
+- 解码器自注意力：`(B, h, L_tgt, L_tgt)`；
+- 交叉注意力：`(B, h, L_tgt, L_src)`。
+
+下面把一个短例子的三种掩码并排放在一起。行是 Q 所来自的 token，列是 K 所来自的 token。
+
+<ThreeMasks />
+
+<Blank id="mask-6" />
+
+<Gate requires="mask-6">
+
+<Stuck q="因果掩码的大小由哪个长度决定？">
+
+因果掩码只用在解码器的自注意力里，那里 Q 和 K 都来自解码器的输入：
+`<bos>` 加上 5 个目标词，共 6 个 token。源序列的长度从不进入因果掩码。
+
+</Stuck>
+
+</Gate>
+
+<Stuck q="为什么编码器和交叉注意力不用因果掩码？">
+
+因果掩码是为了不让一个位置看到它要猜的那个词。只有解码器在猜词，也只有解码器自己的输入里有这些词。
+数字是题目，不是答案：每个词都可以读整个数，每个数字也都可以读其他所有数字。
+
+</Stuck>
+
+<Blank id="decoder-mask-count" />
+
+<Gate requires="decoder-mask-count">
+
+现在为一个例子构造全部三种掩码。和第 15 关一样，True 表示被挡住。第 15 关的填充掩码每一列只有一项；
+要让它变成分数的形状，就把这一行沿每个查询行拉伸。`np.broadcast_to(row, (n, len(row)))`
+就做这件事：`np.broadcast_to(np.array([False, True]), (3, 2))` 是一张 (3, 2) 的表，三行都是 `[False, True]`。
+`|` 逐格合并两张 True/False 表：只要其中一张是 True，那一格就是 True。因果的部分，回想一下
+第 15 关的 `np.triu`。
+
+<CodeBlank id="three-masks" />
+
+<Gate requires="three-masks">
+
+现在在交叉注意力里用上这个交叉掩码。写一个头，挡住源序列里的 PAD token。
+
+<CodeBlank id="cross-attn-code" />
+
+</Gate>
+
+<Deeper title="标签平滑，以及为什么损失永远到不了 0">
+
+这个模型用了 `label_smoothing=0.1`，和 2017 年的设计一样。每个位置的目标不是“100% 是正确的词”，
+而是“90% 是正确的词，剩下的 10% 平均分给全部 32 个词”。这能防止模型变得完全确定，通常对没见过的输入有帮助。
+
+因此，即使是完美的模型，损失也到不了 0。可能的最低损失是平滑后目标的熵。正确的词得到 0.9 + 0.1 / 32 = 0.903125，
+其他 31 个词各得到 0.1 / 32 = 0.003125。所以最低损失是 −(0.903125 ln 0.903125 + 31 × 0.003125 ln 0.003125) ≈ 0.651。这次训练结束时损失是 0.652，只比它高 0.001，
+同时没见过的数全部答对。训练过程中没见过的数的准确率：第 1 轮后 0%，第 10 轮后 89%，第 20 轮后 98%，
+第 40 轮后 98%，第 60 轮后 100%。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="three-masks">
+
+## 6. 读懂 2017 年的原始设计
+
+现在你认识了 2017 年原始 Transformer 的每个部件。它的结构图和正文用的是下面这些名字。
+右边一栏写着本课程在哪里讲每一个。其中有些关你可能还没做。
+
+| 2017 年设计里的名字 | 它是什么 | 本课程在哪里讲 |
+|---|---|---|
+| Input Embedding、Output Embedding | token 表：一张给源序列，一张给目标序列 | [第 13 关](/learn/vectors/#1-the-embedding-table)；[第 2 节](#2-整台机器) |
+| 把嵌入乘以 √d<sub>model</sub> | 加位置之前先缩放 token | [第 16 关第 1 节](/learn/transformer-parts/#1-positional-encoding-attention-cant-see-order)；[第 3 节](#3-放到显微镜下) |
+| Positional Encoding（正弦和余弦） | 一张固定的位置数值表，加到 token 上 | [第 16 关第 1 节](/learn/transformer-parts/#1-positional-encoding-attention-cant-see-order) |
+| Scaled Dot-Product Attention | softmax(Q Kᵀ / √dₖ) V | [第 14 关](/learn/attention/) |
+| Multi-Head Attention，h = 8 | 把注意力分成 8 个头，再用 W<sub>O</sub> 合起来 | [第 15 关第 2 节](/learn/masks-and-heads/#2-many-heads)；[第 21 关](/learn/write-a-gpt/) |
+| Masked Multi-Head Attention | 解码器带因果掩码的自注意力 | [第 15 关第 1 节](/learn/masks-and-heads/#1-masks-who-is-not-allowed-to-look)；[第 17 关](/learn/full-model/) |
+| encoder–decoder attention | 交叉注意力：Q 来自解码器，K 和 V 来自编码器的输出 | [第 1 节](#1-两摞层) |
+| Add & Norm | 残差，然后 LayerNorm（post-norm） | [第 16 关第 3 节](/learn/transformer-parts/#3-residuals-and-layernorm-keeping-deep-stacks-stable)；[第 19 关](/learn/modern-llm/) |
+| Position-wise Feed-Forward Networks | FFN，对每个位置分别使用 | [第 16 关第 2 节](/learn/transformer-parts/#2-the-feed-forward-network-each-word-is-processed-separately) |
+| N×（N = 6） | 编码器和解码器里各叠了几层 | [第 17 关](/learn/full-model/)；[第 2 节](#2-整台机器) |
+| Outputs (shifted right) | 解码器输入 `tgt_in`：目标往右移一步，以 `<bos>` 开头 | [第 5 节](#5-三种注意力和三种掩码) |
+| Linear、Softmax | 输出层，以及在词表上的概率 | [第 17 关](/learn/full-model/) |
+| 嵌入和输出共享权重 | 输出层复用嵌入表（本课程没有这样做） | [第 3 节](#3-放到显微镜下) |
+| label smoothing，0.1 | 正确的 token 得 90%，10% 分给所有 token | [第 5 节](#5-三种注意力和三种掩码) |
+| warmup，然后衰减的学习率 | 学习率调度 | [第 7 关第 4 节](/learn/optimization/#4-learning-rate-schedules) |
+| dropout，0.1 | 训练时随机把一些数值设为 0 | [第 8 关第 2 节](/learn/generalization/#2-regularization) |
+| beam search，宽度 4 | 保留最好的 4 个部分答案 | [第 18 关第 4 节](/learn/generation/#4-beam-search-the-best-word-is-not-always-the-best-start) |
+
+原始的大小：`d_model` = 512，h = 8 个头，所以 dₖ = 512 / 8 = 64；`d_ff` = 2048 = 4 × `d_model`；两边各 6 层。
+
+今天的聊天模型只保留解码器那一摞，和第 17 关一样：“源序列”就是序列的开头部分。
+在输入和输出明显是两种不同东西的地方，比如翻译或语音转文字，编码器–解码器设计仍在使用。
+
+</Gate>

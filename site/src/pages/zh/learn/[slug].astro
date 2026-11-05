@@ -1,0 +1,17 @@
+---
+/** /zh/learn/<slug>/: the Chinese lesson when there is one (lesson.zh.mdx), otherwise the English lesson in Chinese chrome. */
+import { render } from 'astro:content'
+import LessonLayout from '../../../layouts/LessonLayout.astro'
+import { allLevels, type Level } from '@lib/levels'
+
+export async function getStaticPaths() {
+  const lessons = await allLevels('zh')
+  return lessons.map((entry) => ({ params: { slug: entry.id }, props: { entry } }))
+}
+
+const { entry } = Astro.props as { entry: Level }
+const { Content } = await render(entry.zh ?? entry)
+---
+<LessonLayout {...entry.data} slug={entry.id} lang="zh">
+  <Content />
+</LessonLayout>

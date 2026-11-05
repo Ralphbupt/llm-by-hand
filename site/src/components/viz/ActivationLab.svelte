@@ -9,9 +9,23 @@
   import { ACT, type ActName } from '@lib/foundations'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // GELU's numbers stay "?" until the GELU question is solved
-  let { hide = {} }: { hide?: { gelu?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { gelu?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Four activation functions and their slopes': '四个激活函数和它们的斜率',
+    'Drag across any panel, or use the arrow keys, to move x. All four panels read the same x.': '在任意一个面板上拖动或用方向键来移动 x。四个面板读的是同一个 x。',
+    '{name}: drag or use the arrow keys to move x': '{name}：拖动或用方向键移动 x',
+    'If every layer sits at this x, the gradient that reaches the first layer is multiplied by f′(x) once per layer: f′(x)': '如果每一层都在这个 x 处，到达第一层的梯度每经过一层就乘一次 f′(x)：f′(x)',
+    'input x': '输入 x',
+    'layers n': '层数 n',
+    'number of layers': '层数',
+    'slope f′(x)': '斜率 f′(x)',
+    'a gradient below 0.001: it has almost vanished': '梯度小于 0.001：它几乎消失了',
+  })
   let solved = $state(false)
   onMount(() => {
     if (!hide.gelu) return
@@ -78,8 +92,8 @@
 </script>
 
 <LabFrame
-  title="Four activation functions and their slopes"
-  hint="Drag across any panel, or use the arrow keys, to move x. All four panels read the same x."
+  title={t('Four activation functions and their slopes')}
+  hint={t('Drag across any panel, or use the arrow keys, to move x. All four panels read the same x.')}
   onreset={reset}
   resetDisabled={!changed}
 >
@@ -87,7 +101,7 @@
     {#each curves as c}
       <div class="panel">
         <div class="ttl">{ACT[c.k].label}</div>
-        <svg viewBox="0 0 {W} {H}" use:readable role="slider" aria-label="{ACT[c.k].label}: drag or use the arrow keys to move x" aria-valuenow={x} aria-valuemin={XL} aria-valuemax={XR} tabindex="0"
+        <svg viewBox="0 0 {W} {H}" use:readable role="slider" aria-label={t('{name}: drag or use the arrow keys to move x', { name: ACT[c.k].label })} aria-valuenow={x} aria-valuemin={XL} aria-valuemax={XR} tabindex="0"
           onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onkeydown={key}>
           <line x1="0" x2={W} y1={py(0)} y2={py(0)} class="axis" />
           <line x1={px(0)} x2={px(0)} y1="0" y2={H} class="axis" />
@@ -110,7 +124,7 @@
   </div>
 
   <div class="depth">
-    <p class="dim">If every layer sits at this x, the gradient that reaches the first layer is multiplied by f′(x) once per layer: f′(x)<sup>n</sup>.</p>
+    <p class="dim">{t('If every layer sits at this x, the gradient that reaches the first layer is multiplied by f′(x) once per layer: f′(x)')}<sup>n</sup>{lang === 'zh' ? '。' : '.'}</p>
     <div class="scroll">
       <table>
         <thead><tr><th></th>{#each NAMES as k}<th>{ACT[k].label}</th>{/each}</tr></thead>
@@ -123,15 +137,15 @@
   </div>
 
   {#snippet controls()}
-    <label class="knob">x <input type="range" min="-4" max="4" step="0.1" bind:value={x} aria-label="input x" /> <b>{x.toFixed(1)}</b></label>
-    <label class="knob">layers n <input type="range" min="1" max="20" step="1" bind:value={n} aria-label="number of layers" /> <b>{n}</b></label>
+    <label class="knob">x <input type="range" min="-4" max="4" step="0.1" bind:value={x} aria-label={t('input x')} /> <b>{x.toFixed(1)}</b></label>
+    <label class="knob">{t('layers n')} <input type="range" min="1" max="20" step="1" bind:value={n} aria-label={t('number of layers')} /> <b>{n}</b></label>
   {/snippet}
 
   {#snippet legend()}
     <span class="key"><i class="k-f"></i>f(x)</span>
-    <span class="key"><i class="k-df"></i>slope f′(x)</span>
+    <span class="key"><i class="k-df"></i>{t('slope f′(x)')}</span>
     <span class="key"><i class="k-one"></i>y = 1</span>
-    <span class="key"><i class="k-tiny"></i>a gradient below 0.001: it has almost vanished</span>
+    <span class="key"><i class="k-tiny"></i>{t('a gradient below 0.001: it has almost vanished')}</span>
   {/snippet}
 </LabFrame>
 

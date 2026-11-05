@@ -9,13 +9,17 @@
   import { onMount } from 'svelte'
   import LabFrame from './LabFrame.svelte'
   import Tensors3D from '../viz3d/Tensors3D.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   type Tone = 'accent' | 'ok' | 'warn' | 'cat-1' | 'cat-2' | 'cat-3' | 'cat-4' | 'cat-5' | 'ghost'
   type Key = { label: string; tone: Tone }
   type Range = { from: number[]; to: number[]; tone?: string }
   type T = { name?: string; title?: string; shape: number[]; axes?: string[]; highlight?: Range[]; ghost?: Range[] }
-  let { title, hint, tensors, height = 'min(300px, 62vw)', ariaLabel, keys = [] }:
-    { title: string; hint?: string; tensors: any[]; height?: string; ariaLabel: string; keys?: Key[] } = $props()
+  let { title, hint, tensors, height = 'min(300px, 62vw)', ariaLabel, keys = [], lang = 'en' }:
+    { title: string; hint?: string; tensors: any[]; height?: string; ariaLabel: string; keys?: Key[]; lang?: Lang } = $props()
+  provideLang(lang)
+  const tt = useT({ rows: '行', columns: '列', batch: '批', Flat: '平面' })
 
   let view = $state('3d')
   let mounted = $state(false)
@@ -33,8 +37,8 @@
     return null
   }
   const dims = (t: T) => (t.shape.length === 3 ? t.shape : [1, ...t.shape]) as [number, number, number]
-  const rowAxis = (t: T) => (t.shape.length === 3 ? t.axes?.[1] : t.axes?.[0]) ?? 'rows'
-  const colAxis = (t: T) => (t.shape.length === 3 ? t.axes?.[2] : t.axes?.[1]) ?? 'columns'
+  const rowAxis = (t: T) => (t.shape.length === 3 ? t.axes?.[1] : t.axes?.[0]) ?? tt('rows')
+  const colAxis = (t: T) => (t.shape.length === 3 ? t.axes?.[2] : t.axes?.[1]) ?? tt('columns')
   const label = (t: T) => t.title ?? `${t.name} (${t.shape.join(', ')})`
   const range = (n: number) => Array.from({ length: n }, (_, i) => i)
 </script>
@@ -56,7 +60,7 @@
             <div class="slices">
               {#each range(B) as b}
                 <div class="slice">
-                  {#if B > 1}<span class="bl">{t.axes?.[0] ?? 'batch'} {b}</span>{/if}
+                  {#if B > 1}<span class="bl">{t.axes?.[0] ?? tt('batch')} {b}</span>{/if}
                   <div class="grid" style:grid-template-columns="repeat({C}, var(--cell))">
                     {#each range(R) as i}
                       {#each range(C) as j}

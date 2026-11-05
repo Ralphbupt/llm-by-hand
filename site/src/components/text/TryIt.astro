@@ -2,6 +2,7 @@
 /** "Change it" box: an open-ended thing to try with the lab above. */
 interface Props { title?: string }
 import { smart } from '@lib/typo'
-const title = smart(Astro.props.title ?? 'Try it')
+import { langOf, tr } from '@lib/i18n'
+const title = smart(Astro.props.title ?? tr(langOf(Astro.url.pathname), 'Try it'))
 ---
 <div class="tryit"><div class="k">{title}</div><slot /></div>

@@ -1,4 +1,25 @@
 ---
+import { langOf, tr } from '@lib/i18n'
+const lang = langOf(Astro.url.pathname)
+const t = (s: string, v?: Record<string, string | number>) => tr(lang, s, v, {
+  'encoder self-attention': '编码器自注意力',
+  'decoder self-attention': '解码器自注意力',
+  'cross-attention': '交叉注意力',
+  'the digits': '数字',
+  'the decoder input': '解码器输入',
+  'memory (the digits)': 'memory（数字）',
+  '({r}, {c}), {n} blocked': '({r}, {c})，挡住 {n} 格',
+  '({r}, {c}), {n} blocked: {f} future, {p} PAD': '({r}, {c})，挡住 {n} 格：{f} 格未来，{p} 格 PAD',
+  '{name} mask, {r} rows by {c} columns: {n} cells blocked, all as PAD': '{name}的掩码，{r} 行 {c} 列：挡住 {n} 格，全是 PAD',
+  '{name} mask, {r} rows by {c} columns: {n} cells blocked, {f} as future words and {p} as PAD': '{name}的掩码，{r} 行 {c} 列：挡住 {n} 格，{f} 格是未来的词，{p} 格是 PAD',
+  'rows (Q):': '行（Q）：',
+  'columns (K):': '列（K）：',
+  'blocked: future': '挡住：未来',
+  'blocked: PAD': '挡住：PAD',
+  '1 means True: blocked. A blocked score becomes −∞, so its weight is 0.': '1 表示 True：被挡住。被挡住的分数变成 −∞，所以它的权重是 0。',
+  'Reading 15 aloud: the source “15” is padded to 3 digits, and the decoder input is': '读 15：源序列“15”填充到 3 位，解码器输入是',
+  '. A cell that is both future and PAD is shown as future.': '。既是未来又是 PAD 的格显示为未来。',
+})
 /**
  * Level N7, section 5: the three masks of one example, side by side (True = blocked, as in level 15).
  * Source "15" padded to 3 digits; decoder input <bos> fifteen PAD PAD (a batch whose longest input is 4 tokens).
@@ -10,17 +31,18 @@ const src = ['1', '5', 'PAD']
 const tgt = ['<bos>', 'fifteen', 'PAD', 'PAD']
 const pad = (t: string) => t === 'PAD'
 const grids = [
-  { name: 'encoder self-attention', rows: src, cols: src, causal: false, q: 'the digits', k: 'the digits' },
-  { name: 'decoder self-attention', rows: tgt, cols: tgt, causal: true, q: 'the decoder input', k: 'the decoder input' },
-  { name: 'cross-attention', rows: tgt, cols: src, causal: false, q: 'the decoder input', k: 'memory (the digits)' },
+  { name: t('encoder self-attention'), rows: src, cols: src, causal: false, q: t('the digits'), k: t('the digits') },
+  { name: t('decoder self-attention'), rows: tgt, cols: tgt, causal: true, q: t('the decoder input'), k: t('the decoder input') },
+  { name: t('cross-attention'), rows: tgt, cols: src, causal: false, q: t('the decoder input'), k: t('memory (the digits)') },
 ].map((g) => {
   // '' = open, 'f' = blocked as a future word, 'p' = blocked as a PAD column
   const cells = g.rows.map((_, i) => g.cols.map((c, j) => (g.causal && j > i ? 'f' : pad(c) ? 'p' : '')))
   const flat = cells.flat()
   const fut = flat.filter((c) => c === 'f').length
   const pads = flat.filter((c) => c === 'p').length
-  const shape = `(${g.rows.length}, ${g.cols.length}), ${fut + pads} blocked${fut ? `: ${fut} future, ${pads} PAD` : ''}`
-  const aria = `${g.name} mask, ${g.rows.length} rows by ${g.cols.length} columns: ${fut + pads} cells blocked${fut ? `, ${fut} as future words and ${pads} as PAD` : ', all as PAD'}`
+  const v = { r: g.rows.length, c: g.cols.length, n: fut + pads, f: fut, p: pads, name: g.name }
+  const shape = t(fut ? '({r}, {c}), {n} blocked: {f} future, {p} PAD' : '({r}, {c}), {n} blocked', v)
+  const aria = t(fut ? '{name} mask, {r} rows by {c} columns: {n} cells blocked, {f} as future words and {p} as PAD' : '{name} mask, {r} rows by {c} columns: {n} cells blocked, all as PAD', v)
   return { ...g, cells, shape, aria }
 })
 ---
@@ -38,17 +60,17 @@ const grids = [
             ))}
           </tbody>
         </table>
-        <div class="qk">rows (Q): {g.q}<br />columns (K): {g.k}</div>
+        <div class="qk">{t('rows (Q):')} {g.q}<br />{t('columns (K):')} {g.k}</div>
       </div>
     ))}
   </div>
   <div class="legend">
-    <span class="key"><i class="f"></i>blocked: future</span>
-    <span class="key"><i class="p"></i>blocked: PAD</span>
-    <span class="key">1 means True: blocked. A blocked score becomes −∞, so its weight is 0.</span>
+    <span class="key"><i class="f"></i>{t('blocked: future')}</span>
+    <span class="key"><i class="p"></i>{t('blocked: PAD')}</span>
+    <span class="key">{t('1 means True: blocked. A blocked score becomes −∞, so its weight is 0.')}</span>
   </div>
-  <figcaption>Reading 15 aloud: the source “15” is padded to 3 digits, and the decoder input is
-    <code>&lt;bos&gt; fifteen PAD PAD</code>. A cell that is both future and PAD is shown as future.</figcaption>
+  <figcaption>{t('Reading 15 aloud: the source “15” is padded to 3 digits, and the decoder input is')}
+    <code>&lt;bos&gt; fifteen PAD PAD</code>{t('. A cell that is both future and PAD is shown as future.')}</figcaption>
 </figure>
 
 <style>

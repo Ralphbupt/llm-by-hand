@@ -1,4 +1,5 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './LatentLab.svelte'
 ---
-<Lab client:visible />
+<Lab lang={langOf(Astro.url.pathname)} client:visible />

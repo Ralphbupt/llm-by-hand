@@ -1,0 +1,378 @@
+---
+recap:
+  can:
+    - "把一个 NumPy 网络改写成 PyTorch 的 `nn.Module`，带 `__init__` 和 `forward`。"
+    - "按正确的顺序写出训练的一步：`zero_grad`、`backward`、`step`。"
+    - "找出不报错的 bug：越加越多的梯度、被广播的标签、藏在普通列表里的层。"
+  keys:
+    - "`nn.Linear(in, out).weight` 的形状是 `(out, in)`，计算的是 `x @ W.T + b`"
+    - "`loss.backward()` 往 `.grad` 里加；`opt.zero_grad()` 把它清零"
+    - "一列 `(n, 1)` 减一个扁平的 `(n,)`，得到 `(n, n)` 的方阵：算损失之前把两个形状都打印出来"
+    - "`loss.item()` 把只有一个数的张量变成 Python 数"
+  mistakes:
+    - "忘了 `opt.zero_grad()`：于是每一步用的都是所有旧梯度的总和，w 跳过最低点。"
+    - "把层放在普通的 Python 列表里：`parameters()` 看不到它们，所以它们永远不会被训练。要用 `nn.ModuleList`。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import TorchCompareLab from '@viz/TorchCompareLab.astro'
+import GradAccumLab from '@viz/GradAccumLab.astro'
+
+在第 6 关，你用 NumPy 训练了一个学 XOR 的网络。前向传播、损失、反向传播的每一行、更新，都是你自己写的。
+它能跑，但反向传播是最难的部分，而且每多加一层，它就更长一些。
+
+**PyTorch** 就是 NumPy 再加两样东西：能在 GPU 上运行的张量（GPU 就是显卡，它能同时做很多乘法；这门课用不着它），
+以及替你算好的梯度。这一关就是翻译：同一个网络，两种写法，一行一行对照。然后讲 PyTorch **不**替你做的那几件事，
+因为大多数 bug 就出在那里。
+
+第 10 到 19 关都在浏览器里用 NumPy，这样你能看到每一个数。等你在自己的电脑上训练真正的模型时，PyTorch 会回来：
+第 21 关你写的 GPT、LSTM 的 Boss 关，还有扩散模型的 Boss 关。
+
+> **这一页的每道题都在你的浏览器里运行。** 第 8 节有一道可选的练习，要在你自己的电脑上运行 PyTorch。
+> 想做的时候，[在你的电脑上运行](/setup/) 会告诉你怎样安装 Python 和 PyTorch。
+
+## 1. 同一个网络，写两遍
+
+<TorchCompareLab />
+
+把鼠标指向 NumPy 代码里反向传播的那几行（手机上点一下）。四行链式法则变成了 `loss.backward()`。
+其余部分都是一一对应的。代码里有两个名字可能是新的。`logits` 是 sigmoid 之前的原始分数。
+`binary_cross_entropy_with_logits` 就是第 3 关的是 / 否交叉熵，只是把 sigmoid 也算在里面了
+（这比分两步算更准确）。
+
+<Blank id="param-count" />
+
+<Gate requires="param-count">
+
+## 2. 张量和参数
+
+**张量**（tensor）是 PyTorch 的数组。你在 NumPy 里学到的大部分东西在这里用法一样：`@`、`.shape`、`.sum(0)`、
+切片、广播。新的有三点：
+
+| | NumPy 数组 | PyTorch 张量 |
+|---|---|---|
+| 数的类型 | 默认 `float64`（大约 16 位有效数字） | 权重默认 `float32`（大约 7 位有效数字，内存省一半） |
+| 放在哪里 | 内存 | `"cpu"`、`"cuda"`（NVIDIA GPU）或 `"mps"`（Apple GPU） |
+| 梯度 | 没有 | 如果 `requires_grad=True`，`backward()` 会填好 `.grad` |
+
+`nn.Linear` 里的权重创建时就带着 `requires_grad=True`，所以每次 `loss.backward()` 之后它们都有 `.grad`。
+你的数据不需要它。
+
+几乎每个人第一次都会犯一个错：两边存权重矩阵的方式不一样。
+在 NumPy 里你写的是 `X @ W`，`W` 的形状是 `(inputs, outputs)`。`nn.Linear(in, out)` 用相反的布局存权重，
+**每个输出一行**，计算的是 `x @ W.T + b`。比如，`nn.Linear(3, 5).weight` 的形状是 `(5, 3)`。
+
+<Blank id="linear-shape" />
+
+</Gate>
+
+<Gate requires="linear-shape">
+
+<Deeper title="为什么 nn.Linear 存成 (out, in)，再乘它的转置">
+
+为什么每个输出一行？每一行是构成一个隐藏单元的那 2 个数，所以 `weight[3]` 就是关于第 3 个单元的全部。
+算这一层时，它做的是 `x @ W.T + b`，也就是 `(4, 2) @ (2, 6) → (4, 6)`，
+和 NumPy 的形状完全一样。
+
+同样的数，按相反的布局存放。只有两种情况要在意：在两边之间复制权重时，
+或者打印 `.weight.shape` 却以为它是 NumPy 的布局时。这一关的 demo 把 NumPy 的权重复制到 PyTorch 里，
+正是因为这个原因，它必须先转置。
+
+</Deeper>
+
+## 3. 模型是一个类
+
+在实验台的 PyTorch 那一边，模型是一个对象 `model`，你像调用函数一样调用它：`model(X)`。
+这个对象是一个**类**（class）的实例。类是一个盒子的配方：这个盒子保存自己的数和自己的函数。
+比较一下第一层的两种写法：
+
+```python
+def layer(x, W, b):            # 函数：每次都要把权重传进去
+    return x @ W + b
+
+class Layer:                   # 类：盒子自己保存权重
+    def __init__(self, W, b):  # 做盒子时运行一次：layer = Layer(W, b)
+        self.W = W             # self 的意思是“这个盒子”
+        self.b = b
+    def forward(self, x):      # 计算，用的是盒子自己的权重
+        return x @ self.W + self.b
+```
+
+PyTorch 的模型也是这样写的一个类，有四条规则：
+
+1. `__init__` 搭好各个部件：`self.l1 = nn.Linear(2, 6)`。它的第一行永远是 `super().__init__()`（见下面的框）。
+2. `forward(self, x)` 用这些部件算出输出。
+3. `model(x)` 会替你调用 `forward(x)`。你从不直接写 `forward` 这个名字去调用它。
+4. `model.parameters()` 收集你存成 `self.something` 的每个部件里的每个权重。优化器只更新
+   `parameters()` 返回的东西。
+
+```python
+class XorNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.l1 = nn.Linear(2, 6)
+        self.l2 = nn.Linear(6, 1)
+    def forward(self, x):
+        return self.l2(torch.tanh(self.l1(x)))
+
+model = XorNet()
+logits = model(X)              # 运行 forward(X)
+```
+
+<Stuck q="`super().__init__()` 和 `__call__` 是什么？">
+
+`super().__init__()` 运行 `nn.Module` 本身的初始化，`parameters()` 后面要用到它。没有这一行，你一存第一层，
+PyTorch 就会报错停下。
+
+`__call__` 是 Python 里“你写 `model(x)` 时发生什么”的名字。`nn.Module` 替你写好了它，它会
+调用 `forward`。下面的 NumPy 版本是手写的。
+
+</Stuck>
+
+下面是同样的思路，用 NumPy 写，所以能在你的浏览器里运行。
+
+<CodeBlank id="forward-code" />
+
+</Gate>
+
+<Gate requires="forward-code">
+
+第 4 条规则有个陷阱。第 21 关会叠好几个一样的块。在 Python 里，保存它们最自然的方式是一个列表：
+`self.blocks = [Block(), Block(), Block()]`。
+
+<Predict id="plain-list" />
+
+<Stuck q="我的模型能跑，但它的块从来不变。为什么？">
+
+普通的 Python 列表会把里面的东西藏起来，`model.parameters()` 看不到。这些块在 `forward` 里照样运行，所以
+什么都不会崩，损失也是一个正常的数。但优化器从来看不到它们的权重，所以它们一直停在
+随机的初始值上。改用 `nn.ModuleList([Block(), Block(), Block()])`：这是一个 PyTorch 会往里看的列表。
+一个快速的检查：`sum(p.numel() for p in model.parameters())` 应该等于你预期的参数个数。
+
+</Stuck>
+
+## 4. `backward()` 是加上去，不是替换
+
+初学者的大多数 bug 都来自这一条规则。`loss.backward()` 算出梯度，然后把它们
+**加**到 `.grad` 里已有的值上。它从不清空 `.grad`。清零是你的事，
+用 `opt.zero_grad()`。
+
+为什么要加？一个参数可能在好几个地方用到，它的总梯度是各部分的和
+（你会在支线 U3 自己实现这一点）。在一次反向传播里面，加是对的。但在训练的一步和下一步之间，
+这意味着旧梯度会一直留着，直到你把它们清掉。
+
+<Predict id="pred-forget" />
+
+取一个权重 `w = 1`，一个样本 `x = 2`、`y = 6`，损失是 $(w \cdot x - y)^2$。
+它的梯度是 $2(w x - y)\,x = 2 \times (2 - 6) \times 2 = -16$。
+
+<Blank id="grad-twice" />
+
+</Gate>
+
+<Gate requires="grad-twice">
+
+现在试一试。这些按钮做的事和 PyTorch 的那几个调用一样，作用在这一个权重上。
+
+<GradAccumLab />
+
+<TryIt>
+
+按“10 步，有 zero_grad”：w 走到 3，这时 w·x = y，损失是 0。重置，然后按
+“10 步，没有 zero_grad”。每一步用的都是到目前为止所有梯度的总和，所以 w 跳过了 5，又摆回来。
+现在手动来：backward、step、backward、step，看 w.grad 越变越大。
+
+</TryIt>
+
+用 NumPy 模仿 PyTorch 记录梯度的方式。下面的 `Param` 是一个很小的**类**（第 3 节）：一个装着两个数的盒子，
+`w.data` 和 `w.grad`（在类里面，`self` 的意思是“这个盒子”）。`backward` 往 `w.grad` 里加，和 PyTorch 一样。
+写出 `zero_grad`。
+
+<CodeBlank id="accum-code" />
+
+</Gate>
+
+<Gate requires="accum-code">
+
+## 5. 不打招呼就广播的形状
+
+PyTorch 的广播和 NumPy 完全一样。这很方便，但也藏着一个经典的 bug。模型给每个样本输出
+一个分数，排成一列，形状是 `(4, 1)`。标签却常常存成扁平的，形状是 `(4,)`。
+
+<Blank id="broadcast-shape" />
+
+<Stuck q="我的损失看起来正常，可模型什么都没学到。为什么？">
+
+检查一下送进损失的形状。`(4, 1) − (4,)` 不会报错：广播把两者都拉伸成一张
+`(4, 4)` 的表，把**每个**预测值和**每个**标签都比了一遍。这张表的均值是一个数，
+所以什么都不会崩，但它是个错的数，它的梯度也指向错误的方向。
+
+修正只要一行：用 `y.reshape(-1, 1)`（在 PyTorch 里也可以用 `y.unsqueeze(1)`）把标签变成一列，
+或者用 `pred.squeeze(1)` 把预测值压平。一个好习惯是：就在算损失之前，把 `pred.shape` 和 `y.shape`
+打印一次。
+
+</Stuck>
+
+<Stuck q="为什么 `print(loss)` 显示的是 `tensor(0.6958, grad_fn=...)`，而不是一个数？">
+
+`loss` 仍然是一个张量，它记得自己是怎么算出来的（那就是 `grad_fn`），这样 `backward()` 才能用它。
+要得到一个普通的 Python 数，写 `loss.item()`。打印和记录日志时都用它。
+
+不要在训练的各步之间把张量本身存进列表，比如 `history.append(loss)`。每个张量都留着自己的
+整张计算图，内存会一步一步涨上去。改成 append `loss.item()`。
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="broadcast-shape">
+
+## 6. 同样的数，两种算法
+
+PyTorch 的梯度不是近似值。它们正是你手写的那套链式法则。
+这一关的 demo 把同样的权重分别复制到 NumPy 和 PyTorch 里，各做一次反向传播，
+再把两边都打印出来：一直到最后一位都相同。（demo 两边都用 `float64`。如果用 PyTorch 默认的
+`float32`，它们大约有 7 位相同。）你自己来验证其中一个。
+
+对这个网络的 2→3→1 版本，用下面的权重，PyTorch 给出的最后一层的梯度是
+（写成一列）：
+
+$$
+\frac{\partial L}{\partial W_2} = [\,0.014675,\; -0.005854,\; 0.004884\,]^T
+$$
+
+写出算出它的那行 NumPy 代码。
+
+<CodeBlank id="dw2-code" />
+
+<Deeper title="loss.backward() 到底做了什么">
+
+前向传播运行时，PyTorch 记下每一个运算，以及哪些张量进入了这个运算。
+`loss.backward()` 从损失出发，沿着这份记录走回到权重，每一步都乘上那一个运算的
+局部梯度：这就是第 6 关的链式法则，只不过由一个程序来执行。
+
+支线 U3“自己写一个自动求导”用大约 50 行 Python 搭出这个程序。
+学完它，你就会确切知道 `loss.backward()` 做了什么。
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="dw2-code">
+
+## 7. 一张值得留着的对照表
+
+以后你写 PyTorch 时，大多数代码行都是一行你已经会的 NumPy。这张表列的是你在
+这一页用过的。
+
+**这一页用过的**
+
+<div style={{ overflowX: 'auto' }}>
+
+| NumPy | PyTorch | 例子 |
+|---|---|---|
+| `np.array(x, dtype=float)` | `torch.tensor(x, dtype=torch.float32)` | `torch.tensor([[0., 1.]])` 的形状是 `(1, 2)` |
+| `A @ B`、`A.T`、`x.sum(0)`、`x.mean()` | 一样 | `x.sum(0)` 沿着行往下加：每列一个总和 |
+| `np.exp`、`np.log`、`np.tanh` | `torch.exp`、`torch.log`、`torch.tanh` | `torch.tanh(torch.tensor(0.))` 是 `0.` |
+| `X @ W + b`，`W` 的形状是 `(in, out)` | `nn.Linear(in, out)` | 存成 `(out, in)`，计算 `x @ W.T + b` |
+| 一个带 `forward` 的类 | `nn.Module` 的子类 | `model(x)` 运行 `forward(x)` |
+| 手写的反向传播和更新 | `loss.backward()`、`opt.step()`、`opt.zero_grad()` | 每次 `backward` 之前先 `zero_grad` |
+| 从数组里取出一个数 | `loss.item()` | `torch.tensor(0.5).item()` 是 `0.5` |
+
+</div>
+
+<Deeper title="后面几关的参考：更多 PyTorch、你会读到的 Python、一轮训练">
+
+现在先跳过这个框。等后面某一关让你回来时再看。
+
+**后面几关会用到的**（最后一列是需要它的那一关）
+
+<div style={{ overflowX: 'auto' }}>
+
+| NumPy | PyTorch | 例子 | 关 |
+|---|---|---|---|
+| softmax，再 `-np.log(p[correct])` | `F.cross_entropy(logits, target)` | 接收原始分数，不是概率 | 10、20 |
+| 损失里跳过某些目标值 | `F.cross_entropy(..., ignore_index=0)` | 等于 0 的目标值不计入 | 17、20 |
+| `E[ids]`，在形状 `(V, d)` 的表里查 | `nn.Embedding(V, d)(ids)` | ids `(2, 5)` → 向量 `(2, 5, d)` | 13、20 |
+| 一个你自己建的权重 | `nn.Parameter(torch.ones(d))` | 存成 `self.g`，它就会出现在 `parameters()` 里 | 16、20 |
+| 一列层 | `nn.ModuleList([Block(), Block()])` | 普通 Python 列表会把它们藏起来，`parameters()` 看不到 | 20 |
+| `np.triu(np.ones((L, L)), k=1)` | `torch.triu(torch.ones(L, L), diagonal=1)` | 对角线上方是 1；PyTorch 里参数名是 `diagonal`，不是 `k` | 15、20 |
+| `np.where(mask, -np.inf, s)` | `s.masked_fill(mask, float('-inf'))` | `mask` 在被挡住的地方是 `True` | 15、20 |
+| `x.reshape(B, L, h, d_k)` | `x.view(B, L, h, d_k)` | `view` 要求内存是按顺序排的 | U1、20 |
+| `x.transpose(0, 2, 1, 3)` | `x.transpose(1, 2)` | PyTorch 只交换正好两个轴 | U1、20 |
+| 转置之后，`reshape` | `x.transpose(1, 2).contiguous().view(...)` 或 `.reshape(...)` | 刚 `transpose` 完就 `view` 会报错 | U1、20 |
+| `np.argmax(p, axis=-1)` | `logits.argmax(-1)` | 最大分数的下标 | 17、18、20 |
+| — | `model.train()` / `model.eval()` | 打开或关闭只在训练时才有的行为 | 20 |
+| — | `with torch.no_grad():` | 不记录梯度：更快，用于测试 | 20 |
+
+</div>
+
+**你会读到的 Python**，在后面几关的代码里：
+
+<div style={{ overflowX: 'auto' }}>
+
+| Python | 例子 | 结果 |
+|---|---|---|
+| 列表推导式 | `[x * 2 for x in [1, 2, 3]]` | `[2, 4, 6]` |
+| `enumerate` | `list(enumerate("ab"))` | `[(0, 'a'), (1, 'b')]` |
+| 字典推导式 | `{c: i for i, c in enumerate("ab")}` | `{'a': 0, 'b': 1}` |
+| 切片 | `s = [5, 6, 7]`：`s[:-1]`、`s[1:]` | `[5, 6]`、`[6, 7]` |
+| `range(a, b)` 在 `b` 之前停 | `list(range(1, 4))` | `[1, 2, 3]` |
+| `zip` | `list(zip([1, 2], "ab"))` | `[(1, 'a'), (2, 'b')]` |
+| 随机顺序 | `torch.randperm(3)` | 比如 `tensor([2, 0, 1])` |
+| 加一个轴 | `torch.tensor([1, 2]).unsqueeze(1)` | 形状 `(2, 1)` |
+
+</div>
+
+**一轮**（epoch）训练，你会一遍又一遍地写这个循环（一轮 = 把全部训练数据过一遍）：
+
+```python
+for epoch in range(n_epochs):
+    for xb, yb in batches(train, size=64):  # 打乱的小批量（支线 U4 会写 batches）
+        logits = model(xb)                   # (64, V)：词表里每个词一个分数
+        loss = F.cross_entropy(logits, yb)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+```
+
+</Deeper>
+
+## 8. 你的第一次 PyTorch 运行（可选，在你的电脑上）
+
+**可选。** 如果你还没装 PyTorch，就跳过这一节；这一页没有任何内容依赖它，
+不做它也能通关。这是这一页唯一需要 PyTorch 的练习（[在你的电脑上运行](/setup/)）。
+把下面几行复制到文件 `first_run.py` 里（或者下载 [`first_run.py`](/files/numpy-to-pytorch/first_run.py)），然后运行 `python first_run.py`。
+随机种子让随机的初始权重在每台电脑上都一样，所以每个人得到的损失都一样。
+
+```python
+import torch, torch.nn as nn, torch.nn.functional as F
+torch.manual_seed(0)
+X = torch.tensor([[0., 0.], [0., 1.], [1., 0.], [1., 1.]])
+y = torch.tensor([[0.], [1.], [1.], [0.]])
+model = nn.Sequential(nn.Linear(2, 6), nn.Tanh(), nn.Linear(6, 1))
+opt = torch.optim.SGD(model.parameters(), lr=0.5)
+for step in range(100):
+    loss = F.binary_cross_entropy_with_logits(model(X), y)
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
+print(round(loss.item(), 3))
+```
+
+<Blank id="first-run" />
+
+## 9. 自己写这个循环
+
+最后，是这一关要练的本领：训练的四步，按正确的顺序。下面的 `Param` 是第 4 节的
+那个盒子，模型是一条直线 `w · x + b`。`backward` 往 `.grad` 里加，和 PyTorch 一样。写出
+内层循环的循环体：三个调用，每行一个。
+
+<CodeBlank id="loop-code" />
+
+</Gate>

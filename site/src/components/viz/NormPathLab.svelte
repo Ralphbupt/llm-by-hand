@@ -1,12 +1,36 @@
 <script lang="ts">
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
   /**
    * Norm path lab (level 19): where the LayerNorm sits in each layer.
    * Post-norm: x ← LN(x + f(x)).  Pre-norm: x ← x + f(LN(x)), plus one LN at the very end.
    * Count the normalizations a signal crosses on the straight residual path from input to output.
    * The slider stops at 6 layers; the question on the page asks about 12.
    */
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Where the LayerNorm sits: on the residual path, or only in front of the sublayer': 'LayerNorm 放在哪里：在残差通路上，还是只在子层前面',
+    'Switch between the 2017 design and today’s, and add layers. Count the LayerNorms the input must pass through on the residual path.': '在 2017 年的设计和如今的设计之间切换，再加几层。数一数输入在残差通路上必须经过几个 LayerNorm。',
+    '{n} layers, {m}: {k} LayerNorm on the residual path': '{n} 层，{m}：残差通路上有 {k} 个 LayerNorm',
+    '{n} layers, {m}: {k} LayerNorms on the residual path': '{n} 层，{m}：残差通路上有 {k} 个 LayerNorm',
+    'input x': '输入 x',
+    'output': '输出',
+    'layer {n}': '第 {n} 层',
+    'attention / FFN': '注意力 / FFN',
+    'final LN': '最后的 LN',
+    'Where the norm sits': '归一化放在哪里',
+    'post-norm (2017)': 'post-norm（2017 年）',
+    'pre-norm (today)': 'pre-norm（如今）',
+    'layers': '层数',
+    'LayerNorms on the residual path from input to output:': '从输入到输出，残差通路上的 LayerNorm 个数：',
+    'Every layer rescales the whole sum x, so the input reaches the top only through all of them.': '每一层都会重新缩放整个和 x，所以输入要经过所有这些 LayerNorm 才能到达顶部。',
+    'Sublayers only add to x; nothing rescales it. The input reaches the top unchanged, then one final LN.': '子层只往 x 上加东西，没有东西重新缩放它。输入原样到达顶部，然后经过最后一个 LN。',
+    'the residual path': '残差通路',
+    'a LayerNorm on that path': '这条路上的一个 LayerNorm',
+  })
   let mode = $state<'post' | 'pre'>('post')
   let layers = $state(3)
   const onPath = $derived(mode === 'post' ? layers : 1)
@@ -15,28 +39,28 @@
 </script>
 
 <LabFrame
-  title="Where the LayerNorm sits: on the residual path, or only in front of the sublayer"
-  hint="Switch between the 2017 design and today’s, and add layers. Count the LayerNorms the input must pass through on the residual path."
+  title={t('Where the LayerNorm sits: on the residual path, or only in front of the sublayer')}
+  hint={t('Switch between the 2017 design and today’s, and add layers. Count the LayerNorms the input must pass through on the residual path.')}
   onreset={() => { mode = 'post'; layers = 3 }}
   resetDisabled={mode === 'post' && layers === 3}
 >
   <!-- the residual path runs straight up the left; each layer's sublayer side sits to its right -->
   <svg class="diagram" use:readable viewBox="0 0 360 {H}" role="img"
-    aria-label={`${layers} layers, ${mode === 'post' ? 'post-norm' : 'pre-norm'}: ${onPath} LayerNorm${onPath === 1 ? '' : 's'} on the residual path`}>
-    <text x={HX} y={H - 6} class="io mid">input x</text>
-    <text x={HX} y="12" class="io mid">output</text>
+    aria-label={t(onPath === 1 ? '{n} layers, {m}: {k} LayerNorm on the residual path' : '{n} layers, {m}: {k} LayerNorms on the residual path', { n: layers, m: mode === 'post' ? 'post-norm' : 'pre-norm', k: onPath })}>
+    <text x={HX} y={H - 6} class="io mid">{t('input x')}</text>
+    <text x={HX} y="12" class="io mid">{t('output')}</text>
     <line x1={HX} y1={H - 18} x2={HX} y2="20" class="hw" />
     {#each Array(layers) as _, l}
       {@const yb = H - 30 - l * ROW}
       {@const yp = yb - ROW + 22}
-      <text x={FX + 136} y={yb - 4} class="lbl">layer {l + 1}</text>
+      <text x={FX + 136} y={yb - 4} class="lbl">{t('layer {n}', { n: l + 1 })}</text>
       <!-- the sublayer side: leave the path, (LN), function, come back to + -->
       <path d={`M${HX},${yb - 8} H${mode === 'pre' ? BX - 4 : FX}`} class="br" />
       {#if mode === 'pre'}
         <rect x={BX - 4} y={yb - 18} width="34" height="20" rx="4" class="box ln" /><text x={BX + 13} y={yb - 4} class="t mid">LN</text>
         <path d={`M${BX + 30},${yb - 8} H${FX}`} class="br" />
       {/if}
-      <rect x={FX} y={yb - 18} width="128" height="20" rx="4" class="box f" /><text x={FX + 64} y={yb - 4} class="t mid">attention / FFN</text>
+      <rect x={FX} y={yb - 18} width="128" height="20" rx="4" class="box f" /><text x={FX + 64} y={yb - 4} class="t mid">{t('attention / FFN')}</text>
       <path d={`M${FX + 64},${yb - 18} V${yp + 2} H${HX + 9}`} class="br" />
       <circle cx={HX} cy={yp + 2} r="8" class="add" /><text x={HX} y={yp + 6} class="t mid">+</text>
       {#if mode === 'post'}
@@ -44,29 +68,29 @@
       {/if}
     {/each}
     {#if mode === 'pre'}
-      <rect x={HX - 30} y="26" width="60" height="18" rx="4" class="box ln hot" /><text x={HX} y="39" class="t mid hot-t">final LN</text>
+      <rect x={HX - 30} y="26" width="60" height="18" rx="4" class="box ln hot" /><text x={HX} y="39" class="t mid hot-t">{t('final LN')}</text>
     {/if}
   </svg>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="Where the norm sits">
-      <button type="button" class:on={mode === 'post'} aria-pressed={mode === 'post'} onclick={() => (mode = 'post')}>post-norm (2017)</button>
-      <button type="button" class:on={mode === 'pre'} aria-pressed={mode === 'pre'} onclick={() => (mode = 'pre')}>pre-norm (today)</button>
+    <div class="seg" role="group" aria-label={t('Where the norm sits')}>
+      <button type="button" class:on={mode === 'post'} aria-pressed={mode === 'post'} onclick={() => (mode = 'post')}>{t('post-norm (2017)')}</button>
+      <button type="button" class:on={mode === 'pre'} aria-pressed={mode === 'pre'} onclick={() => (mode = 'pre')}>{t('pre-norm (today)')}</button>
     </div>
-    <label class="knob">layers <b>{layers}</b><input type="range" min="1" max="6" step="1" value={layers} oninput={(e) => (layers = +e.currentTarget.value)} /></label>
+    <label class="knob">{t('layers')} <b>{layers}</b><input type="range" min="1" max="6" step="1" value={layers} oninput={(e) => (layers = +e.currentTarget.value)} /></label>
   {/snippet}
 
   {#snippet readout()}
-    LayerNorms on the residual path from input to output:
-    <b>{onPath}</b>.
+    {t('LayerNorms on the residual path from input to output:')}
+    <b>{onPath}</b>{lang === 'zh' ? '。' : '.'}
     {mode === 'post'
-      ? 'Every layer rescales the whole sum x, so the input reaches the top only through all of them.'
-      : 'Sublayers only add to x; nothing rescales it. The input reaches the top unchanged, then one final LN.'}
+      ? t('Every layer rescales the whole sum x, so the input reaches the top only through all of them.')
+      : t('Sublayers only add to x; nothing rescales it. The input reaches the top unchanged, then one final LN.')}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><span class="hwk"></span>the residual path</span>
-    <span class="lg"><span class="lnk">LN</span>a LayerNorm on that path</span>
+    <span class="lg"><span class="hwk"></span>{t('the residual path')}</span>
+    <span class="lg"><span class="lnk">LN</span>{t('a LayerNorm on that path')}</span>
   {/snippet}
 </LabFrame>
 

@@ -5,6 +5,33 @@
    * and the perplexity e^entropy.
    */
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'mat': '垫子',
+    'sofa': '沙发',
+    'roof': '屋顶',
+    'moon': '月亮',
+    'even': '均匀',
+    'sure': '确定',
+    'choosing between two': '二选一',
+    'skewed': '偏向一个',
+    'Entropy and perplexity: how unsure is the model?': '熵和困惑度：模型有多拿不准？',
+    'Drag how much the model believes in each word, or press a preset.': '拖动滑块，调整模型对每个词有多相信，或者按一个预设。',
+    'word': '词',
+    'belief (drag)': '相信程度（拖动）',
+    'belief in {w}': '对“{w}”的相信程度',
+    'Perplexity {n}: as unsure as choosing evenly among that many words': '困惑度 {n}：就像在这么多个词里平均地挑一个那样拿不准',
+    'perplexity': '困惑度',
+    'entropy': '熵',
+    'nats': '奈特',
+    ': as unsure as an even choice among {n} words': '：就像在 {n} 个词里平均地挑一个那样拿不准',
+    'p of each word': '每个词的 p',
+    'one equally likely word; the filled part is the perplexity': '一个同样可能的词；填满的部分就是困惑度',
+  })
 
   const WORDS = ['mat', 'sofa', 'roof', 'moon']
   const START = [1, 1, 1, 1]
@@ -33,17 +60,17 @@
 </script>
 
 <LabFrame
-  title="Entropy and perplexity: how unsure is the model?"
-  hint="Drag how much the model believes in each word, or press a preset."
+  title={t('Entropy and perplexity: how unsure is the model?')}
+  hint={t('Drag how much the model believes in each word, or press a preset.')}
   onreset={() => (w = [...START])}
   resetDisabled={w.every((v, i) => v === START[i])}
 >
   <div class="rows">
-    <div class="row head"><span>word</span><span>belief (drag)</span><span>p</span><span class="r">−ln p</span></div>
+    <div class="row head"><span>{t('word')}</span><span>{t('belief (drag)')}</span><span>p</span><span class="r">−ln p</span></div>
     {#each WORDS as word, i}
       <div class="row">
-        <span class="w">{word}</span>
-        <input type="range" min="0" max="10" step="0.5" value={w[i]} aria-label={`belief in ${word}`}
+        <span class="w">{t(word)}</span>
+        <input type="range" min="0" max="10" step="0.5" value={w[i]} aria-label={t('belief in {w}', { w: t(word) })}
           oninput={(e) => set(i, +(e.currentTarget as HTMLInputElement).value)} />
         <span class="bar"><i style="width:{p[i] * 100}%"></i><em>{p[i].toFixed(3)}</em></span>
         <span class="num">{fmt(surprise[i])}</span>
@@ -51,8 +78,8 @@
     {/each}
   </div>
 
-  <div class="dice" aria-label={`Perplexity ${ppl.toFixed(2)}: as unsure as choosing evenly among that many words`}>
-    <span class="dl">perplexity</span>
+  <div class="dice" aria-label={t('Perplexity {n}: as unsure as choosing evenly among that many words', { n: ppl.toFixed(2) })}>
+    <span class="dl">{t('perplexity')}</span>
     {#each [0, 1, 2, 3] as k}
       <span class="die"><i style="width:{Math.max(0, Math.min(1, ppl - k)) * 100}%"></i></span>
     {/each}
@@ -61,18 +88,18 @@
 
   {#snippet controls()}
     {#each presets as [name, v]}
-      <button class="lab-btn" class:on={w.every((x, i) => x === v[i])} aria-pressed={w.every((x, i) => x === v[i])} onclick={() => (w = [...v])}>{name}</button>
+      <button class="lab-btn" class:on={w.every((x, i) => x === v[i])} aria-pressed={w.every((x, i) => x === v[i])} onclick={() => (w = [...v])}>{t(name)}</button>
     {/each}
   {/snippet}
 
   {#snippet readout()}
-    entropy = Σ p · (−ln p) = <b>{H.toFixed(3)}</b> nats · perplexity = e<sup>{H.toFixed(3)}</sup> = <b>{ppl.toFixed(2)}</b>
-    <span class="dim">: as unsure as an even choice among {ppl.toFixed(2)} words</span>
+    {t('entropy')} = Σ p · (−ln p) = <b>{H.toFixed(3)}</b> {t('nats')} · {t('perplexity')} = e<sup>{H.toFixed(3)}</sup> = <b>{ppl.toFixed(2)}</b>
+    <span class="dim">{t(': as unsure as an even choice among {n} words', { n: ppl.toFixed(2) })}</span>
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw p"></i>p of each word</span>
-    <span><i class="sw die-sw"></i>one equally likely word; the filled part is the perplexity</span>
+    <span><i class="sw p"></i>{t('p of each word')}</span>
+    <span><i class="sw die-sw"></i>{t('one equally likely word; the filled part is the perplexity')}</span>
   {/snippet}
 </LabFrame>
 

@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './RopeLab.svelte'
 interface Props { hide?: { qx?: string; score?: string } }
 const { hide } = Astro.props
 ---
-<Lab client:visible hide={hide} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible hide={hide} />

@@ -1,0 +1,191 @@
+grad-d:
+  prompt: "a = 2，b = 3，c = 1，d = −2。e = a·b，f = e + c，L = f·d。∂L/∂d 是多少？"
+  after: "L = f·d，所以这个乘积把 f × L.grad = 7 × 1 = 7 传给 d。d 增加一点点，L 就增加它的 7 倍。"
+  hints:
+    - "−2 是 d 本身，那是 f 收到的。d 收到的是乘积的另一个输入。"
+    - "−14 是 L。梯度是 d 变化时 L 变化得有多快。"
+    - ["在乘积里，每个输入得到（另一个输入）×（乘积的 grad）。对 d 来说，L = f·d 的另一个输入是哪个？", "d 得到 f × L.grad，而 L.grad = 1。先算出 f：f = e + c，其中 e = a·b。"]
+
+grad-a:
+  prompt: "a = 2，b = 3，c = 1，d = −2。e = a·b，f = e + c，L = f·d。∂L/∂a 是多少？"
+  after: "L → f：d = −2。f → e：× 1，还是 −2。e → a：× b = 3。所以 −2 × 1 × 3 = −6。"
+  hints:
+    - "−4 是 ∂L/∂b：它用的是 a。对 a 来说，乘积 e = a·b 传过来的是 b × e.grad。"
+    - "大小对了，符号反了。到达 e 的梯度是 −2。"
+    - "−2 是 e.grad。还差一个节点：e = a·b 把 b × e.grad 传给 a。"
+    - ["用链式法则：沿着路径 L → f → e → a，把局部因子乘起来。", "第一个因子，从 L 到 f，是 d = −2。然后 f = e + c 把梯度原封不动地传给 e。"]
+
+code-mul:
+  prompt: "写出乘积传给它第一个输入的梯度。"
+  template: |
+    class Value:
+        def __init__(self, data, children=()):
+            self.data = data
+            self.grad = 0.0
+            self._children = children
+            self._backward = lambda: None
+
+        def __add__(self, other):
+            out = Value(self.data + other.data, (self, other))
+            def _backward():
+                self.grad += out.grad
+                other.grad += out.grad
+            out._backward = _backward
+            return out
+
+        def __mul__(self, other):
+            out = Value(self.data * other.data, (self, other))
+            def _backward():
+                self.grad += ____
+                other.grad += self.data * out.grad
+            out._backward = _backward
+            return out
+
+    def grads(a, b, c, d):
+        a, b, c, d = Value(a), Value(b), Value(c), Value(d)
+        e = a * b
+        f = e + c
+        L = f * d
+        L.grad = 1.0
+        for v in [L, f, e]:          # 从末尾开始访问，现在先手动来
+            v._backward()
+        return [a.grad, b.grad, c.grad, d.grad]
+
+    print(grads(2, 3, 1, -2))
+  after: "在乘积里，一个输入的微小变化会被乘上另一个输入，所以那就是局部因子。再乘上 out.grad，就把这个节点之后所有节点的影响都加了进来。这就是链式法则，一次一个节点。"
+  tests:
+    - "实验台里的数：a −6，b −4，c −2，d 7"
+    - "a = 1，b = −1，c = 2，d = 3"
+  hints:
+    - ["self 得到（另一个输入）× out.grad。看看它下面那一行，也就是给 other 的那一行。", "给 other 的那一行用的是 self.data。对 self 来说，另一个输入是哪个？", "对 e = a·b，a = 2、b = 3，a 得到 3 × e.grad：也就是 b 的 data。"]
+    - ["乘积的每个输入得到（另一个输入）×（乘积的 grad）。", "它下面那一行，给 other 的那一行，形式是一样的。", "对 e = a·b，a = 2、b = 3，a 得到 3 × e.grad。"]
+
+x-times-x:
+  prompt: "y = x · x，x = 3。dy/dx 是多少？"
+  after: "dy/dx = 2x = 6。在计算图里：x 同时是乘积的两个输入，每一边传回 x × 1 = 3。合起来是 6。"
+  hints:
+    - "3 是乘积的一边传回来的。x 是两边。"
+    - "9 是 y。x² 在 x = 3 处的斜率是 2x。"
+    - ["x 同时是乘积的两个输入。每一边传回（另一个输入）× y.grad，两部分相加。", "y.grad = 1，所以一边传回 3 × 1 = 3。"]
+
+pred-equals:
+  prompt: "有人写成了 self.grad = … 和 other.grad = …（用 =，不是 +=）。对 y = x · x，x = 3，他的反向传播得到的 x.grad 是多少？"
+  options: ["6，还是对的", "3，正确答案的一半", "9"]
+  hints:
+    - "用 = 时，第二行不会加到第一行写的值上，而是把它替换掉。"
+    - "9 是 y 本身。每一行写的是梯度的一部分，x × 1 = 3。"
+  reveal: "3。第一行让 x.grad = 3，第二行又让 x.grad = 3，把它覆盖了。用 += 的话，两部分会加起来：3 + 3 = 6。"
+
+code-sub:
+  prompt: "写出减法 out = self − other 的反向规则：一行给 self，一行给 other。"
+  template: |
+    class Value:
+        def __init__(self, data, children=()):
+            self.data = data
+            self.grad = 0.0
+            self._children = children
+            self._backward = lambda: None
+
+        def __mul__(self, other):
+            out = Value(self.data * other.data, (self, other))
+            def _backward():
+                self.grad += other.data * out.grad
+                other.grad += self.data * out.grad
+            out._backward = _backward
+            return out
+
+        def __sub__(self, other):
+            out = Value(self.data - other.data, (self, other))
+            def _backward():
+                ____
+            out._backward = _backward
+            return out
+
+    def grads(a, b, c):
+        a, b, c = Value(a), Value(b), Value(c)
+        e = a * b
+        L = e - c
+        L.grad = 1.0
+        for v in [L, e]:             # 从末尾开始访问，手动
+            v._backward()
+        return [a.grad, b.grad, c.grad]
+
+    print(grads(2, 3, 1))   # 应该是 [3, 2, -1]
+  after: "out = self − other 的局部因子是 1 和 −1，所以 self 得到 +out.grad，other 得到 −out.grad。两行都是往 grad 里累加，所以 y = x − x 能正确地得到 x.grad = 1 − 1 = 0。"
+  tests:
+    - "L = a·b − c，a = 2，b = 3，c = 1：c 得到 −1"
+    - "y = x − x：x 同时是两个输入，所以 1 和 −1 这两部分加起来必须是 0"
+    - "L = (a − b)·c，a = 4，b = 1，c = 2：这里 out.grad 是 2，不是 1"
+  hints:
+    - "两行都在 _backward 里面。第二行要和第一行对齐。"
+    - ["两行：self 得到它的局部因子乘 out.grad，other 得到它的局部因子乘 out.grad。", "self 增加一点，out 增加同样多。other 增加一点，out 减少同样多。这两个局部因子是什么？", "self 的局部因子是 1。other 的因子大小一样，符号相反。"]
+    - ["第一个测试通过了，但 x − x 没通过。这里 self 和 other 是同一个 x。第二行有没有保留第一行写的值？", "两行都必须往 grad 里累加，用 +=（或 -=），绝不能用 = 替换它。"]
+    - "这里 out.grad 是 2，不是 1。用每个局部因子乘 out.grad，而不是用一个固定的数。"
+    - ["一行给 self，一行给 other，各自往自己的 grad 里累加。", "self 增加一点，out 增加同样多。other 增加一点，out 减少同样多。", "每一行累加的是（局部因子）× out.grad。两个因子里有一个是负的。"]
+
+code-backward:
+  prompt: "写出 backward 在 build(self) 之后的结尾部分：设定输出节点的起始梯度，然后按拓扑序的逆序，对每个节点调用 _backward。需要写好几行。"
+  template: |
+    import math
+
+    class Value:
+        def __init__(self, data, children=()):
+            self.data = data
+            self.grad = 0.0
+            self._children = children
+            self._backward = lambda: None
+
+        def __add__(self, other):
+            out = Value(self.data + other.data, (self, other))
+            def _backward():
+                self.grad += out.grad
+                other.grad += out.grad
+            out._backward = _backward
+            return out
+
+        def __mul__(self, other):
+            out = Value(self.data * other.data, (self, other))
+            def _backward():
+                self.grad += other.data * out.grad
+                other.grad += self.data * out.grad
+            out._backward = _backward
+            return out
+
+        def tanh(self):
+            t = math.tanh(self.data)
+            out = Value(t, (self,))
+            def _backward():
+                self.grad += (1 - t ** 2) * out.grad
+            out._backward = _backward
+            return out
+
+        def backward(self):
+            topo, seen = [], set()
+            def build(v):
+                if v not in seen:
+                    seen.add(v)
+                    for child in v._children:
+                        build(child)
+                    topo.append(v)      # 一个节点排在它所有的输入之后
+            build(self)
+            ____
+
+    def grads(a, b, c, d):
+        a, b, c, d = Value(a), Value(b), Value(c), Value(d)
+        L = (a * b + c) * d
+        L.backward()
+        return [a.grad, b.grad, c.grad, d.grad]
+
+    print(grads(2, 3, 1, -2))
+  after: "build 把每个节点都排在它的输入之后，所以 L 在最后。倒着走这个列表，每个节点都要等所有用到它的节点访问完才会被访问，所以它把梯度传给输入之前，自己的 grad 已经完整了。"
+  tests:
+    - "实验台里的计算图"
+    - "y = x² + x，x = 3：2·3 + 1 = 7（x 用在了三个地方）"
+    - "一个 tanh 神经元：(1 − tanh(0.5)²) × 1 = 0.786448"
+  hints:
+    - "每一行都缩进 8 个空格，和上面的 build(self) 一样；只有 for 里面的那一行再多缩进 4 个空格。"
+    - "build 填的那个列表叫 topo，你开始的那个节点是 self。"
+    - ["全是 0：没有东西启动梯度的流动。∂L/∂L 是多少？它应该放在哪个节点上？", "每个 _backward 都要乘 out.grad。如果输出的 grad 还是 0，每个乘积都是 0。"]
+    - ["只有 d 得到了梯度。L 的 _backward 运行时 L.grad 是 1，但 a·b + c 运行它的 _backward 时，它自己的 grad 还是 0。你是按什么顺序访问节点的？", "topo 把输入排在用到它们的节点之前。一个节点只有在所有用到它的节点都运行过之后，才能把梯度传下去。你必须从 topo 的哪一头开始？", "从 topo 的最后一个元素走到第一个。Python 有一个内置函数能倒着走一个列表。"]
+    - ["把你的列表和期望的列表比一比。哪些梯度错了？它们属于哪些节点？", "topo 把输入排在用到它们的节点之前。backward 必须从列表的哪一头开始？", "从 topo 的最后一个元素走到第一个。Python 有一个内置函数能倒着走一个列表。"]
+    - ["两件事：L 自己的梯度，然后每个节点调用一次 _backward。", "反向传播从 L 开始，在这里 L 就是 self，也是 topo 里的最后一个节点。", "倒着走 topo：从 L 走到输入。"]

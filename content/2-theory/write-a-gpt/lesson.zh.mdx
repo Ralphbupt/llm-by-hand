@@ -1,0 +1,438 @@
+---
+recap:
+  can:
+    - "把一道题变成 id，再变成错开一位的 x 和 y，损失只算答案数字。"
+    - "写出带掩码的多头注意力：拆开各个头，给分数加掩码，再把各个头合回去。"
+    - "在长时间训练之前先调试模型：检查第一个损失，再让模型过拟合一批数据。"
+  keys:
+    - "`x, y = ids[:-1], ids[1:]`；不评分的目标值写成 `IGNORE = -100`"
+    - "拆分：`(B, L, d_model)` → `view(B, L, h, d_k).transpose(1, 2)` → `(B, h, L, d_k)`"
+    - "合并：`out.transpose(1, 2)`，再 `.contiguous().view(B, L, d_model)`"
+    - "没训练过的模型从 $\\ln V$ 附近开始：$\\ln 15 \\approx 2.71$"
+  mistakes:
+    - "在 `.transpose` 之后直接调用 `.view`，没有先 `.contiguous()`。"
+    - "数位置时漏了 `<bos>`，或者把 a 和 b 的随机数字以及 `<pad>` 也算进了损失。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import AddDataLab from '@viz/AddDataLab.astro'
+import PlateauLab from '@viz/PlateauLab.astro'
+import MicroscopeLab from '@viz/MicroscopeLab.astro'
+
+到目前为止，每一关都给了你大部分代码。这一关只给你任务和一个**起始文件**：一个 Python 文件，
+里面每个类和函数都已经有了名字和一行说明，但没有代码。
+你可以随时回去重读前面的关，但每一行都要你自己写，在你自己的电脑上写。
+如果你还没在本地跑过 Python 和 PyTorch，先看[安装页](/setup/)。
+打这个 Boss 之前，建议先做支线 U4（给模型喂数据）和 U5（调试模型）。它们讲了你在这里会遇到的批、
+填充和 bug。如果你跳过了它们，一轮训练需要的批循环是这样的：
+
+```python
+# X, Y：所有训练用的 x 和 y。perm：每轮一个新顺序。
+perm = torch.randperm(len(X))
+for i in range(0, len(X), 64):
+    idx = perm[i:i + 64]               # 接下来的 64 个 id
+    xb, yb = X[idx], Y[idx]
+    # 前向传播、损失、zero_grad、backward、step
+```
+
+## 任务
+
+- **模型做什么。** 它读入 `<bos>23+58=`，接着写出 `81<eos>`。每个字符一个 token。
+  `<bos>` 是起始 token：每个序列都以它开头，这样模型在第一个数字之前就有输入。
+  `<eos>` 是结束 token：答案写完时，模型写出它。
+  聊天模型写东西的方式正是这样：一次又一次地预测下一个 token。
+- **数据。** a、b 从 0 到 99 的每一对：10,000 道题。把它们打乱。用 8,500 道训练。用 500 道做验证，
+  挑出最好的那一轮。最后 1,000 道单独放着：模型从来看不到它们，你也不根据它们做任何选择。
+- **词表。** 15 个 token：`<pad>`、`<bos>`、`<eos>`、十个数字、`+` 和 `=`。
+- **模型。** 仅解码器：嵌入，几个由因果自注意力和 FFN 组成的块，然后是输出层。
+  没有编码器，也没有交叉注意力。块是 **pre-norm**（第 16 关），用 **RMSNorm**（第 19 关），
+  位置嵌入是学出来的。
+- **通关条件。** 两项检查。第一，你的代码载入固定权重，必须算出和参考实现一样的 logit。
+  第二，你训练好的模型写出 1,000 道没见过的题的答案，至少 950 道必须全对。
+
+按顺序做这些步骤。每一步都有一个检查，在你把某个部件用到下一步之前，先告诉你它是对的。
+
+## 第 0 步：你的工具
+
+把这些文件下载到同一个文件夹里：
+
+1. [skeleton.py](/files/write-a-gpt/skeleton.py)，起始文件：名字、形状和一行说明，没有提示。把它复制成 `my_gpt.py`，补完每个 `# TODO`。
+   类名和属性名不要改：Boss 检查按这些名字载入权重。
+   如果卡住了，[`skeleton_hints.py`](/files/write-a-gpt/skeleton_hints.py) 是同一个文件，带着告诉你该写哪几行的注释。先试试不看它。
+2. [check.py](/files/write-a-gpt/check.py) 和 [`check_weights.json`](/files/write-a-gpt/check_weights.json)，Boss 检查。
+   你在第 2 步和第 5 步结束时用它检查你自己的文件。
+3. 第 9 关[第 7 节](/learn/numpy-to-pytorch/#7-a-translation-table-to-keep)的**对照表**。
+   你写的几乎每一行，都是前面某一关的 NumPy 代码翻译过来的：`nn.Embedding`、`view`、`transpose`、
+   `masked_fill`、带 `ignore_index` 的 `F.cross_entropy`，还有按轮训练的循环。有一个名字和 NumPy 不同：
+   `np.triu(…, k=1)` 在 PyTorch 里是 `torch.triu(…, diagonal=1)`。
+
+<Deeper title="起始文件里有什么">
+
+```python
+PAD, BOS, EOS = 0, 1, 2
+ITOS = ["<pad>", "<bos>", "<eos>"] + list("0123456789") + ["+", "="]   # 15 个 token，id 0–14
+STOI = {c: i for i, c in enumerate(ITOS)}                             # {'<pad>': 0, '<bos>': 1, …}
+MAXLEN = 11          # 最长的序列：<bos> 9 9 + 9 9 = 1 9 8 <eos>
+IGNORE = -100        # F.cross_entropy(..., ignore_index=IGNORE) 会跳过这些目标值
+
+def encode(a, b): ...          # (23, 58) → 11 个 id，用 <pad> 补齐
+def make_xy(ids): ...          # x、y 错开一位；答案之前和 <pad> 处 y = IGNORE
+def split(seed=0): ...         # 已给出：8,500 训练、500 验证、1,000 没见过（和 check.py 用的划分相同）
+
+class RMSNorm(nn.Module): ...  # 除以均方根，再乘一个学出来的增益
+class Attention(nn.Module): ...# q、k、v → 拆头 → 分数 → 因果掩码 → softmax → 合并头 → 输出
+class Block(nn.Module): ...    # pre-norm：x = x + attn(norm1(x))；x = x + ffn(norm2(x))
+class GPT(nn.Module): ...      # 嵌入 → 块 → 最后的归一化 → 输出层：(B, L) 个 id → (B, L, 15)
+
+def overfit_one_batch(): ...   # 第 3 步
+def train(epochs): ...         # 第 4 步，最后保存 model.pt 给 check.py 用
+def solve(model, a, b): ...    # 第 5 步：贪心解码直到 <eos>
+```
+
+</Deeper>
+
+<Deeper title="照抄的代码，和你要做的选择">
+
+有些代码在几乎每个 PyTorch 脚本里都一样。你可以照抄，不需要自己的理由：
+`torch.manual_seed(0)`、`opt.zero_grad(); loss.backward(); opt.step()`、学习率 0.001 的 Adam，以及 64 的批大小。
+
+另一些代码是选择，会改变模型学到什么。每一个你都应该说得出为什么这样选：
+
+- 哪些位置算进损失；
+- 几个块，每个块多宽；
+- pre-norm 还是 post-norm；
+- 位置怎样进入模型。
+
+支线 [N7](/learn/encoder-decoder/) 的编码器–解码器用了 `label_smoothing=0.1`，和 2017 年的设计一样。
+这是一个选择，不是习惯。这个任务不需要它。
+
+</Deeper>
+
+## 第 1 步：数据，错开一位
+
+每个 token 都有一个 id。这一页的检查用的是这些 id：
+
+| token | `<pad>` | `<bos>` | `<eos>` | `0` … `9` | `+` | `=` |
+|---|---|---|---|---|---|---|
+| id | 0 | 1 | 2 | 3 … 12 | 13 | 14 |
+
+所以数字 2 的 id 是 5，数字 8 的 id 是 11。拿 23 + 58 这道题来说。写成一个 token 序列，它是
+`<bos>23+58=81<eos>`。
+
+<Blank id="seq-len" />
+
+<Gate requires="seq-len">
+
+一批是一个长方形：里面每个序列的长度必须相同。所以每个序列都在末尾补上 `<pad>` token，
+一直补到可能的最长序列的长度。
+
+<Blank id="pad-len" />
+
+</Gate>
+
+<Gate requires="pad-len">
+
+输入 x 是补齐后的序列去掉最后一个 token，目标 y 是同一个序列去掉第一个 token。
+所以 x 和 y 各有 10 个 token，y[t] 就是 x[t] 后面的那个 token。
+
+<Blank id="first-answer-pos" />
+
+</Gate>
+
+<Gate requires="first-answer-pos">
+
+模型应该只按答案评分。a 和 b 的数字是随机的，没有哪个模型能预测它们，
+而 `<pad>` 也不是谁想让它说的东西。所以在 y 里，答案之前的每个目标值和每个 `<pad>` 都换成一个特殊值
+`IGNORE = -100`，`F.cross_entropy(..., ignore_index=-100)` 会跳过这些位置。这一页把它叫作**损失只算答案数字**。
+
+<Blank id="answer-targets" />
+
+</Gate>
+
+<Gate requires="answer-targets">
+
+所以“只算答案数字”总是包括 `<eos>`：模型既要答对，也要知道什么时候停。
+
+为什么不像第 15 关那样用填充掩码？这里每个 `<pad>` 都在末尾，在 `<eos>` 之后，而因果掩码
+已经不让每个位置看后面的位置。所以没有哪个真正的 token 会看到 `<pad>`。`<pad>` 的位置确实会看它前面的 token，
+但没有谁用到它们的输出：它们的目标值是 IGNORE，而生成在 `<eos>` 处就停了。
+
+现在在实验台里检查你的答案，再试几道你自己的题。逐个位置比较 x 和 y，看看损失跳过了哪些目标值。
+
+<AddDataLab />
+
+**检查：** 打印三个样本，分别显示成字符、id、x 和 y。检查每个 y 都是它的 x 往左挪了一步。
+
+<CodeBlank id="make-xy" />
+
+<Stuck q="我明白错开一位，但为什么要去掉第一个和最后一个 token？">
+
+x 和 y 来自同一个序列。x 去掉最后一个 token，y 去掉第一个。所以在每个位置 t，
+y[t] 都是“x[t] 后面的那个 token”。模型跑一遍就同时做出十个猜测，每个位置一个，
+而因果掩码保证没有哪个猜测能看到它自己的答案。
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="make-xy">
+
+## 第 2 步：前向传播的形状
+
+写你的模型之前，先看一个训练好的小 GPT 怎样读入 `<bos>2+3=` 并写出下一个 token。它的部件和你的
+一样，只是尺寸非常小，所以每个数你都能看到。一步一步走一遍，记下每个部件之后的形状。
+
+<MicroscopeLab data="write-a-gpt" />
+
+现在用随机权重搭好你自己的模型，让一批数据穿过它。还什么都没训练。只有形状要紧。
+
+和第 16、17 关有一个不同：输入就是 `tok(ids) + pos(positions)`，**不**乘 √`d_model`。
+那两关用这个因子，是因为它们的位置表是固定的（数在 −1 和 1 之间），而 token 的数不能被它盖住。
+这里两张表都是学出来的 `nn.Embedding` 层，开始时大小相同，所以由训练来定它们之间的平衡。
+Boss 检查要求不乘这个因子。
+
+<Blank id="logits-shape" />
+
+</Gate>
+
+<Gate requires="logits-shape">
+
+模型里最难的一行是拆分各个头。在第 15 关，每个头取它自己的那几列。
+在代码里，大小为 `d_model` 的最后一个轴被变形成 h 个头，每个头 `d_k` 个数。然后把头这个轴挪到
+长度前面，这样每个头都有自己的 (L, `d_k`) 表：
+
+```python
+q = q.view(B, L, h, d_k).transpose(1, 2)    # (B, L, d_model) → (B, h, L, d_k)
+```
+
+<Blank id="split-heads" />
+
+在 NumPy 里，同样的拆分是一次 reshape，再加一次把四个轴按新顺序排好的 transpose（[第 9 关的表](/learn/numpy-to-pytorch/#7-a-translation-table-to-keep)）：
+
+<CodeBlank id="split-code" />
+
+</Gate>
+
+<Gate requires="split-code">
+
+注意力算完以后，各个头要合回去：先把长度挪回到头的前面，再把最后两个轴合并。
+
+```python
+y = out.transpose(1, 2).contiguous().view(B, L, d_model)    # (B, h, L, d_k) → (B, L, d_model)
+```
+
+<Blank id="merge-heads" />
+
+<Stuck q="view 报错：“view size is not compatible with input tensor’s size and stride”。">
+
+`view` 只是按数在内存里的排列重新标记它们，从不移动它们。`transpose` 之后，本该挨在一起的数
+在内存里并不挨在一起，所以 `view` 拒绝了。`.contiguous()` 会按新顺序复制一份，
+然后 `view` 就能用了。`.reshape(B, L, d_model)` 会替你把两步都做了。
+报错是：`view size is not compatible with input tensor's size and stride … Use .reshape(...) instead.`
+
+</Stuck>
+
+<Stuck q="我的模型能跑，但训练时有些块从来不变。">
+
+检查你是怎样存这些块的。模型是一个类：`__init__` 搭好各个部件，`forward` 使用它们。
+只有部件被存成模块（module），PyTorch 才找得到它的权重。普通的 Python 列表会把它藏起来：
+`self.blocks = [Block(...), Block(...)]` 能正常运行，但 `model.parameters()` 看不到这些块，所以优化器
+从不更新它们。用 `nn.ModuleList([...])`。单个学出来的数也要同样小心：用
+`nn.Parameter(...)` 包起来，就像 RMSNorm 的增益那样，否则它也不会被训练。
+
+</Stuck>
+
+<Deeper title="GPT 块就是第 16 关的解码器块，换成了 RMSNorm">
+
+第 16 关的解码器块已经是 pre-norm，第 17 关把它叠成了一个完整的模型。
+每个块先做 `x = x + attn(norm1(x))`，再做 `x = x + ffn(norm2(x))`。
+注意力用因果掩码，输出层之前还有一个最后的归一化。
+GPT 块保留这一切，只改一处：用 **RMSNorm**（第 19 关）代替 LayerNorm。块的外面还有两处改动：
+位置是学出来的，token 不乘 √`d_model`。
+
+参考答案有 2 个块，`d_model` 64，4 个头，`d_ff` 256，学出来的位置嵌入和 RMSNorm：
+共 102,415 个参数。
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="merge-heads">
+
+现在把整个注意力拼起来。在 NumPy 里，`k.transpose(0, 1, 3, 2)` 交换一个四轴数组的最后两个轴
+（PyTorch：`k.transpose(-2, -1)`），`np.where(blocked, -np.inf, scores)` 把被挡住的分数设成 −∞（PyTorch：
+`scores.masked_fill(blocked, float('-inf'))`）。因果掩码就是第 15 关那个：对角线以上是 True。
+在函数里面，从数组本身取尺寸，比如 `d_k = q.shape[-1]`。
+
+<CodeBlank id="mha-code" />
+
+这在 NumPy 里能用以后，你的 PyTorch `Attention.forward` 就是同样的四行，翻译过去。
+
+</Gate>
+
+<Gate requires="mha-code">
+
+**Boss 检查，第 1 部分。** 你的模型完整了，但还没训练。运行 `python check.py my_gpt.py`。它用小尺寸
+`GPT(d=32, heads=4, layers=2, d_ff=64)` 搭出你的 `GPT`，所以起始文件里这四个参数名不要改
+（`d` 就是 `d_model`）。然后它把 `check_weights.json` 里的固定权重按名字载入，
+在 `23+58=81` 上运行，把其中 20 个 logit 变成一个短码。它还会告诉你它们和参考实现是否一致。
+一个正确的、带 RMSNorm、因果掩码和 √`d_k` 缩放的 pre-norm GPT，会给出和参考实现一样的码。少了掩码、少了增益，或者用了 post-norm 块，
+都会让它变。权重按名字载入，所以还有一件事必须对得上：`qkv(x)` 各列的顺序。前 d 个数是 q，
+接下来 d 个是 k，最后 d 个是 v（`q, k, v = self.qkv(x).split(d, dim=-1)`），然后才把每一个拆成多个头。
+
+<CodeBlank id="boss-forward" />
+
+</Gate>
+
+<Gate requires="boss-forward">
+
+## 第 3 步：过拟合一批数据
+
+取 8 个固定的样本，只用它们训练 300 步。正确的模型会把它们背下来：
+损失只算答案数字时，参考实现从 2.73 降到 50 步后的 0.061，300 步后的 0.003。
+
+第一个数不是随便来的。训练之前，模型给 15 个 token 中的每一个差不多相同的概率，
+1/15。损失是 −ln(1/15) = ln 15 ≈ 2.71。所以没训练过的模型应该从 2.7 附近开始。
+
+<Predict id="start-loss" />
+
+如果一批数据上的损失一直很高，bug 在你的代码里，而不是模型的大小。几乎总是这三样之一：
+因果掩码、错开一位，或者损失在数什么。
+
+<Stuck q="我在一批数据上的损失停在 0.22 左右，降不下去了。">
+
+检查你是不是在每个位置上都算了损失。参考实现正是这样做的：50 步后 0.36，
+然后停在 0.22。`<bos>` 之后，8 个样本以不同的数字开头，前面没有任何 token 告诉模型第一个数字是什么。
+没有哪个模型能猜对这些，所以损失降不到那个水平以下。
+每个样本在它的第一个数字上损失 ln 8 ≈ 2.08。分摊到每个样本大约 9.5 个目标值上，就是 ln 8 / 9.5 ≈ 0.22。
+
+改成损失只算答案数字，同一个模型就降到 0.003。
+你的模型没问题。是这个测试要它去猜一个随机数字。
+
+</Stuck>
+
+<Stuck q="算损失那一行报错：“Expected target size [8, 15], got [8, 10]”。">
+
+`F.cross_entropy` 要求每个预测一行分数，但你的 logit 是 (8, 10, 15)：8 个样本、10 个位置、
+15 个 token。像第 17 关那样把它们摊平成每个位置一行：
+`F.cross_entropy(logits.reshape(-1, 15), y.reshape(-1), ignore_index=IGNORE)`。这是 80 行、每行 15 个分数，以及 80 个目标值。
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="start-loss">
+
+## 第 4 步：训练
+
+用 8,500 道训练题训练，批大小 64，学习率 0.001 的 Adam。一**轮**（epoch）就是把 8,500 道题
+全部过一遍，每次用新的随机顺序。训练 40 轮，在笔记本电脑上大约一分钟。每一轮之后，
+在 500 道验证题上测准确率。准确率可能会降一两轮然后恢复，所以要保留
+最好的模型。每当验证准确率超过目前最好的成绩，就把模型存下来给检查用。起始文件里的 `train` 写了
+做这件事的那一行。如果连最好的一轮都低于 95%，就多训练几轮（比如 60 轮）。
+
+<Predict id="plateau" />
+
+<Gate requires="plateau">
+
+参考模型的两次真实训练，每种损失设置一次。拖动滑块或者按播放。实验台显示的是在
+1,000 道没见过的题上的准确率，只是为了观察训练过程：最好的一轮仍然是按 500 道验证题挑的。
+
+<PlateauLab />
+
+<Stuck q="为什么准确率好几轮都不变，然后突然跳上去？">
+
+准确率只算完全正确的答案。一个答对三位中两位的模型得零分。
+在平的那一段，模型在学一些零碎的东西：答案有两位或三位，最后一位取决于
+a 和 b 的最后一位。训练损失能看出这一点。损失算每个位置时，它在第 4 轮到第 8 轮之间从 1.34 降到 1.27，
+而准确率只是慢慢地从 8% 升到 15%。
+
+然后模型把这些零碎的东西组合起来，包括进位。进位就是某一列加起来达到 10 或更多时，挪到下一位的那个 1，
+比如 8 + 5 = 13。这之后，整个答案开始答对。
+平的那一段持续多久，取决于模型、数据和设置。在别的设置下，它可能持续五十轮。
+
+</Stuck>
+
+**是平台期还是 bug？** 看训练损失，不要只看准确率。
+
+- **损失还在下降：** 模型在学。继续训练，即使准确率还没动。
+- **损失已经平了很久，而且过拟合一批数据（第 3 步）也失败：** 这是 bug。用
+  一个很容易的任务训练，比如第 17 关的复制任务，先修好代码，再去训练更久。
+
+<Stuck q="我跑了两次，得到的数一模一样。不是应该随机吗？">
+
+`torch.manual_seed(0)` 把每个随机选择都固定住了：初始权重、批的顺序和数据划分。
+这是故意的。在实验里改一样东西时，你看到的变化就来自这一样东西。
+想看随机性有多大影响，就换一个随机种子：平的那一段会变长或变短，最终结果差不多。
+
+</Stuck>
+
+<Predict id="loss-floor" />
+
+<Deeper title="为什么损失只算答案数字时起步更快">
+
+损失算每个位置时，大部分目标值是 a 和 b 的数字。它们是随机的，模型学不会，
+而每一批的梯度大部分都来自它们。损失只算答案数字时，全部梯度都在推着模型去学会正确地做加法。
+
+在这两次训练里，损失只算答案数字的那次早期遥遥领先：8 轮后 81%，而算每个位置的只有 15%。
+它也稍早一点达到 95%（第 14 轮对第 16 轮）。两次最后都接近 100%。两条曲线都不平滑：
+损失只算答案数字的那次在第 18 轮掉到 84.2%，然后又恢复了。先看几轮，再判断一次训练是好是坏。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="loss-floor">
+
+## 第 5 步：评估，打败 Boss
+
+对每道没见过的题，把 `<bos>a+b=` 交给模型，选出分数最高的 token，接在后面，重复直到 `<eos>`。
+只有每一位都对，答案才算对。
+
+不要只看分数。98% 的模型仍然会答错 20 道题，而答错的那些常常有共同点。
+把每一道错题打印出来，找出规律。`zip` 把两个列表一起读，一次读一对：
+`list(zip([1, 2], ["a", "b"]))` 是 `[(1, "a"), (2, "b")]`。
+
+<CodeBlank id="list-wrong" />
+
+</Gate>
+
+<Gate requires="list-wrong">
+
+**Boss 检查，第 2 部分。** 运行 `python check.py my_gpt.py model.pt`。它先对 `my_gpt.py` 再跑一遍第 1 部分，所以
+它测的模型必须是你写的那个 GPT。然后它载入你训练好的模型，用它自己的贪心循环写出
+1,000 道没见过的题的答案。它打印一份报告，分三部分：答对了几道，答错的前十道，
+以及由这些数生成的一个短校验码。把报告粘贴进来。
+
+这个页面能检查报告是否前后一致，以及你是否原样粘贴。它看不到你的模型：任何读过 check.py 的人
+都能手写一份报告。所以这一部分靠你的诚实。两部分都通过，这一关就算通关。
+
+<CodeBlank id="boss-report" />
+
+<TryIt>
+
+通关以后，给自己加点难度。用 1 个块代替 2 个，或者用 `d_model` 32 代替 64。
+它还能达到 95% 吗？现在需要多少轮？然后把学出来的位置嵌入换成 RoPE
+（第 19 关），比较两个版本学得多快。
+
+</TryIt>
+
+<Deeper title="参考答案">
+
+这一页的数来自课程自己对这个 Boss 的解答。它不提供下载，这样 Boss 才仍然是一场考验。
+训练 40 轮（在笔记本电脑上大约一分钟），按 500 道验证题选出的最好一轮，在 1,000 道没见过的题上答对 98.6%。上面实验台里的两次训练来自同一份代码。它没有学习率调度，所以那两次的前 40 轮就是一次完整的 40 轮训练；实验台显示 60 轮，是为了让你看到之后会发生什么。
+
+</Deeper>
+
+你已经搭出并训练了一个 GPT。如果你还没做，有两条支线能让你看到更多。
+支线 [N7](/learn/encoder-decoder/) 给你刚写的 GPT 加上两样东西：第二个栈，也就是编码器，
+以及把两个栈连起来的交叉注意力。支线 [U6](/learn/attention-backward/) 用手算出注意力的反向传播。
+
+</Gate>

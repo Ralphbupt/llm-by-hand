@@ -9,8 +9,25 @@
   import { has, subscribe } from '@lib/progress'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = [] }: { hide?: { id: string; t: number }[] } = $props()
+  let { hide = [], lang = 'en' }: { hide?: { id: string; t: number }[]; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'A recurrent network, one step at a time': '循环网络，一次一步',
+    'Press Next step. Change the weights or the inputs x and watch h change at every step.': '按“下一步”。改变权重或输入 x，看 h 在每一步怎样变化。',
+    'The network unrolled over time: each step reads x and the previous h': '沿时间展开的网络：每一步读 x 和上一步的 h',
+    'z = w_x·x_t + w_h·h_(t−1) + b, then h_t = tanh(z)': 'z = w_x·x_t + w_h·h_(t−1) + b，然后 h_t = tanh(z)',
+    'size of h': 'h 的大小',
+    'input x at step {k}': '第 {k} 步的输入 x',
+    'Next step': '下一步',
+    'All steps': '全部步骤',
+    'step {k} of {n}: h{k} = {h}. The same w_x, w_h and b are used at every step; only h carries anything forward.': '第 {k} 步，共 {n} 步：h{k} = {h}。每一步都用同样的 w_x、w_h 和 b；只有 h 把东西往前带。',
+    'h above 0': 'h 大于 0',
+    'h below 0': 'h 小于 0',
+    'deeper color: bigger |h|': '颜色越深：|h| 越大',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => (solved = Object.fromEntries(hide.map((h) => [h.id, has(h.id)])))
@@ -41,13 +58,13 @@
 </script>
 
 <LabFrame
-  title="A recurrent network, one step at a time"
-  hint="Press Next step. Change the weights or the inputs x and watch h change at every step."
+  title={tx('A recurrent network, one step at a time')}
+  hint={tx('Press Next step. Change the weights or the inputs x and watch h change at every step.')}
   onreset={resetAll}
   resetDisabled={!changed && shown === 1}
 >
   <!-- the unrolled chain: one node per step, the same w_x and w_h on every arrow -->
-  <svg use:readable viewBox="0 0 {40 + 110 * xs.length} 150" class="chain" role="img" aria-label="The network unrolled over time: each step reads x and the previous h">
+  <svg use:readable viewBox="0 0 {40 + 110 * xs.length} 150" class="chain" role="img" aria-label={tx('The network unrolled over time: each step reads x and the previous h')}>
     <text x="4" y="64" class="lbl">h₀=0</text>
     {#each xs as x, t}
       {@const cx = 90 + 110 * t}
@@ -71,16 +88,16 @@
     {/each}
   </svg>
 
-  <p class="cap mono">z = w_x·x_t + w_h·h_(t−1) + b, then h_t = tanh(z)</p>
+  <p class="cap mono">{tx('z = w_x·x_t + w_h·h_(t−1) + b, then h_t = tanh(z)')}</p>
   <div class="scroll">
     <table>
-      <thead><tr><th>t</th><th>x_t</th><th>z</th><th>h_t</th><th>size of h</th></tr></thead>
+      <thead><tr><th>t</th><th>x_t</th><th>z</th><th>h_t</th><th>{tx('size of h')}</th></tr></thead>
       <tbody>
         {#each xs as x, t}
           <tr class:off={t >= shown}>
             <td>{t + 1}</td>
             <td>
-              <input class="num" type="number" step="0.5" value={x} aria-label={`input x at step ${t + 1}`}
+              <input class="num" type="number" step="0.5" value={x} aria-label={tx('input x at step {k}', { k: t + 1 })}
                 onchange={(e) => { const n = [...xs]; n[t] = Number(e.currentTarget.value) || 0; xs = n }} />
             </td>
             {#if t < shown}
@@ -97,8 +114,8 @@
   </div>
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => (shown = Math.min(xs.length, shown + 1))} disabled={shown >= xs.length}>Next step</button>
-    <button class="lab-btn" onclick={() => (shown = xs.length)} disabled={shown >= xs.length}>All steps</button>
+    <button class="lab-btn primary" onclick={() => (shown = Math.min(xs.length, shown + 1))} disabled={shown >= xs.length}>{tx('Next step')}</button>
+    <button class="lab-btn" onclick={() => (shown = xs.length)} disabled={shown >= xs.length}>{tx('All steps')}</button>
     <span class="knobs">
       <label>w_x <b>{wx.toFixed(2)}</b> <input type="range" min="-2" max="2" step="0.05" bind:value={wx} aria-label="w_x" /></label>
       <label>w_h <b>{wh.toFixed(2)}</b> <input type="range" min="-2" max="2" step="0.05" bind:value={wh} aria-label="w_h" /></label>
@@ -107,13 +124,13 @@
   {/snippet}
 
   {#snippet readout()}
-    step {shown} of {xs.length}: h{shown} = {masked(shown) ? '?' : f4(hs[shown - 1])}. The same w_x, w_h and b are used at every step; only h carries anything forward.
+    {tx('step {k} of {n}: h{k} = {h}. The same w_x, w_h and b are used at every step; only h carries anything forward.', { k: shown, n: xs.length, h: masked(shown) ? '?' : f4(hs[shown - 1]) })}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw pos"></i>h above 0</span>
-    <span><i class="sw neg"></i>h below 0</span>
-    <span>deeper color: bigger |h|</span>
+    <span><i class="sw pos"></i>{tx('h above 0')}</span>
+    <span><i class="sw neg"></i>{tx('h below 0')}</span>
+    <span>{tx('deeper color: bigger |h|')}</span>
   {/snippet}
 </LabFrame>
 

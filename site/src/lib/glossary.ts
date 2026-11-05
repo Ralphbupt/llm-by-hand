@@ -25,6 +25,8 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function forms(t: Term): string[] {
   const out = new Set<string>()
   for (const f of [t.term, ...(t.aliases ?? [])]) {
+    // a single Chinese character (层, 批, 门) is part of too many other words to underline
+    if (/^[\u4e00-\u9fff]$/.test(f)) continue
     out.add(f)
     if (/[a-z]$/i.test(f) && !/s$/i.test(f)) out.add(f + 's')
     if (/(x|ch|sh)$/i.test(f)) out.add(f + 'es')

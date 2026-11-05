@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './FullModelLab.svelte'
 interface Props { variant?: 'decoder' | 'encdec' }
 const { variant = 'decoder' } = Astro.props
 ---
-<Lab client:visible variant={variant} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible variant={variant} />

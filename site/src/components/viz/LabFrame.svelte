@@ -16,6 +16,8 @@
    */
   import { onMount, type Snippet } from 'svelte'
   import { webglAvailable } from '@lib/three/webgl'
+  import { useT } from '@lib/i18nSvelte'
+  const t = useT()
 
   /** `webgl: true` marks a view that needs WebGL; the id '3d' implies it */
   type View = { id: string; label: string; webgl?: boolean }
@@ -26,7 +28,7 @@
     /** optional view switch, e.g. [{id:'map',label:'Map'},{id:'3d',label:'3D'}]; the exact-reading view goes first */
     views?: View[]
     view?: string
-    /** show "Reset to the starting numbers" at the end of the controls row */
+    /** show t('Reset to the starting numbers') at the end of the controls row */
     onreset?: () => void
     /** gray it out when nothing has changed (it still never does harm when pressed) */
     resetDisabled?: boolean
@@ -108,9 +110,9 @@
       {#if hint}<p class="lf-hint">{hint}</p>{/if}
     </div>
     {#if shown && shown.length > 1}
-      <div class="lf-views" role="group" aria-label="View">
+      <div class="lf-views" role="group" aria-label={t('View')}>
         {#each shown as v}
-          <button type="button" class:on={view === v.id} aria-pressed={view === v.id} onclick={() => (view = v.id)}>{v.label}</button>
+          <button type="button" class:on={view === v.id} aria-pressed={view === v.id} onclick={() => (view = v.id)}>{t(v.label)}</button>
         {/each}
       </div>
     {/if}
@@ -119,13 +121,13 @@
   <div class="lf-pic" class:scrolls class:at-end={atEnd} bind:this={pic} tabindex={scrolls ? 0 : undefined}>
     <div class="lf-pic-in">{@render children()}</div>
   </div>
-  {#if scrolls}<p class="lf-swipe" aria-hidden="true">← swipe to see the rest →</p>{/if}
+  {#if scrolls}<p class="lf-swipe" aria-hidden="true">{t('← swipe to see the rest →')}</p>{/if}
 
   {#if controls || onreset}
     <div class="lf-controls">
       {#if controls}<div class="lf-actions">{@render controls()}</div>{/if}
       {#if onreset}
-        <button type="button" class="lab-btn ghost lf-reset" class:quiet={resetDisabled} onclick={onreset}>Reset to the starting numbers</button>
+        <button type="button" class="lab-btn ghost lf-reset" class:quiet={resetDisabled} onclick={onreset}>{t('Reset to the starting numbers')}</button>
       {/if}
     </div>
   {/if}

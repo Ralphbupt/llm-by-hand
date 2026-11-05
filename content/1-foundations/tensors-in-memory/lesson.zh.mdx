@@ -1,0 +1,254 @@
+---
+glossarySkip: [stride]
+recap:
+  can:
+    - "根据形状、步长和起点，找出任意一个元素在内存里的位置。"
+    - "运行之前就说出转置、切片或 reshape 得到的是视图还是副本。"
+    - "解释为什么 `transpose` 之后 `view` 会失败，以及 `.contiguous()` 怎样解决它。"
+  keys:
+    - "位置 = 起点 + $i \\cdot s_0 + j \\cdot s_1$"
+    - "内存连续的 `(2, 5, 3)` → 步长 `(15, 3, 1)`：每个步长都是它右边各维大小的乘积"
+    - "转置交换步长：`(4, 1)` → `(1, 4)`。内存里什么都没有移动。"
+    - "被广播的轴步长为 0：每走一步都重新读同一批数"
+    - "NumPy 的 `x.strides` 按字节算；PyTorch 的 `x.stride()` 按元素算"
+  mistakes:
+    - "往视图里写数，却以为原数组不会变。"
+    - "在 `.transpose(...)` 之后直接调用 `.view(...)`：要用 `.reshape(...)` 或 `.contiguous().view(...)`。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import StridesLab from '@viz/StridesLab.astro'
+
+在第 1 关，数组是一张有形状的表。可是在计算机里并没有表。只有一长排数字，外加一小段说明：怎样把这一排数读成一张表。
+这一关讲的就是这段说明。
+
+它能解释你后面会遇到的三件事：
+
+1. 为什么 `x.T` 不花任何代价，矩阵再大也一样；
+2. 为什么 `reshape` 有时会复制，有时不会；
+3. 为什么第 21 关在拼接注意力头时要写 `.transpose(1, 2).contiguous().view(...)`。
+
+## 1. 一长排数
+
+拿十二个数，把它们读成 3 行 4 列：
+
+```python
+# np.arange(12.0) 是 0.0, 1.0, …, 11.0
+x = np.arange(12.0).reshape(3, 4)
+# [[ 0.  1.  2.  3.]
+#  [ 4.  5.  6.  7.]
+#  [ 8.  9. 10. 11.]]
+```
+
+`reshape(3, 4)` 按顺序读这十二个数，先填第 0 行，再填第 1 行，然后是第 2 行。
+内存里什么都没变：这十二个数仍然排成一排，从 0 到 11。
+
+要找到 `x[i, j]`，NumPy 需要知道每个轴走一步时在内存里跨多远。这些跨度就是**步长**（strides）。
+
+- 沿着一行走一格（`j` 加 1），在内存里走 1 格。
+- 往下走一行（`i` 加 1），要跳过整整一行 4 个数：4 格。
+
+所以 `x` 的步长是 `(4, 1)`，每个元素都遵循同一条**地址规则**：
+
+$$
+\text{position of } x[i, j] \;=\; \text{start} + i \cdot s_0 + j \cdot s_1
+$$
+
+对 `x` 来说，起点（start）是 0。所以 `x[1, 2]` 在 $0 + 1 \cdot 4 + 2 \cdot 1 = 6$ 这个位置。一个数组就是这四样东西：
+内存、形状、步长和起点。
+
+在下面的实验台里选一个数组，然后指向或点一下它的某一格。现在先只看 `x`；其他按钮留到后面几节。
+
+<StridesLab hide={{ T: "strides-T" }} />
+
+关于单位还有一点。NumPy 的 `x.strides` 数的是**字节**，不是元素。每个 float64 数占 8 个字节，
+所以 NumPy 打印出来的是 `(32, 8)`。除以 `x.itemsize`（8）就得到 `(4, 1)`。这一页一律按元素来数，
+PyTorch 的 `x.stride()` 也是。
+
+<Blank id="addr-2-3" />
+
+<Gate requires="addr-2-3">
+
+轴更多时，规则也一样。最后一个轴的步长是 1。它左边的每个轴都要跳过它右边的所有东西，
+所以它的步长是它右边各维大小的乘积。步长符合这个规律的数组叫**内存连续**（contiguous）：
+按行的顺序读它，就是在内存里一格一格往前走。
+
+<Blank id="strides-234" />
+
+<Gate requires="strides-234">
+
+现在把这个规律写成代码。从右往左走一遍形状：步子从 1 开始，每过一个轴就乘上这个轴的大小。
+`strides.insert(0, s)` 把 `s` 放到列表的最前面，所以最后列表是从左到右的顺序。
+
+<CodeBlank id="code-strides" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="code-strides">
+
+## 2. 视图：新的步长，同一块内存
+
+在实验台里按 **x.T**。转置的形状是 (4, 3)，但它没有自己的内存。它读的还是那十二个数，
+只是形状和步长交换了。没有一个数被移动，所以转置一个巨大的矩阵也不花时间。
+
+<Blank id="strides-T" />
+
+<Gate requires="strides-T">
+
+读另一个数组的内存的数组叫**视图**（view）。NumPy 能告诉你两个数组是不是共用内存：
+
+```python
+np.shares_memory(x, x.T)    # True
+```
+
+<Predict id="pred-write" />
+
+切片也会得到视图。`x[:, ::2]` 每隔一列取一列，所以沿它的一行走一步，在内存里要走 2 步：
+步长 `(4, 2)`。`x[1:, 1:]` 的步长还是 `(4, 1)`，但起点在位置 5。这两个都在实验台里。
+
+有些操作总会得到**副本**（copy），也就是一个有新内存的数组：`x.copy()`，以及用列表做下标，比如
+`x[[0, 2]]`。
+
+轴更多时，转置要指明交换哪两个轴。在 NumPy 里是 `np.swapaxes(t, 1, 2)`，在 PyTorch 里是
+`t.transpose(1, 2)`。两者都会交换形状里这两个大小，以及对应的两个步长。
+
+<Blank id="strides-swap" />
+
+<TryIt>
+
+按 **x[:, ::2]**，看看那一排内存。虚线框的格子是这个数组从来不读的内存。再按
+**x[1:, 1:]**：前五格都是虚线，因为这个视图从位置 5 开始。
+
+</TryIt>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="strides-swap">
+
+## 3. reshape 什么时候必须复制
+
+`reshape` 保持数的**行顺序**：第 0 行从左到右，然后第 1 行，依此类推。
+如果数组是内存连续的，行顺序就是内存顺序，`reshape` 只需要写下新的步长。按
+**x.reshape(2, 6)**：步长 `(6, 1)`，还是同一块内存。
+
+现在在 `x.T` 上试试。按行顺序读 `x.T`：0, 4, 8, 1, 5, 9, … 这些数在内存里的位置是 0, 4, 8, 1, 5, 9：
+前进 4，前进 4，后退 7。没有哪一个步长能描述这样走，所以 `x.T.reshape(12)` 不可能是视图。
+NumPy 会复制一份，把数按新的顺序排好。按 **x.T.reshape(2, 6)** 看看新的内存。
+
+<Blank id="flat-T-1" />
+
+<Gate requires="flat-T-1">
+
+<Predict id="pred-copy" />
+
+PyTorch 的规则一样，而且每种情况都有名字：
+
+| PyTorch | 作用 |
+|---|---|
+| `x.stride()` | 步长，按元素算 |
+| `x.is_contiguous()` | 行顺序就是内存顺序时为 `True` |
+| `x.T`, `x.transpose(1, 2)` | 交换了步长的视图；从不复制 |
+| `x.view(...)` | 同一块内存上的新形状；找不到合适的步长就报错 |
+| `x.reshape(...)` | 能做成视图就做成视图，否则复制 |
+| `x.contiguous()` | 按行顺序复制一份（如果 `x` 已经内存连续，就返回 `x` 本身） |
+
+第 21 关要拼接注意力头。输出 `out` 的形状是 `(B, h, L, d_k)`。为了把每个词的各个头并排放在一起，
+代码先交换第 1、2 轴，再把最后两个轴合并：
+`out.transpose(1, 2).contiguous().view(B, L, d_model)`。
+
+<Blank id="heads-strides" />
+
+<Gate requires="heads-strides">
+
+<Stuck q="view 报错 “view size is not compatible with input tensor’s size and stride”。这是怎么回事？">
+
+`transpose(1, 2)` 之后，步长是 `(640, 16, 160, 1)`。要把最后两个轴合并成一个长 64 的轴，
+一个词的 4 个头 × 16 个数必须在内存里连成一段 64 个相邻的数。可它们并不相邻：
+下一个头在 160 格之外。`view` 从不移动数字，所以它拒绝了。
+
+`.contiguous()` 把这些数按行顺序复制一份，步长变成 `(640, 64, 16, 1)`，然后 `view` 就能用了。
+`.reshape(B, L, d_model)` 一次调用就做完这两步。
+
+</Stuck>
+
+</Gate>
+
+<Deeper title="为什么内存连续还更快">
+
+内存是按一块一块相邻的数来读的（常见的是一次 64 个字节），不是一次读一个数。读一个内存连续的数组，
+每一块里的每个数都用上了。在一个按行存放的大矩阵里沿着一列往下读，每一块只用到一个数，
+其余的都浪费了。很多快速的函数，不管在 CPU 还是 GPU 上，都会因此先把输入变成内存连续的。
+复制也要花时间和内存，所以经常运行的代码会避免不必要的复制。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+<Gate requires="heads-strides">
+
+## 4. 广播就是步长 0
+
+在第 1 关，广播把大小为 1 的轴“拉伸”到和另一个数组对上，被拉伸出来的格子颜色很浅，
+因为它们并没有存下来。NumPy 是这样做的：被拉伸的轴得到**步长 0**。
+
+```python
+b = np.broadcast_to(x[0], (3, 4))   # x[0] 是 [0, 1, 2, 3]
+b.strides                           # (0, 8) 字节 → (0, 1) 元素
+```
+
+沿 `b` 往下走一行，在内存里走 0 格，所以每一行读的都是同样的四个数。
+在实验台里按 **`broadcast_to`(x[0], (3, 4))**：每个被用到的内存格都被数组的 3 个格子读到（×3）。
+
+<Blank id="bytes-bc" />
+
+<Gate requires="bytes-bc">
+
+`broadcast_to` 得到的视图是只读的。写 `b[0, 0] = 5` 会报错，因为这一个内存格同时也是
+`b[1, 0]` 和 `b[2, 0]`。
+
+只要给出形状和以字节计的步长，NumPy 可以用 `as_strided` 手工搭出任何视图：
+
+```python
+from numpy.lib.stride_tricks import as_strided
+as_strided(x[0], shape=(3, 4), strides=(0, 8))   # 和 broadcast_to(x[0], (3, 4)) 一样
+```
+
+用它要小心。`as_strided` 什么都不检查。步长太大会让它读到数组末尾之后的内存，
+你会得到随机的数，或者程序崩溃，而且没有任何报错信息。
+
+<Deeper title="用 `as_strided` 做滑动窗口">
+
+在 `np.arange(6.0)` 上用步长 `(8, 8)`，每一行都比上一行晚一个数开始：
+
+```python
+as_strided(np.arange(6.0), shape=(4, 3), strides=(8, 8))
+# [[0. 1. 2.]
+#  [1. 2. 3.]
+#  [2. 3. 4.]
+#  [3. 4. 5.]]
+```
+
+这些全是由 3 个相邻数组成的窗口，没有复制。卷积（支线 N1）就是这样读输入的。
+NumPy 有一个专门做这件事的安全函数：`np.lib.stride_tricks.sliding_window_view(a, 3)`，它会替你检查大小。
+
+</Deeper>
+
+现在把这一关的内容装进一个函数。`read` 只用形状、步长和起点，从内存里搭出一个数组。
+测试会给它一个转置、一个隔列取、一个切片和一个广播：这一关里所有的视图。
+
+<CodeBlank id="code-read" />
+
+</Gate>
+
+</Gate>

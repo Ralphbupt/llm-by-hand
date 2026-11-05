@@ -6,6 +6,30 @@
   import { stack } from '@lib/residuals'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Stack {n} tanh layers: how much of the signal and the gradient is left?': '叠 {n} 个 tanh 层：信号和梯度还剩多少？',
+    'Drag depth and weight scale. Compare the plain stack with the residual stack.': '拖动深度和权重尺度。比较普通堆叠和残差堆叠。',
+    'Signal going up': '往上走的信号',
+    'std of each layer’s output': '每一层输出的标准差',
+    'Gradient coming down': '往下回来的梯度',
+    'std of the gradient reaching each layer': '传到每一层的梯度的标准差',
+    '{name}: plain stack vs residual stack, log scale': '{name}：普通堆叠对比残差堆叠，对数刻度',
+    plain: '普通',
+    residual: '残差',
+    '0 (input)': '0（输入）',
+    '{n} (top)': '{n}（顶部）',
+    depth: '深度',
+    'weight scale': '权重尺度',
+    'gradient at layer 0 ÷ gradient at the top: plain': '第 0 层的梯度 ÷ 顶部的梯度：普通',
+    ', residual': '，残差',
+    'plain: h ← tanh(h @ W)': '普通：h ← tanh(h @ W)',
+    'residual: h ← h + tanh(h @ W)': '残差：h ← h + tanh(h @ W)',
+    'log scale; the dashed line is 1': '对数刻度；虚线是 1',
+  })
 
   const D0 = 30, S0 = 0.8
   let depth = $state(D0)
@@ -41,19 +65,19 @@
 </script>
 
 <LabFrame
-  title={`Stack ${depth} tanh layers: how much of the signal and the gradient is left?`}
-  hint="Drag depth and weight scale. Compare the plain stack with the residual stack."
+  title={t('Stack {n} tanh layers: how much of the signal and the gradient is left?', { n: depth })}
+  hint={t('Drag depth and weight scale. Compare the plain stack with the residual stack.')}
   onreset={() => { depth = D0; scale = S0 }}
   resetDisabled={!changed}
 >
   <div class="panels">
-    {#each [{ key: 'act', name: 'Signal going up', sub: 'std of each layer’s output' }, { key: 'grad', name: 'Gradient coming down', sub: 'std of the gradient reaching each layer' }] as p}
+    {#each [{ key: 'act', name: t('Signal going up'), sub: t('std of each layer’s output') }, { key: 'grad', name: t('Gradient coming down'), sub: t('std of the gradient reaching each layer') }] as p}
       {@const pv = p.key === 'act' ? plain.act : plain.grad}
       {@const rv = p.key === 'act' ? res.act : res.grad}
       {@const ys = ends(pv, rv)}
       <figure>
         <figcaption><b>{p.name}</b> <span>{p.sub}</span></figcaption>
-        <svg use:readable viewBox="0 0 {W} {H}" role="img" aria-label="{p.name}: plain stack vs residual stack, log scale">
+        <svg use:readable viewBox="0 0 {W} {H}" role="img" aria-label={t('{name}: plain stack vs residual stack, log scale', { name: p.name })}>
           {#each ticks as e}
             <line x1={PL} x2={W - PR} y1={yOf(10 ** e)} y2={yOf(10 ** e)} class="grid" />
             <text x={PL - 4} y={yOf(10 ** e) + 3} class="tick end">{tickLabel(e)}</text>
@@ -62,28 +86,28 @@
           <polyline points={line(pv)} class="plain" />
           <polyline points={line(rv)} class="res" />
           <!-- label each line at its end, so no color lookup is needed -->
-          <text x={W - PR + 4} y={ys.plain} class="end-lbl plain-t">plain</text>
-          <text x={W - PR + 4} y={ys.res} class="end-lbl res-t">residual</text>
-          <text x={PL} y={H - 6} class="tick">0 (input)</text>
-          <text x={W - PR} y={H - 6} class="tick end">{depth} (top)</text>
+          <text x={W - PR + 4} y={ys.plain} class="end-lbl plain-t">{t('plain')}</text>
+          <text x={W - PR + 4} y={ys.res} class="end-lbl res-t">{t('residual')}</text>
+          <text x={PL} y={H - 6} class="tick">{t('0 (input)')}</text>
+          <text x={W - PR} y={H - 6} class="tick end">{t('{n} (top)', { n: depth })}</text>
         </svg>
       </figure>
     {/each}
   </div>
 
   {#snippet controls()}
-    <label class="knob">depth <input type="range" min="1" max="50" bind:value={depth} aria-label="depth" /> <b>{depth}</b></label>
-    <label class="knob">weight scale <input type="range" min="0.5" max="1.5" step="0.1" bind:value={scale} aria-label="weight scale" /> <b>{scale.toFixed(1)}/√16</b></label>
+    <label class="knob">{t('depth')} <input type="range" min="1" max="50" bind:value={depth} aria-label={t('depth')} /> <b>{depth}</b></label>
+    <label class="knob">{t('weight scale')} <input type="range" min="0.5" max="1.5" step="0.1" bind:value={scale} aria-label={t('weight scale')} /> <b>{scale.toFixed(1)}/√16</b></label>
   {/snippet}
 
   {#snippet readout()}
-    gradient at layer 0 ÷ gradient at the top: plain <b class="p">{fmt(ratio(plain.grad))}</b>, residual <b class="r">{fmt(ratio(res.grad))}</b>
+    {t('gradient at layer 0 ÷ gradient at the top: plain')} <b class="p">{fmt(ratio(plain.grad))}</b>{t(', residual')} <b class="r">{fmt(ratio(res.grad))}</b>
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw plain"></i>plain: h ← tanh(h @ W)</span>
-    <span><i class="sw res"></i>residual: h ← h + tanh(h @ W)</span>
-    <span>log scale; the dashed line is 1</span>
+    <span><i class="sw plain"></i>{t('plain: h ← tanh(h @ W)')}</span>
+    <span><i class="sw res"></i>{t('residual: h ← h + tanh(h @ W)')}</span>
+    <span>{t('log scale; the dashed line is 1')}</span>
   {/snippet}
 </LabFrame>
 

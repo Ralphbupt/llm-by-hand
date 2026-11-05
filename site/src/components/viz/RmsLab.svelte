@@ -4,8 +4,29 @@
   import LabFrame from './LabFrame.svelte'
   import { has, subscribe } from '@lib/progress'
   import { layerNorm, rmsNorm } from '@lib/modern'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: { rms?: string; out?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { rms?: string; out?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'LayerNorm and RMSNorm on the same four numbers': '同样四个数上的 LayerNorm 和 RMSNorm',
+    'Edit any number of x. LayerNorm shifts and scales; RMSNorm only scales.': '改动 x 的任意一个数。LayerNorm 既平移又缩放；RMSNorm 只缩放。',
+    'input x': '输入 x',
+    'LayerNorm: shifted, then scaled': 'LayerNorm：先平移，再缩放',
+    'RMSNorm: only scaled': 'RMSNorm：只缩放',
+    '1. mean =': '1. 均值 =',
+    '2. subtract it:': '2. 减去它：',
+    '3. std =': '3. 标准差 =',
+    '4. divide:': '4. 相除：',
+    'output mean 0, std 1': '输出均值为 0，标准差为 1',
+    '1. mean of squares =': '1. 平方的均值 =',
+    '2. rms = √ that =': '2. rms = 它的平方根 =',
+    '3. divide:': '3. 相除：',
+    'no mean subtracted: the output keeps its sign pattern': '不减均值：输出各个数的正负号保持不变',
+    'Some RMSNorm numbers show “?” until you answer the questions below. Edit x to explore other vectors.': 'RMSNorm 的一些数显示为“?”，等你回答了下面的问题才会显示。改动 x 可以试试别的向量。',
+    'LayerNorm: mean {m}, std {s} · RMSNorm: rms {r}': 'LayerNorm：均值 {m}，标准差 {s} · RMSNorm：rms {r}',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -51,8 +72,8 @@
 {/snippet}
 
 <LabFrame
-  title="LayerNorm and RMSNorm on the same four numbers"
-  hint="Edit any number of x. LayerNorm shifts and scales; RMSNorm only scales."
+  title={t('LayerNorm and RMSNorm on the same four numbers')}
+  hint={t('Edit any number of x. LayerNorm shifts and scales; RMSNorm only scales.')}
   onreset={() => (x = [...X0])}
   resetDisabled={isStart}
 >
@@ -64,32 +85,32 @@
   </div>
 
   <div class="plots">
-    {@render plot(x, 'var(--dim)', 'input x')}
-    {@render plot(ln.out, 'var(--fg)', 'LayerNorm: shifted, then scaled')}
-    {@render plot(rm.out, 'var(--accent)', 'RMSNorm: only scaled', rmsHidden)}
+    {@render plot(x, 'var(--dim)', t('input x'))}
+    {@render plot(ln.out, 'var(--fg)', t('LayerNorm: shifted, then scaled'))}
+    {@render plot(rm.out, 'var(--accent)', t('RMSNorm: only scaled'), rmsHidden)}
   </div>
 
   <div class="cols">
     <div class="col">
       <h4>LayerNorm</h4>
-      <p>1. mean = <b>{f(ln.mean)}</b></p>
-      <p>2. subtract it: <span class="nw">[{x.map((v) => (v - ln.mean).toFixed(2)).join(', ')}]</span></p>
-      <p>3. std = <b>{f(ln.std)}</b></p>
-      <p>4. divide: <span class="nw">[{ln.out.map((v) => v.toFixed(4)).join(', ')}]</span></p>
-      <p class="dim">output mean 0, std 1</p>
+      <p>{t('1. mean =')} <b>{f(ln.mean)}</b></p>
+      <p>{t('2. subtract it:')} <span class="nw">[{x.map((v) => (v - ln.mean).toFixed(2)).join(', ')}]</span></p>
+      <p>{t('3. std =')} <b>{f(ln.std)}</b></p>
+      <p>{t('4. divide:')} <span class="nw">[{ln.out.map((v) => v.toFixed(4)).join(', ')}]</span></p>
+      <p class="dim">{t('output mean 0, std 1')}</p>
     </div>
     <div class="col">
       <h4>RMSNorm</h4>
-      <p>1. mean of squares = {isStart && locked('rms') ? '?' : f(rm.meanSq)}</p>
-      <p>2. rms = √ that = <b>{isStart && locked('rms') ? '?' : f(rm.rms)}</b></p>
-      <p>3. divide: <span class="nw">[{rm.out.map((v, i) => (isStart && (locked('rms') || (i === rm.out.length - 1 && locked('out'))) ? '?' : v.toFixed(4))).join(', ')}]</span></p>
-      <p class="dim">no mean subtracted: the output keeps its sign pattern</p>
+      <p>{t('1. mean of squares =')} {isStart && locked('rms') ? '?' : f(rm.meanSq)}</p>
+      <p>{t('2. rms = √ that =')} <b>{isStart && locked('rms') ? '?' : f(rm.rms)}</b></p>
+      <p>{t('3. divide:')} <span class="nw">[{rm.out.map((v, i) => (isStart && (locked('rms') || (i === rm.out.length - 1 && locked('out'))) ? '?' : v.toFixed(4))).join(', ')}]</span></p>
+      <p class="dim">{t('no mean subtracted: the output keeps its sign pattern')}</p>
     </div>
   </div>
 
   {#snippet readout()}
-    {#if isStart && (locked('rms') || locked('out'))}<span class="idle">Some RMSNorm numbers show “?” until you answer the questions below. Edit x to explore other vectors.</span>
-    {:else}LayerNorm: mean {f(ln.mean)}, std {f(ln.std)} · RMSNorm: rms {f(rm.rms)}{/if}
+    {#if isStart && (locked('rms') || locked('out'))}<span class="idle">{t('Some RMSNorm numbers show “?” until you answer the questions below. Edit x to explore other vectors.')}</span>
+    {:else}{t('LayerNorm: mean {m}, std {s} · RMSNorm: rms {r}', { m: f(ln.mean), s: f(ln.std), r: f(rm.rms) })}{/if}
   {/snippet}
 </LabFrame>
 

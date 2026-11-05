@@ -7,9 +7,40 @@
   import LabFrame from './LabFrame.svelte'
   import { has, subscribe } from '@lib/progress'
   import { softmax, order, cumulative, topKKeep, topPKeep, sampleIndex } from '@lib/generation'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // values a question asks for stay "?" until that question is solved
-  let { hide = {} }: { hide?: { prob?: string; renorm?: string; cum?: string } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { prob?: string; renorm?: string; cum?: string }; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Pick the next word: temperature, then a filter, then a draw': '挑出下一个词：先调温度，再过滤，最后抽取',
+    'Change T and the filter, then sample. Rows are sorted by probability, largest first.': '改变 T 和过滤方式，然后采样。各行按概率排序，最大的在前。',
+    'running total, largest first': '累计和，最大的在前',
+    ' · top-p cuts at {p}': ' · top-p 在 {p} 处截断',
+    ' · top-k keeps the first {k}': ' · top-k 保留前 {k} 个',
+    '? (answer the question below first)': '?（先回答下面的问题）',
+    'The five probabilities in one row, largest first': '五个概率排成一行，最大的在前',
+    'word': '词',
+    'score': '分数',
+    'running total': '累计和',
+    'kept?': '保留？',
+    'after filter': '过滤后',
+    'sampled': '抽中次数',
+    'yes': '是',
+    'no': '否',
+    '★ = greedy’s pick: always the top word. Rows are sorted by p, largest first.': '★ = 贪心挑的词：总是排第一的那个。各行按 p 排序，最大的在前。',
+    'temperature T =': '温度 T =',
+    'Filter': '过滤方式',
+    'no filter': '不过滤',
+    'Sample 1': '采样 1 次',
+    'Sample 1000': '采样 1000 次',
+    'Clear counts': '清空计数',
+    'Press Sample to draw a word.': '按“采样 1 次”抽一个词。',
+    '{n} samples · last draw:': '共 {n} 次采样 · 最近一次抽到：',
+    '· greedy would always say': '· 贪心永远只会说',
+    ' · some numbers show “?” until you answer the question about them below': ' · 有些数显示为“?”，等你回答了下面关于它们的问题才会显示',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -61,8 +92,8 @@
 </script>
 
 <LabFrame
-  title="Pick the next word: temperature, then a filter, then a draw"
-  hint="Change T and the filter, then sample. Rows are sorted by probability, largest first."
+  title={tx('Pick the next word: temperature, then a filter, then a draw')}
+  hint={tx('Change T and the filter, then sample. Rows are sorted by probability, largest first.')}
   onreset={reset}
   resetDisabled={!changed}
 >
@@ -70,12 +101,12 @@
 
   <!-- all five words in one row in sorted order: widths are probabilities, so the right edge is 1 -->
   <div class="strip-wrap">
-    <div class="strip-label">running total, largest first{mode === 'topp' ? ` · top-p cuts at ${p.toFixed(2)}` : mode === 'topk' ? ` · top-k keeps the first ${k}` : ''}</div>
+    <div class="strip-label">{tx('running total, largest first')}{mode === 'topp' ? tx(' · top-p cuts at {p}', { p: p.toFixed(2) }) : mode === 'topk' ? tx(' · top-k keeps the first {k}', { k }) : ''}</div>
     {#if locked('prob')}
-      <div class="strip blank">? (answer the question below first)</div>
+      <div class="strip blank">{tx('? (answer the question below first)')}</div>
     {:else}
       {@const showCut = mode !== 'none' && !(mode === 'topp' && locked('cum'))}
-      <div class="strip" class:withcut={mode === 'topp' && showCut} role="img" aria-label="The five probabilities in one row, largest first">
+      <div class="strip" class:withcut={mode === 'topp' && showCut} role="img" aria-label={tx('The five probabilities in one row, largest first')}>
         {#each rows as i, r}
           <span class="seg" class:out={showCut && !keep[i]} style:width="{probs[i] * 100}%" style:--o={1 - r * 0.15}>
             {#if probs[i] > 0.08}{WORDS[i]}{/if}
@@ -91,7 +122,7 @@
 
   <div class="table" role="table">
     <div class="tr th" role="row">
-      <span>word</span><span>score</span><span>p</span><span>running total</span><span>kept?</span><span>after filter</span><span>sampled</span>
+      <span>{tx('word')}</span><span>{tx('score')}</span><span>p</span><span>{tx('running total')}</span><span>{tx('kept?')}</span><span>{tx('after filter')}</span><span>{tx('sampled')}</span>
     </div>
     {#each rows as i}
       <div class="tr" class:out={!keep[i]} role="row">
@@ -99,22 +130,22 @@
         <span class="num">{SCORES[i].toFixed(1)}</span>
         <span class="num">{locked('prob') ? '?' : fmt(probs[i])}</span>
         <span class="num">{hideCum ? '?' : fmt(cum[i])}</span>
-        <span class="num">{mode === 'topp' && locked('cum') ? '?' : keep[i] ? 'yes' : 'no'}</span>
+        <span class="num">{mode === 'topp' && locked('cum') ? '?' : keep[i] ? tx('yes') : tx('no')}</span>
         <span class="bar"><i style="width:{hideFinal ? 0 : final[i] * 100}%"></i><em>{hideFinal ? '?' : fmt(final[i])}</em></span>
         <span class="num">{counts[i]}</span>
       </div>
     {/each}
   </div>
-  <p class="dim">★ = greedy’s pick: always the top word. Rows are sorted by p, largest first.</p>
+  <p class="dim">{tx('★ = greedy’s pick: always the top word. Rows are sorted by p, largest first.')}</p>
 
 
   {#snippet controls()}
     <div class="ctrl">
-    <label>temperature T = <b>{T.toFixed(2)}</b>
+    <label>{tx('temperature T =')} <b>{T.toFixed(2)}</b>
       <input type="range" min="0.1" max="3" step="0.05" value={T} oninput={(e) => { T = +e.currentTarget.value; clear() }} />
     </label>
-    <div class="modes" role="group" aria-label="Filter">
-      <button type="button" aria-pressed={mode === 'none'} class:on={mode === 'none'} onclick={() => { mode = 'none'; clear() }}>no filter</button>
+    <div class="modes" role="group" aria-label={tx('Filter')}>
+      <button type="button" aria-pressed={mode === 'none'} class:on={mode === 'none'} onclick={() => { mode = 'none'; clear() }}>{tx('no filter')}</button>
       <button type="button" aria-pressed={mode === 'topk'} class:on={mode === 'topk'} onclick={() => { mode = 'topk'; clear() }}>top-k</button>
       <button type="button" aria-pressed={mode === 'topp'} class:on={mode === 'topp'} onclick={() => { mode = 'topp'; clear() }}>top-p</button>
     </div>
@@ -125,15 +156,15 @@
     {/if}
     </div>
     <div class="acts">
-      <button type="button" class="lab-btn primary" onclick={() => sample(1)}>Sample 1</button>
-      <button type="button" class="lab-btn" onclick={() => sample(1000)}>Sample 1000</button>
-      <button type="button" class="lab-btn ghost" onclick={clear} disabled={total === 0}>Clear counts</button>
+      <button type="button" class="lab-btn primary" onclick={() => sample(1)}>{tx('Sample 1')}</button>
+      <button type="button" class="lab-btn" onclick={() => sample(1000)}>{tx('Sample 1000')}</button>
+      <button type="button" class="lab-btn ghost" onclick={clear} disabled={total === 0}>{tx('Clear counts')}</button>
     </div>
   {/snippet}
 
   {#snippet readout()}
-    {#if last === null}<span class="idle">Press Sample to draw a word.</span>{:else}{total} samples · last draw: <b>{WORDS[last]}</b> · greedy would always say <b>{WORDS[greedy]}</b>{/if}
-    {#if hideFinal}<span class="idle"> · some numbers show “?” until you answer the question about them below</span>{/if}
+    {#if last === null}<span class="idle">{tx('Press Sample to draw a word.')}</span>{:else}{tx('{n} samples · last draw:', { n: total })} <b>{WORDS[last]}</b> {tx('· greedy would always say')} <b>{WORDS[greedy]}</b>{/if}
+    {#if hideFinal}<span class="idle">{tx(' · some numbers show “?” until you answer the question about them below')}</span>{/if}
   {/snippet}
 </LabFrame>
 

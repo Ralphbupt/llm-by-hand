@@ -1,6 +1,7 @@
 ---
+import { langOf } from '@lib/i18n'
 import Lab from './SpiralLab.svelte'
 interface Props { hide?: { params?: string[] } }
 const { hide } = Astro.props
 ---
-<Lab client:visible hide={hide} />
+<Lab lang={langOf(Astro.url.pathname)} client:visible hide={hide} />

@@ -33,7 +33,7 @@ same-shape:
       say: "Check the inner numbers: A is (3, 2), B is (3, 2). Is 2 equal to 3?"
     - when: { equals: 1 }
       say: "A (3, 3) result would need B to be (2, 3). Look at the inner numbers of (3, 2) @ (3, 2)."
-  reveal: "Error. The inner numbers are 2 and 3, and they must be equal. To multiply them you would need to flip B into (2, 3) first. That flip is called a transpose, written B.T, and A @ B.T is (3, 3). You will meet it again in attention."
+  reveal: "Right, it fails. Line the shapes up as (3, 2) @ (3, 2): the inner numbers (A’s columns and B’s rows) are 2 and 3, and they must be equal. To multiply them you would need to flip B into (2, 3) first. That flip is called a transpose, written B.T, and A @ B.T is (3, 3). You will meet it again in attention."
 
 matmul-loop:
   type: code
@@ -100,7 +100,7 @@ bc-trailing:
   type: predict
   prompt: "A is (3, 2). v is a plain list of 3 numbers, shape (3,). Guess before you check: what does A + v do?"
   options: ["Adds v[i] to row i of A", "Adds v to every row of A", "Error"]
-  reveal: "Error. Broadcasting compares the shapes from the right: (3,) is treated as (1, 3) and compared with A’s columns: 2 vs 3. Neither is 1, so it fails. To add v[i] to row i you would write v as a column, shape (3, 1)."
+  reveal: "Right, it fails. Broadcasting compares the shapes from the right: (3,) is treated as (1, 3) and compared with A’s columns: 2 vs 3. Neither is 1, so they can’t be stretched to match. To add v[i] to row i you would write v as a column, shape (3, 1)."
 
 bc-value:
   type: number

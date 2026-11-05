@@ -5,6 +5,29 @@
    */
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    'Dot product: direction and length': '点积：方向和长度',
+    'Drag an arrow tip (or focus it and use the arrow keys); tips move in steps of 0.5. Pick a pair to see its angle.': '拖动箭头的尖端（或选中它后用方向键），每次移动 0.5。选一对，看它们的夹角。',
+    'Three arrows from the origin: cat, dog and car': '从原点出发的三个箭头：cat、dog 和 car',
+    '{w} arrow tip at [{x}, {y}]': '{w} 的箭头尖端在 [{x}, {y}]',
+    'word': '词',
+    'vector': '向量',
+    'length': '长度',
+    'pair': '一对',
+    'dot product': '点积',
+    'cos(angle)': 'cos(夹角)',
+    '{a}·{b}: angle {deg}°, dot product {d}': '{a}·{b}：夹角 {deg}°，点积 {d}',
+    'Pick a pair in the table to see its angle.': '在表里选一对，看它们的夹角。',
+    'positive': '正',
+    'dot product: roughly the same direction': '点积：方向大致相同',
+    ': at a right angle': '：成直角',
+    'negative': '负',
+    ': roughly opposite': '：方向大致相反',
+  })
   const NAMES = ['cat', 'dog', 'car']
   // all arrows share one neutral color; the pair you point at turns blue (color means "what you are looking at", not identity)
   const START = [[2, 1], [1.5, 1.5], [-1, 2]]
@@ -61,13 +84,13 @@
 </script>
 
 <LabFrame
-  title="Dot product: direction and length"
-  hint="Drag an arrow tip (or focus it and use the arrow keys); tips move in steps of 0.5. Pick a pair to see its angle."
+  title={tx('Dot product: direction and length')}
+  hint={tx('Drag an arrow tip (or focus it and use the arrow keys); tips move in steps of 0.5. Pick a pair to see its angle.')}
   onreset={() => { V = START.map((v) => [...v]); pair = null }}
   resetDisabled={!changed}
 >
   <div class="cols">
-    <svg bind:this={svg} viewBox="0 0 100 100" use:readable role="group" aria-label="Three arrows from the origin: cat, dog and car"
+    <svg bind:this={svg} viewBox="0 0 100 100" use:readable role="group" aria-label={tx('Three arrows from the origin: cat, dog and car')}
       onpointermove={move} onpointerup={() => (dragging = null)} onpointercancel={() => (dragging = null)}>
       {#each [-2, -1, 0, 1, 2] as t}
         <line x1={sx(t)} y1="0" x2={sx(t)} y2="100" class="grid" class:axis={t === 0} />
@@ -87,7 +110,7 @@
       {#each V as v, i}
         {@const dim = pair !== null && !pair.includes(i)}
         <line x1={sx(0)} y1={sy(0)} x2={sx(v[0])} y2={sy(v[1])} class="vec" class:on={on(i)} class:dim marker-end={on(i) ? "url(#dot-head-on)" : "url(#dot-head)"} />
-        <g class="tip" role="button" tabindex="0" aria-label={`${NAMES[i]} arrow tip at [${g(v[0])}, ${g(v[1])}]`}
+        <g class="tip" role="button" tabindex="0" aria-label={tx('{w} arrow tip at [{x}, {y}]', { w: NAMES[i], x: g(v[0]), y: g(v[1]) })}
           onpointerdown={(e) => { dragging = i; svg.setPointerCapture(e.pointerId) }} onkeydown={(e) => key(e, i)}>
           <circle cx={sx(v[0])} cy={sy(v[1])} r="7" class="hit" />
           <circle cx={sx(v[0])} cy={sy(v[1])} r="3.2" class="dot" class:on={on(i)} class:dim />
@@ -97,7 +120,7 @@
     </svg>
     <div class="panel">
       <table>
-        <thead><tr><th>word</th><th>vector</th><th>length</th></tr></thead>
+        <thead><tr><th>{tx('word')}</th><th>{tx('vector')}</th><th>{tx('length')}</th></tr></thead>
         <tbody>
           {#each V as v, i}
             <tr class:hl={on(i)}><td>{NAMES[i]}</td><td>[{g(v[0])}, {g(v[1])}]</td><td>{len(v).toFixed(2)}</td></tr>
@@ -105,7 +128,7 @@
         </tbody>
       </table>
       <table>
-        <thead><tr><th>pair</th><th>dot product</th><th>cos(angle)</th></tr></thead>
+        <thead><tr><th>{tx('pair')}</th><th>{tx('dot product')}</th><th>{tx('cos(angle)')}</th></tr></thead>
         <tbody>
           {#each rows as r}
             {@const isOn = pair !== null && pair[0] === r.i && pair[1] === r.j}
@@ -124,16 +147,16 @@
 
   {#snippet readout()}
     {#if pair && arc}
-      {NAMES[pair[0]]}·{NAMES[pair[1]]}: angle {arc.deg.toFixed(0)}°, dot product {g(dot(V[pair[0]], V[pair[1]]))}
+      {tx('{a}·{b}: angle {deg}°, dot product {d}', { a: NAMES[pair[0]], b: NAMES[pair[1]], deg: arc.deg.toFixed(0), d: g(dot(V[pair[0]], V[pair[1]])) })}
     {:else}
-      <span class="idle">Pick a pair in the table to see its angle.</span>
+      <span class="idle">{tx('Pick a pair in the table to see its angle.')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><b class="pos">positive</b> dot product: roughly the same direction</span>
-    <span><b>0</b>: at a right angle</span>
-    <span><b class="neg">negative</b>: roughly opposite</span>
+    <span><b class="pos">{tx('positive')}</b> {tx('dot product: roughly the same direction')}</span>
+    <span><b>0</b>{tx(': at a right angle')}</span>
+    <span><b class="neg">{tx('negative')}</b>{tx(': roughly opposite')}</span>
   {/snippet}
 </LabFrame>
 

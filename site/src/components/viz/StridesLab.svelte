@@ -8,8 +8,39 @@
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: Record<string, string> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Row order and memory order are the same: x is contiguous.': '行顺序和内存顺序一样：x 是内存连续的。',
+    'The same memory. Only the shape and the strides swapped.': '同一块内存。只是形状和步长交换了。',
+    'Every second column: the column stride doubles. Cells in odd-numbered columns (1, 3) are skipped.': '每隔一列取一列：列步长翻倍。奇数列（1、3）的格子被跳过。',
+    'A slice moves the start. The strides stay (4, 1).': '切片移动了起点。步长仍然是 (4, 1)。',
+    'A new shape on the same row of memory: a view.': '同一排内存上的新形状：一个视图。',
+    'x.T in row order reads memory out of order, so no strides fit. NumPy copies into new memory.': '按行顺序读 x.T，内存的顺序是乱的，找不到合适的步长。NumPy 把数复制到新内存里。',
+    'Stride 0: moving down a row does not move in memory. Every row reads x[0].': '步长 0：往下走一行，在内存里不动。每一行读的都是 x[0]。',
+    'One row of memory, many arrays': '一排内存，多个数组',
+    'Pick an array, then point at or tap one of its cells.': '选一个数组，然后指向或点一下它的某一格。',
+    'new memory (a copy)': '新内存（副本）',
+    'memory of x': 'x 的内存',
+    '{m}: 12 numbers in one row': '{m}：12 个数排成一排',
+    'memory of x is still 0, 1, 2, …, 11; this array does not share it': 'x 的内存仍然是 0, 1, 2, …, 11；这个数组不和它共用',
+    'shape': '形状',
+    'strides': '步长',
+    'start': '起点',
+    '{name} row {i}, column {j}': '{name} 第 {i} 行第 {j} 列',
+    'reading {name} in row order visits {what}:': '按行顺序读 {name}，访问的{what}：',
+    'positions of x': 'x 的位置',
+    'memory positions': '内存位置',
+    'memory': '内存',
+    'value': '值',
+    'Answer the question below the lab to see this address.': '先回答实验台下面的问题，才能看到这个地址。',
+    'the cell you picked and the memory cell it reads': '你选的那一格，和它读的内存格',
+    'memory this array never reads': '这个数组从来不读的内存',
+    'read by 3 cells of the array': '被数组的 3 个格子读到',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -29,13 +60,13 @@
   }
   const T_COPY = [0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11]
   const CASES: Case[] = [
-    { key: 'x', name: 'x', shape: [3, 4], strides: [4, 1], start: 0, note: 'Row order and memory order are the same: x is contiguous.' },
-    { key: 'T', name: 'x.T', shape: [4, 3], strides: [1, 4], start: 0, note: 'The same memory. Only the shape and the strides swapped.' },
-    { key: 'step', name: 'x[:, ::2]', shape: [3, 2], strides: [4, 2], start: 0, note: 'Every second column: the column stride doubles. Cells in odd-numbered columns (1, 3) are skipped.' },
-    { key: 'corner', name: 'x[1:, 1:]', shape: [2, 3], strides: [4, 1], start: 5, note: 'A slice moves the start. The strides stay (4, 1).' },
-    { key: 'r26', name: 'x.reshape(2, 6)', shape: [2, 6], strides: [6, 1], start: 0, note: 'A new shape on the same row of memory: a view.' },
-    { key: 'copy', name: 'x.T.reshape(2, 6)', shape: [2, 6], strides: [6, 1], start: 0, copy: T_COPY, note: 'x.T in row order reads memory out of order, so no strides fit. NumPy copies into new memory.' },
-    { key: 'bc', name: 'broadcast_to(x[0], (3, 4))', shape: [3, 4], strides: [0, 1], start: 0, note: 'Stride 0: moving down a row does not move in memory. Every row reads x[0].' },
+    { key: 'x', name: 'x', shape: [3, 4], strides: [4, 1], start: 0, note: t('Row order and memory order are the same: x is contiguous.') },
+    { key: 'T', name: 'x.T', shape: [4, 3], strides: [1, 4], start: 0, note: t('The same memory. Only the shape and the strides swapped.') },
+    { key: 'step', name: 'x[:, ::2]', shape: [3, 2], strides: [4, 2], start: 0, note: t('Every second column: the column stride doubles. Cells in odd-numbered columns (1, 3) are skipped.') },
+    { key: 'corner', name: 'x[1:, 1:]', shape: [2, 3], strides: [4, 1], start: 5, note: t('A slice moves the start. The strides stay (4, 1).') },
+    { key: 'r26', name: 'x.reshape(2, 6)', shape: [2, 6], strides: [6, 1], start: 0, note: t('A new shape on the same row of memory: a view.') },
+    { key: 'copy', name: 'x.T.reshape(2, 6)', shape: [2, 6], strides: [6, 1], start: 0, copy: T_COPY, note: t('x.T in row order reads memory out of order, so no strides fit. NumPy copies into new memory.') },
+    { key: 'bc', name: 'broadcast_to(x[0], (3, 4))', shape: [3, 4], strides: [0, 1], start: 0, note: t('Stride 0: moving down a row does not move in memory. Every row reads x[0].') },
   ]
 
   let k = $state(0)
@@ -61,9 +92,9 @@
   const fmtS = (s: [number, number]) => (hideStrides ? '(?, ?)' : `(${s[0]}, ${s[1]})`)
 </script>
 
-<LabFrame title="One row of memory, many arrays" hint="Pick an array, then point at or tap one of its cells.">
+<LabFrame title={t('One row of memory, many arrays')} hint={t('Pick an array, then point at or tap one of its cells.')}>
   <div class="wrap">
-    <div class="lbl">{c.copy ? 'new memory (a copy)' : 'memory of x'}: 12 numbers in one row</div>
+    <div class="lbl">{t('{m}: 12 numbers in one row', { m: c.copy ? t('new memory (a copy)') : t('memory of x') })}</div>
     <div class="mem" role="list">
       {#each buf as _, m}
         <div class="mc" role="listitem" class:unused={uses[m] === 0} class:hi={cell && addr(cell.i, cell.j) === m}>
@@ -74,18 +105,18 @@
       {/each}
     </div>
     {#if c.copy}
-      <div class="lbl">memory of x is still 0, 1, 2, …, 11; this array does not share it</div>
+      <div class="lbl">{t('memory of x is still 0, 1, 2, …, 11; this array does not share it')}</div>
     {/if}
 
     <div class="arr">
-      <div class="lbl">{c.name} · shape ({c.shape[0]}, {c.shape[1]}) · strides {fmtS(c.strides)} · start {c.start}</div>
+      <div class="lbl">{c.name} · {t('shape')} ({c.shape[0]}, {c.shape[1]}) · {t('strides')} {fmtS(c.strides)} · {t('start')} {c.start}</div>
       <table onpointerleave={() => (cell = null)}>
         <tbody>
           {#each Array(c.shape[0]) as _, i}
             <tr>
               {#each Array(c.shape[1]) as _, j}
                 <td tabindex="0" class:hi={cell && cell.i === i && cell.j === j}
-                  aria-label={`${c.name} row ${i}, column ${j}`}
+                  aria-label={t('{name} row {i}, column {j}', { name: c.name, i, j })}
                   onpointerenter={() => pick(i, j)} onclick={() => pick(i, j)} onfocus={() => pick(i, j)}
                   class:q={hideCopy}>{showVal(addr(i, j))}</td>
               {/each}
@@ -95,7 +126,7 @@
       </table>
     </div>
     <div class="walk">
-      <span class="lbl">reading {c.name} in row order visits {c.copy ? 'positions of x' : 'memory positions'}:</span>
+      <span class="lbl">{t('reading {name} in row order visits {what}:', { name: c.name, what: c.copy ? t('positions of x') : t('memory positions') })}</span>
       <span class="seq">{hideStrides || hideCopy ? '? ? ? …' : visits.join(' ')}</span>
     </div>
   </div>
@@ -108,18 +139,18 @@
 
   {#snippet readout()}
     {#if cell && !hideStrides && !hideCopy}
-      {c.name}[{cell.i}, {cell.j}] → memory {c.start} + {cell.i}·{c.strides[0]} + {cell.j}·{c.strides[1]} = {addr(cell.i, cell.j)} → value <b>{buf[addr(cell.i, cell.j)]}</b>
+      {c.name}[{cell.i}, {cell.j}] → {t('memory')} {c.start} + {cell.i}·{c.strides[0]} + {cell.j}·{c.strides[1]} = {addr(cell.i, cell.j)} → {t('value')} <b>{buf[addr(cell.i, cell.j)]}</b>
     {:else if cell}
-      <span class="idle">Answer the question below the lab to see this address.</span>
+      <span class="idle">{t('Answer the question below the lab to see this address.')}</span>
     {:else}
       <span class="idle">{c.note}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k-hi"></i>the cell you picked and the memory cell it reads</span>
-    <span class="key"><i class="k-un"></i>memory this array never reads</span>
-    <span class="key"><b class="k-n">×3</b>read by 3 cells of the array</span>
+    <span class="key"><i class="k-hi"></i>{t('the cell you picked and the memory cell it reads')}</span>
+    <span class="key"><i class="k-un"></i>{t('memory this array never reads')}</span>
+    <span class="key"><b class="k-n">×3</b>{t('read by 3 cells of the array')}</span>
   {/snippet}
 </LabFrame>
 

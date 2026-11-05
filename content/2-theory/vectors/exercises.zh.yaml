@@ -1,0 +1,145 @@
+lookup-shape:
+  prompt: "表 E 的形状是 (4, 2)：4 个 id，每个 2 个数。你查找“hello”的 5 个 id，[1, 0, 2, 2, 3]。结果是什么形状？"
+  after: "每个 token 一行，每行 2 个数。词表大小（4）消失了：它只说明表有多少行。"
+  hints:
+    - "这是表本身的形状。结果每个 token 一行，而“hello”有 5 个 token。"
+    - "这是独热行的形状。再乘上 E (4, 2)，还剩什么？"
+    - ["每个 token 一行。", "(token 数, 每个 token 的数的个数)。"]
+
+same-l:
+  prompt: "“hello”有两个 l，在位置 2 和 3（从 0 开始数）。查表之后，它们的两个向量一样吗？"
+  options: ["完全一样", "略有不同，因为位置不同", "完全不同"]
+  hints:
+    - ["两个 l 的 id 相同。", "每个 l 拿到的是表里的哪一行？"]
+  reveal: "完全一样：两个都是表的第 2 行。查表不知道位置，也不知道邻居。第 16 关会加入位置；这一页的最后一节会说明为什么邻居也重要。"
+
+embed:
+  prompt: "用独热行乘以嵌入表来做嵌入。"
+  template: |
+    E = np.array([[-1.4,  0.1],    # id 0 'e'
+                  [ 1.5, -1.2],    # id 1 'h'
+                  [-0.1, -1.5],    # id 2 'l'
+                  [-1.3,  1.5]])   # id 3 'o'
+
+    def embed(ids, E):
+        onehot = np.eye(E.shape[0])[ids]   # (token 数, 词表大小)，每行只有一个 1
+        print("one-hot", onehot.shape)
+        return ____
+
+    print(embed([1, 0, 2, 2, 3], E))
+  tests:
+    - "每个 token 对应 E 的一行"
+    - "一个 token → 形状 (1, 2)"
+    - "和直接索引 E 的结果一样"
+  hints:
+    - "形状对不上。onehot 是 (token 数, 4)，E 是 (4, 2)。把 onehot 放在前面。"
+    - ["每个独热行只有一个 1。用它乘表，正好留下 E 的一行。", "哪种运算能把 (token 数, 4) 的数组和 (4, 2) 的数组变成 (token 数, 2) 的数组？", "矩阵乘法，写作 @。顺序很重要。"]
+  after: "每个独热行只有一个 1，所以乘积正好留下 E 的一行。这就是查表 E[ids] 和 onehot @ E 得到同样的数的原因：(token 数, 4) @ (4, 2) → (token 数, 2)。"
+
+dot-5:
+  prompt: "[2, 1] · [1, 3] 是多少？"
+  after: "2×1 + 1×3 = 5。"
+  hints:
+    - "这看起来像 2×3 + 1×1。应该第一个数和第一个数配对，第二个数和第二个数配对。"
+    - ["第一个乘第一个，第二个乘第二个，再把两个乘积加起来。", "第一个乘积是 2×1。第二个呢？"]
+
+dot-sign:
+  prompt: "cat = [2, 1]。你把 car 转到和 cat 方向相反。cat·car 会怎样？"
+  options: ["变成负数", "变成 0", "仍是正数，但很小"]
+  hints:
+    - "0 是成直角，就像一开始的 cat 和 car。方向相反比这更远。算一下 [2, 1] · [−2, −1]。"
+    - "把 car 的符号都翻过来：和里的每个乘积都会变号。算一下 [2, 1] · [−2, −1]。"
+  reveal: "负数。[2, 1] · [−2, −1] = −5。正数表示两个箭头大致指向同一方向，0 表示成直角（就像一开始的 cat 和 car：[2, 1] · [−1, 2] = 0），负数表示方向相反。"
+
+static-apple:
+  prompt: "两句话里，“apple”都是在同一张表里查的。它在“sweet apple”和“apple releases phone”里的向量一样吗？"
+  options: ["一样，完全相同", "不一样，句子会改变它"]
+  hints:
+    - "查表是按 id 取一行。“apple”的 id 会随句子变化吗？"
+  reveal: "完全一样：两句话里都是 [1, 1, 0, 0]，水果上一个 1，科技上一个 1。表不可能知道说的是哪个 apple。只有把它和邻居混合，才能得到一点线索。"
+
+mix-fruit:
+  prompt: "把“apple releases phone”的三个向量平均（apple [1, 1, 0, 0]，releases [0, 1, 0, 1]，phone [0, 1, 0, 0]）。结果的水果那个数，也就是第一项，是多少？（保留 3 位小数）"
+  after: "(1 + 0 + 0) / 3 = 0.333，而科技是 (1 + 1 + 1) / 3 = 1。混合把 apple 拉向了科技，这正是它在这里的意思。"
+  hints:
+    - "1 是 apple 自己的水果数。要对三个词的水果那一列取平均。"
+    - "这是第一句话（2 个词）。这句话有 3 个词。"
+    - ["权重相等的混合就是平均：先加起来，再除以词数。", "水果那个数：apple 是 1，releases 是 0，phone 是 0。"]
+
+cat-count:
+  prompt: "句子：“cat eats fish”、“dog eats meat”、“cat drinks milk”、“car needs fuel”。eats、drinks、needs 一共有几次紧挨着“cat”（在它前面或后面一个词）？"
+  after: "第一句里的“eats”和第三句里的“drinks”：2 次。按 (eats, drinks, needs)，cat 的计数是 [1, 1, 0]。"
+  hints:
+    - "“cat”出现在两句话里。两句都要查。"
+    - "只数 eats、drinks 和 needs，而且只数紧挨着“cat”的。"
+    - ["找到每个“cat”，看它左边一个词和右边一个词。", "“cat”在第 1 句和第 3 句里。分别看它旁边的词。"]
+
+cat-dog:
+  prompt: "按 (eats, drinks, needs)：cat = [1, 1, 0]，dog = [1, 0, 0]，car = [0, 0, 1]。cat · dog 是多少？"
+  after: "1×1 + 1×0 + 0×0 = 1。而 cat · car = 0：它们没有共同的邻居。共同邻居越多，点积越大。"
+  hints:
+    - "这是 cat · car。cat 和 dog 都紧挨着“eats”。"
+    - ["逐个数相乘，再加起来。", "第一个乘积是 1×1 = 1。再算另外两个乘积，加起来。"]
+
+closest:
+  prompt: "拿成千上万个像“cat eats fish”、“dog eats meat”、“car needs fuel”这样的句子。cat 和 dog 总是出现在相同的位置，car 出现在别的位置。最后谁的计数向量离 cat 的最近？"
+  options: ["dog", "car", "eats"]
+  hints:
+    - "cat 和 car 从来没有共同的邻居。按 (eats, drinks, needs)，cat = [1, 1, 0]，car = [0, 0, 1]，所以它们的点积是 0。"
+    - "“eats”是 cat 的邻居，而不是和 cat 用在相同位置的词。哪个词的邻居和 cat 一样？"
+  reveal: "dog。接近来自有共同的邻居，而不是互为邻居。有 12 个词和很多句子时，同样的数法会把动物放在一起。"
+
+count-code:
+  prompt: "数邻居：对每个词，它前面紧挨的词和后面紧挨的词各加 1。"
+  template: |
+    sents = [["cat", "eats", "fish"], ["dog", "eats", "meat"],
+             ["cat", "drinks", "milk"], ["car", "needs", "fuel"]]
+    words = sorted({w for s in sents for w in s})
+    idx = {w: i for i, w in enumerate(words)}
+    C = np.zeros((len(words), len(words)), dtype=int)
+    for s in sents:
+        for j in range(len(s)):
+            for k in (j - 1, j + 1):
+                if 0 <= k < len(s):
+                    ____
+    cat_row = C[idx["cat"]]
+    print("cat's row:", {w: int(cat_row[idx[w]]) for w in words if cat_row[idx[w]]})
+  tests:
+    - "cat 紧挨着 eats 一次"
+    - "eats 有四个邻居：cat、fish、dog、meat"
+    - "a 挨着 b，b 也就挨着 a：这张表是对称的"
+    - "每个 3 个词的句子有 4 对邻居"
+  hints:
+    - "用 idx[...] 把一个词变成它的行号或列号。"
+    - ["j 和 k 是句子里的位置（0、1、2），不是词的编号。先读出每个位置上的词。", "再用模板里的字典把每个词变成行号或列号。"]
+    - ["给（这个词，它的邻居）对应的格子加 1。", "这个词是位置 j 上的词，邻居是位置 k 上的词。两个都是字符串，所以先把它们各自变成数。", "C 的行和列都用 idx 来找，然后用 += 加 1。"]
+  after: "每一对都会从两边各数一次：j 是 cat、k 是 eats 时数一次，j 是 eats、k 是 cat 时再数一次。所以这张表是对称的。一个 3 个词的句子给出 4 次计数。"
+
+mix-code:
+  prompt: "写出 mix：在表 E 里查出 ids 对应的行，再用权重 w（每个 id 一个权重，加起来等于 1）把它们混合成一个 4 个数的向量。比如 ids [1, 0] 配 w = [0.75, 0.25]，就是 0.75 × sweet + 0.25 × apple。写两行。"
+  template: |
+    #              水果 科技 甜  动作
+    E = np.array([[1, 1, 0, 0],    # id 0 apple
+                  [1, 0, 1, 0],    # id 1 sweet
+                  [0, 1, 0, 1],    # id 2 releases
+                  [0, 1, 0, 0]],   # id 3 phone
+                 dtype=float)
+
+    def mix(ids, w, E):
+        ____
+        return m
+
+    print("apple releases phone:", mix([0, 2, 3], np.array([0.5, 0.25, 0.25]), E))
+    print("sweet apple:         ", mix([1, 0], np.array([0.75, 0.25]), E))
+  tests:
+    - "不管句子多长，都是一个 4 个数的向量"
+    - "0.5 × apple + 0.25 × releases + 0.25 × phone = [0.5, 1, 0, 0.25]"
+    - "0.75 × sweet + 0.25 × apple = [1, 0.25, 0.75, 0]"
+    - "权重相等就是实验台里的普通平均"
+  hints:
+    - ["函数必须在 `return m` 之前给 m 赋值。", "先写一行查出这些行，再写一行算 m。"]
+    - ["形状对不上。E[ids] 是 (L, 4)，w 是 (L,)。哪个放在 @ 的左边？", "L 个权重组成的向量 @ 一个 (L, 4) 的矩阵，得到 4 个数。"]
+    - ["结果必须是一个 4 个数的向量。消失的是 L 那个轴（每个词一行），还是 4 那个轴？", "E[ids] 是 (L, 4)。权重跟着行走，所以是沿着行求和。"]
+    - ["形状对了，数不对。每一行是不是乘了它自己的权重？", "手算检查一下：0.5 × apple + 0.25 × releases + 0.25 × phone。"]
+    - ["分两步：取出这句话的 id 对应的行，再用权重混合这些行。", "用列表 ids 索引 E，每个 token 得到一行，形状 (L, 4)。", "一个权重向量 @ 一个矩阵，就是它各行的加权和。"]
+  after: "E[ids] 的形状是 (L, 4)，w @ E[ids] 就是 (L,) @ (L, 4) → (4,)：每一行乘它的权重，再加起来。所以不管句子多长，都得到 4 个数。权重相等时就是普通平均。第 14 关会根据词本身算出这些权重；那就是注意力。"

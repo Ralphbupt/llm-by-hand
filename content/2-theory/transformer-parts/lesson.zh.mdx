@@ -1,0 +1,308 @@
+---
+recap:
+  can:
+    - "说出注意力为什么需要位置编码，并给出位置表的形状。"
+    - "对一个词手算 FFN 和 LayerNorm，并用 NumPy 写出带残差的 FFN 子层。"
+    - "用带掩码的自注意力和 FFN 搭出一个 pre-norm 解码器块，并用 NumPy 写出它们的堆叠。"
+  keys:
+    - "$PE[pos][2k] = \\sin\\!\\left(\\frac{pos}{10000^{2k/d}}\\right)$，第 2k + 1 列用 cos；PE 的形状是 `(L, d_model)`"
+    - "FFN：`(3, 2) @ (2, 4)` → `(3, 4)` → ReLU → `@ (4, 2)` → `(3, 2)`，每个词单独计算"
+    - "post-norm 把子层包成 `LayerNorm(x + sublayer(x))`；LayerNorm 作用在最后一个轴上：[1, 1, 5, 5] → [−1, −1, 1, 1]"
+    - "pre-norm 解码器块先把注意力的结果加到 x 上，再加 FFN 的结果；两者读的都只是 x 经过 LayerNorm 的副本。多个块堆叠之后，最后还有一个 LayerNorm"
+  mistakes:
+    - "跨词对每一列做归一化，而不是对每个词自己的数做：LayerNorm 作用在最后一个轴上。"
+    - "在 pre-norm 块里对和做归一化：LayerNorm 只用在送进子层的那一份上，x 原封不动地加回去。"
+glossarySkip: [activation function]
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import PositionLab from '@viz/PositionLab.astro'
+import FfnLab from '@viz/FfnLab.astro'
+import NormLab from '@viz/NormLab.astro'
+import LayerFlowLab from '@viz/LayerFlowLab.astro'
+
+注意力是主角，但 Transformer 的一层里还有另外四个部件。每个部件解决一个具体的问题。
+要看清一个部件做什么，最好的办法是把它拿掉，看看哪里出了问题。这一页的每个实验台都让你这样做。
+
+## 1. 位置编码：注意力看不出顺序
+
+再看一遍第 14 关的公式：每个词都和每个词比较，输出是一个加权和。
+公式里没有任何东西说明哪个词在前。继续之前，先试一试。
+
+<Predict id="swap-no-pe" />
+
+<PositionLab hide={{ pe01: "pe-0-1" }} />
+
+<Gate requires="swap-no-pe">
+
+解决办法：在注意力之前，给每个位置**加上**一个不同的向量。词向量 + 位置向量。
+现在“位置 0 的 cat”和“位置 2 的 cat”是不同的输入，所以会得到不同的输出。
+
+位置向量由不同频率（重复得多快）的正弦和余弦组成。
+每个词有 2 个数时，位置 `pos` 得到 `[sin(pos), cos(pos)]`。
+
+<Blank id="pe-0-1" />
+
+<Blank id="pe-shape" />
+
+<Stuck q="为什么不直接给每个数加上 1、2、3、……？">
+
+有两个问题。第一，这些数会无限增长。位置 500 要加 500，而一个词的数只有几个单位大小，
+这样词自己的数就小到无关紧要了。第二，一个在长度为 20 的句子上训练的模型，
+要到使用时才第一次见到位置 300。
+
+正弦和余弦永远在 −1 和 1 之间，而且每个位置仍然有自己的模式。在条纹图里，
+左边的列变得快（用来区分相邻的位置），右边的列变得慢（用来区分相隔很远的位置）。
+钟表也是这样：分针快，时针慢。
+
+</Stuck>
+
+<Stuck q="这个句子只用了 3 个位置，位置表为什么有 16 行？">
+
+位置表只建一次，按模型会见到的最长句子来建（这里是 16）。长度为 L 个 token 的句子取前 L 行：
+3 个 token 就取 `PE[:3]`。两张表的用法不一样：
+
+| 表 | 一个 token 取哪一行 |
+|---|---|
+| 嵌入表（第 13 关） | 由它是**哪个** token 决定（可以是任意一行；“cat”总是第 5 行） |
+| 位置表 | 由这个 token 在**哪里**决定：总是按顺序取第 0、1、2、…… 行 |
+
+</Stuck>
+
+<Stuck q="为什么加位置之前，词向量要先乘一个数？">
+
+第 17 关的模型做的是 `x = embedding * √d_model + PE`。取 `d_model` = 4，词向量 [−0.77, −0.62, 0.91, −0.28]，
+PE[0] = [0, 1, 0, 1]：
+
+- 词 + PE[0] = [−0.77, 0.38, 0.91, 0.72]。第二个和第四个数变了号：位置盖掉了词的一部分。
+- 词 × 2 + PE[0] = [−1.54, −0.24, 1.82, 0.44]。现在词的数比位置的数大。
+
+位置的数是固定的，在 −1 和 1 之间，所以这个系数决定了词相对于它的位置有多强。
+通常的解释是：如果嵌入表一开始的数大约是 1/√`d_model` 的大小，乘以 √`d_model`
+就让词和位置差不多大。这样“这是什么词”就不会被“它在哪里”盖住。
+第 17 关会给出真实模型里的数，第 21 关会展示一个不需要这个系数的模型。
+
+</Stuck>
+
+<Blank id="sqrt-dmodel" />
+
+<Deeper title="任意模型宽度下的公式">
+
+对位置 `pos`，第 2k 列和第 2k + 1 列这一对得到：
+
+$$PE[pos][2k] = \sin\!\left(\frac{pos}{10000^{2k/d}}\right)$$
+
+$$PE[pos][2k+1] = \cos\!\left(\frac{pos}{10000^{2k/d}}\right)$$
+
+列两两成对。第 0 对每个位置转动的速度是 1；后面每一对都转得更慢。最后一对的速度是 $10000^{-(d-2)/d}$：d 很大时接近 1/10000，d = 4 时是 1/100。
+d = 2 时只有第 0 对，所以向量是 `[sin(pos), cos(pos)]`。很多较新的模型改为学出位置向量，
+或者按位置旋转 Q 和 K（第 19 关）。目标是一样的：给注意力一样随位置而不同的东西。
+
+</Deeper>
+
+<Deeper title="只靠因果掩码，也能看出一点顺序">
+
+用第 15 关的因果掩码时，第 i 个词正好能看到 i + 1 个词。所以即使没有位置编码，第一个词
+总是对一个词求平均，第十个词对十个词求平均：输出确实和位置有一点关系。但这太弱了，
+分不清“dog bites man”和“man bites dog”，所以解码器仍然要加位置向量（或者旋转 Q 和 K）。
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="pe-shape">
+
+## 2. 前馈网络：每个词单独处理
+
+注意力把词混在一起。它是一个加权平均，所以单靠它只能求平均。
+注意力之后，每个词都要经过一个小 MLP，就是你在第 5 关搭过的那种：
+变宽，ReLU，再变窄回来。每个词用的是同一组权重，而且每个词都**单独**处理。
+它叫**前馈**（feed-forward），是因为数只往前流，没有回路。
+因为它在每个位置上单独工作，所以也叫**逐位置**（position-wise）前馈网络。隐藏层的宽度
+叫 **`d_ff`**：这里是 4，在 2017 年的设计里是 2048 = 4 × `d_model`。
+
+W1、b1 和 W2 是**参数**：在训练中学出来，然后固定不变。隐藏层的数是**激活值**：每个词、
+每次运行模型都要重新计算（和第 14 关里 Q、K、V 与 `W_Q`、`W_K`、`W_V` 的区分一样）。
+
+三个词，每个词 2 个数，所以 X 是 (3, 2)。第一层是 W1 (2, 4) 加上偏置 b1，然后是 ReLU
+（每个负数都变成 0），然后是 W2 (4, 2)：
+
+$$W_1 = \begin{bmatrix} 1 & -1 & 0 & 1 \\ 0 & 1 & -1 & 1 \end{bmatrix}$$
+
+$$b_1 = [0, 0, 1, -2]$$
+
+<Blank id="ffn-hidden-shape" />
+
+<Blank id="cat-lit" />
+
+<Predict id="ffn-alone" />
+
+<Gate requires="ffn-alone">
+
+在实验台上检查这三个答案。把鼠标指向一个词（手机上点一下），看它的隐藏单元。
+
+<FfnLab />
+
+</Gate>
+
+<Deeper title="为什么要先变宽？">
+
+非线性的工作发生在隐藏层里。每个单元根据输入开或关。
+所以网络可以把输入分成若干区域，对每个区域区别对待。单元越多，区域越多。
+这就是真实模型把隐藏层做得比 `d_model` 宽 4 倍的原因（比如 512 → 2048 → 512）。
+不算嵌入表，FFN 占了每一层大约三分之二的权重（注意力有 4 × d_model² 个，FFN 有 8 × d_model² 个）。
+
+</Deeper>
+
+</Gate>
+
+<Gate requires="ffn-alone">
+
+## 3. 残差和 LayerNorm：让很深的堆叠保持稳定
+
+Transformer 把同一种层堆叠很多次，常常是 12 层、32 层甚至更多。堆叠会带来一个问题。
+每一层都把数乘上某个东西。乘 0.5 乘三十次，几乎什么都不剩；乘 1.5 乘三十次，会得到一个巨大的数。
+
+两个小改动可以解决它：
+
+- **残差**（residual）：把这一层的输入加回到它的输出上，`x + f(x)`。这一层只需要学一个变化量，原来的 x 总能到达输出。
+  从输入直接到输出、不经过任何层的那个 `x`，就是**残差通路**。
+- **LayerNorm**：把每个词的数缩放到均值 0、标准差（std）1，让大小在层与层之间保持不变。
+  标准差衡量这些数有多分散：它是方差（到均值的距离的平方的平均）的平方根。
+
+一层里有两个部分各自带一个残差：注意力和 FFN。每个这样的部分叫一个**子层**（sublayer）。
+最早的 Transformer 把每个子层包成 `LayerNorm(x + sublayer(x))`。第 4 节会把 LayerNorm 挪到一个更好的位置。
+[支线 N2](/learn/residuals-and-norms/) 在一个 30 层的堆叠上测量了这两者，并比较了 LayerNorm 和 BatchNorm。如果你做过 N2，可以直接跳到
+下面的 LayerNorm 练习。
+
+<Predict id="deep-plain" />
+
+<NormLab />
+
+<TryIt>
+
+在“堆叠 30 层”实验台里，选 `x ← f(x)`，把增益从 0.5 拖到 2：曲线先降到 0，然后变得巨大。
+换成 `x ← x + f(x)`：它不再消失，但仍然可能变大。换成 `LayerNorm(x + f(x))`：无论你怎么调，它都稳定在 2.83 左右。
+为什么是 2.83？实验台里的向量有 8 个数。经过 LayerNorm 后，它们的均值是 0、标准差是 1，所以它们的平方加起来是 8，
+向量的大小（长度）是 √8 ≈ 2.83。
+
+</TryIt>
+
+<Blank id="ln-clean" />
+
+<Blank id="ln-count" />
+
+<Stuck q="LayerNorm 对哪个轴做归一化？">
+
+最后一个轴：一个词自己的那些数。形状为 (B, L, d) 的一批数据会得到 B × L 个各自独立的均值和标准差，
+每个词一个。词与词之间、句子与句子之间不共享任何东西，所以一个词的结果永远不取决于批里还有什么。
+把 LayerNorm 实验台切换到“每一列”，看看不这样做会出什么问题。
+
+</Stuck>
+
+在 NumPy 里，`x.mean(axis=-1)` 对最后一个轴求平均。加上 `keepdims=True`，结果会保留这个轴，大小为 1：
+x 的形状是 (2, 4) 时，均值的形状是 (2, 1) 而不是 (2,)，所以 `x - mu` 减去的是每个词自己的均值。
+
+<CodeBlank id="layer-norm" />
+
+<Deeper title="每一列的两个可学习的数：γ 和 β">
+
+真正的 LayerNorm 不止于均值 0、标准差 1。接着它把每一列乘以一个可学习的增益 γ（gamma），再加上一个可学习的
+偏移 β（beta）：`out = γ * normalized + β`。这是逐元素的。γ 和 β 的形状都是 (`d_model`,)。它们的初始值是 γ = 1、β = 0，
+所以一个新的 LayerNorm 和你刚写的完全一样。之后训练可以让某些列的值更大，或者在归一化没用的地方
+把它撤销掉。
+
+</Deeper>
+
+<Gate requires="layer-norm">
+
+现在把第 2 节和第 3 节合起来：把 FFN 作为一个子层，带上它的残差，`x + ffn(x)`。
+第 4 节再加上 LayerNorm。在 NumPy 里，ReLU 是 `np.maximum(0, …)`，和第 4 关一样：
+
+```python
+# [2, 0, 1, 0]：每个负数都变成 0
+np.maximum(0, np.array([2.0, -2.0, 1.0, 0.0]))
+```
+
+<CodeBlank id="ffn-block" />
+
+</Gate>
+
+</Gate>
+
+<Gate requires="ffn-block">
+
+## 4. 搭出一个解码器块
+
+现在每个部件都有了自己的工作。一个**解码器块**（decoder block）由两个子层组成：先是带掩码的自注意力（第 15 关），
+每个 token 和它前面的 token 混合；然后是 FFN，它对每个 token 单独处理。每个子层都有一个残差和一个 LayerNorm。
+一个模型就是把同一种块堆叠几次。token 的嵌入和位置进入第一个块，最后一个块之后是
+输出层。它叫解码器，是因为它一次写出一个 token，而每个新 token 都由它前面的 token 算出来。
+
+第 3 节展示的是 2017 年最早的 Transformer 的放法：`LayerNorm(x + sublayer(x))`。
+这门课的主线模型，从第 17 关一直到你在第 21 关写的 GPT，都把 LayerNorm 挪到了前面。
+它们只对**送进**子层的东西做归一化，再把子层的输出加到没有改动的 x 上。
+对一个子层 f，一步是
+
+$$x \leftarrow x + f(\mathrm{LayerNorm}(x))$$
+
+一个解码器块做两次：第一次 f 是带掩码的自注意力，第二次 f 是 FFN。
+这就是 **pre-norm**。部件相同，顺序不同。现在原始的 x 穿过整个堆叠，从来不会
+被重新缩放：每个块都只是往它上面加东西。[第 19 关](/learn/modern-llm/)的第 2 节会解释为什么这样训练深的堆叠效果更好。因为
+到最后没有任何东西对这个和做归一化，所以堆叠的结尾有一个最终的 LayerNorm，放在最后一个块之后、输出层之前。
+
+<Predict id="zero-sublayer" />
+
+<Gate requires="zero-sublayer">
+
+选一个块，看看它的形状、Q、K、V 从哪里来，以及没有它会出什么问题。
+
+<LayerFlowLab />
+
+<Stuck q="为什么每个块的形状都一样？">
+
+形状处处都是 (B, L, `d_model`)，因为每个块的输出就是下一个块的输入。注意力给每个 token 一个由 `d_model` 个数组成的向量，
+FFN 变宽到 `d_ff`，但又变窄回 `d_model`。残差把两个形状相同的张量相加。所以你可以堆 2 个块，
+也可以堆 96 个，代码不用改：不同的只是里面的权重。
+
+</Stuck>
+
+<Blank id="block-ln-count" />
+
+<Stuck q="Transformer 不是由编码器和解码器组成的吗？">
+
+最早的那个是。它是为翻译做的，所以有两个堆叠：编码器读源语言的句子，
+解码器写目标语言的句子，并通过交叉注意力读编码器。今天的聊天模型只保留了
+解码器那一个堆叠：提示词和回答是同一个序列，模型接着往下写。这样的模型叫
+仅解码器（decoder-only）模型。第 17 关搭的就是这种模型。
+[支线 N7](/learn/encoder-decoder/) 在第 17 关之后，会搭出两个堆叠的设计，并读懂它原始的结构图。
+
+</Stuck>
+
+</Gate>
+
+<Gate requires="block-ln-count">
+
+最后一步：写出一个完整的解码器堆叠 `decoder(x, n_blocks)`。它依次运行 `n_blocks` 个解码器块，
+然后是最终的 LayerNorm。为了让数保持简单，下面的注意力没有权重矩阵。
+Q、K 和 V 都是归一化后的 x 本身，和第 14 关第 2 节一样。它用的是第 15 关的因果掩码。
+FFN 用的是第 2 节的权重。
+
+一个只有一个 token 的句子，x = [0, 4]，手算如下：LayerNorm 把它变成 [−1, 1]。这个 token 只能看到它自己，所以
+注意力原样给回 [−1, 1]，x 变成 [0, 4] + [−1, 1] = [−1, 5]。再做 LayerNorm 又得到 [−1, 1]；FFN 的隐藏层
+经过 ReLU 后是 [0, 2, 0, 0]，W2 把它变成 [0, 2]。这个块的输出是 [−1, 5] + [0, 2] = [−1, 7]。
+第二个块会从 [−1, 7] 开始。
+
+<CodeBlank id="decoder-block" />
+
+可选的支线：扩散模型分支（[支线 D1](/learn/noise-and-denoise/) 到 [D3](/learn/latents-and-dit/)）的结尾
+是一个画图的 Transformer。它就是由这样的块组成的。第 17 关继续主线。
+
+</Gate>
+
+</Gate>

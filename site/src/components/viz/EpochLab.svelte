@@ -6,8 +6,32 @@
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const tx = useT({
+    '10 examples, cut into batches': '10 个样本，切成批',
+    'Change the batch size, check Shuffle each epoch, and press Next epoch.': '改变批大小，勾选“每轮打乱”，然后按“下一轮”。',
+    'Epoch {e}, seed {s}': '第 {e} 轮，随机种子 {s}',
+    'Epoch {e}, no shuffle': '第 {e} 轮，不打乱',
+    'all': '全部',
+    'Batches:': '批：',
+    'Answer the question below to see how the examples are cut.': '回答下面的问题，就能看到样本是怎样切分的。',
+    'batch {k}': '第 {k} 批',
+    'Next epoch': '下一轮',
+    'Batch size': '批大小',
+    'Shuffle each epoch': '每轮打乱',
+    'Seed': '随机种子',
+    'Seed minus one': '随机种子减一',
+    'Seed plus one': '随机种子加一',
+    'Batches per epoch: ?': '每轮的批数：?',
+    '{n} batches ({sizes}); every example appears once.': '{n} 批（{sizes}）；每个样本出现一次。',
+    '{p} of {n} batches hold only one class.': '{n} 批里有 {p} 批只有一个类别。',
+    'class 0 (examples 0–4)': '类别 0（样本 0–4）',
+    'class 1 (examples 5–9)': '类别 1（样本 5–9）',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -62,22 +86,22 @@
 </script>
 
 <LabFrame
-  title="10 examples, cut into batches"
-  hint="Change the batch size, check Shuffle each epoch, and press Next epoch."
+  title={tx('10 examples, cut into batches')}
+  hint={tx('Change the batch size, check Shuffle each epoch, and press Next epoch.')}
   onreset={reset}
   resetDisabled={!changed}
 >
-  <p class="cap">Epoch {epoch}{shuffle ? `, seed ${seed}` : ', no shuffle'}</p>
+  <p class="cap">{shuffle ? tx('Epoch {e}, seed {s}', { e: epoch, s: seed }) : tx('Epoch {e}, no shuffle', { e: epoch })}</p>
   {#if hidden}
     <div class="row">
-      <span class="lbl">all</span>
+      <span class="lbl">{tx('all')}</span>
       <span class="chips">{#each Array.from({ length: N }, (_, i) => i) as i}<span class="chip c{cls(i)}">{i}</span>{/each}</span>
     </div>
-    <p class="q">Batches: <b>?</b> Answer the question below to see how the examples are cut.</p>
+    <p class="q">{tx('Batches:')} <b>?</b> {tx('Answer the question below to see how the examples are cut.')}</p>
   {:else}
     {#each batches as b, k (k + '-' + b.join(','))}
       <div class="row">
-        <span class="lbl">batch {k}</span>
+        <span class="lbl">{tx('batch {k}', { k })}</span>
         <span class="chips">{#each b as i}<span class="chip c{cls(i)}">{i}</span>{/each}</span>
         <span class="n">{b.length}</span>
       </div>
@@ -85,30 +109,30 @@
   {/if}
 
   {#snippet controls()}
-    <button class="lab-btn primary" onclick={() => epoch++}>Next epoch</button>
-    <label class="ctl">Batch size
+    <button class="lab-btn primary" onclick={() => epoch++}>{tx('Next epoch')}</button>
+    <label class="ctl">{tx('Batch size')}
       <select bind:value={bs}>{#each [2, 3, 4, 5] as v}<option value={v}>{v}</option>{/each}</select>
     </label>
-    <label class="ctl tog"><input type="checkbox" bind:checked={shuffle} /> Shuffle each epoch</label>
-    <span class="ctl">Seed
-      <button class="lab-btn step" aria-label="Seed minus one" disabled={!shuffle || seed === 0} onclick={() => { seed--; epoch = 0 }}>−</button>
+    <label class="ctl tog"><input type="checkbox" bind:checked={shuffle} /> {tx('Shuffle each epoch')}</label>
+    <span class="ctl">{tx('Seed')}
+      <button class="lab-btn step" aria-label={tx('Seed minus one')} disabled={!shuffle || seed === 0} onclick={() => { seed--; epoch = 0 }}>−</button>
       <span class="num">{seed}</span>
-      <button class="lab-btn step" aria-label="Seed plus one" disabled={!shuffle} onclick={() => { seed++; epoch = 0 }}>+</button>
+      <button class="lab-btn step" aria-label={tx('Seed plus one')} disabled={!shuffle} onclick={() => { seed++; epoch = 0 }}>+</button>
     </span>
   {/snippet}
 
   {#snippet readout()}
     {#if hidden}
-      Batches per epoch: ?
+      {tx('Batches per epoch: ?')}
     {:else}
-      {batches.length} batches ({batches.map((b) => b.length).join(', ')}); every example appears once.
-      {pure} of {batches.length} batches hold only one class.
+      {tx('{n} batches ({sizes}); every example appears once.', { n: batches.length, sizes: batches.map((b) => b.length).join(', ') })}
+      {tx('{p} of {n} batches hold only one class.', { p: pure, n: batches.length })}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><span class="chip c0">0</span> class 0 (examples 0–4)</span>
-    <span class="lg"><span class="chip c1">5</span> class 1 (examples 5–9)</span>
+    <span class="lg"><span class="chip c0">0</span> {tx('class 0 (examples 0–4)')}</span>
+    <span class="lg"><span class="chip c1">5</span> {tx('class 1 (examples 5–9)')}</span>
   {/snippet}
 </LabFrame>
 

@@ -33,4 +33,19 @@ const lessons = defineCollection({
   }),
 })
 
-export const collections = { lessons }
+// A translation of a level: lesson.zh.mdx next to lesson.en.mdx. Its frontmatter holds only text (the recap, and
+// glossarySkip for Chinese words); the level's title, short title and question live in content/levels.zh.yaml, so the
+// sidebar and the map have them for every level, translated or not. Everything structural comes from the English file.
+const lessonsZh = defineCollection({
+  loader: glob({
+    pattern: '**/lesson.zh.mdx',
+    base: '../content',
+    generateId: ({ entry }) => entry.split('/').slice(-2, -1)[0],
+  }),
+  schema: z.object({
+    glossarySkip: z.array(z.string()).optional(),
+    recap: z.object({ can: z.array(z.string()), keys: z.array(z.string()), mistakes: z.array(z.string()) }).optional(),
+  }),
+})
+
+export const collections = { lessons, lessonsZh }

@@ -5,6 +5,13 @@
    * Shift + arrow two steps). Page scroll still works when you start a swipe away from a tip.
    */
   import { readable } from '@lib/readable'
+  import { useT } from '@lib/i18nSvelte'
+  const tx = useT({
+    'Draggable vector canvas': '可拖动的向量画布',
+    'vector {i}': '向量 {i}',
+    '{name}: arrow keys move it': '{name}：用方向键移动',
+    'Drag a dot, or focus it and use the arrow keys (steps of {step}).': '拖动一个点，或者选中它后用方向键移动（每步 {step}）。',
+  })
   type Props = {
     value: number[][]           // n × 2
     labels?: string[]
@@ -63,7 +70,7 @@
   onpointerup={() => (dragging = null)}
   onpointercancel={() => (dragging = null)}
   role="application"
-  aria-label="Draggable vector canvas"
+  aria-label={tx('Draggable vector canvas')}
 >
   <!-- 网格 -->
   {#each ticks as t}
@@ -87,7 +94,7 @@
       onpointerdown={(e) => grab(i, e)}
       onkeydown={(e) => key(i, e)}
       role="slider" tabindex="0"
-      aria-label={`${labels?.[i] ?? `vector ${i}`}: arrow keys move it`}
+      aria-label={tx('{name}: arrow keys move it', { name: labels?.[i] ?? tx('vector {i}', { i }) })}
       aria-valuetext={`[${v[0]}, ${v[1]}]`}
       aria-valuenow={v[0]}
     />
@@ -97,7 +104,7 @@
   {/each}
 </svg>
 
-<p class="tip">Drag a dot, or focus it and use the arrow keys (steps of {step}).</p>
+<p class="tip">{tx('Drag a dot, or focus it and use the arrow keys (steps of {step}).', { step })}</p>
 
 <style>
   svg {

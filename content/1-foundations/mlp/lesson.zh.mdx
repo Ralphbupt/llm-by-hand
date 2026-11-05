@@ -1,0 +1,191 @@
+---
+recap:
+  can:
+    - "对一个样本手算 MLP 的前向传播：隐藏层、激活函数、输出。"
+    - "说出一批样本经过每一层后输出的形状。"
+    - "根据各层的大小，数出网络的权重和偏置。"
+  keys:
+    - "$H = \\text{act}(X W_1 + b_1)$，$p = \\sigma(H W_2 + b_2)$"
+    - "`(N, d_in) @ (d_in, n)` → `(N, n)`：每个样本一行，每个隐藏单元一列"
+    - "每层的参数：输入数 × 输出数个权重，加上每个输出一个偏置"
+    - "第一层的每个单元画一条直线；后面的层把这些直线组合起来"
+  mistakes:
+    - "只数了线（权重），忘了每个神经元还有一个偏置。"
+    - "在激活函数之后才加偏置，而不是之前：`act(X @ W1 + b1)`。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import SpiralLab from '@viz/SpiralLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+在第 3 关，一个神经元画一条直线。在第 4 关，XOR 需要第二个神经元，并在层与层之间弯一下。
+这个小网络有个名字：**多层感知机**（multilayer perceptron），简称 **MLP**。它就是一层层神经元，每一层
+的输出交给下一层，中间夹着激活函数。
+
+这一关要问：每层更多的神经元（**宽度**）和更多的层（**深度**）能带来什么。
+先把前向传播写成每个库都用的写法：矩阵。
+
+## 1. 一个隐藏层，写成矩阵
+
+把输入放进矩阵 $X$，每个样本一行。一个有 $n$ 个神经元的隐藏层，就是一次矩阵乘法、
+一个偏置和一个激活函数。输出层再来一次：
+
+$$
+H = \text{act}(X W_1 + b_1) \qquad p = \sigma(H W_2 + b_2)
+$$
+
+和第 4 关一样，$X W_1$ 就是代码里的矩阵乘法 `X @ W1`。
+$W_1$ 的第 $j$ 列放着神经元 $j$ 的两个权重，所以 $W_1$ 是 (2, n)。$H$ 存着隐藏层的值：每个样本一行，
+每个隐藏神经元一列。
+
+用 ReLU 作激活函数，手算一个样本：
+
+$$
+x = [2, 1] \quad W_1 = \begin{bmatrix} 1 & -1 \\ 0 & 1 \end{bmatrix} \quad b_1 = [0, 0] \quad W_2 = \begin{bmatrix} 2 \\ -1 \end{bmatrix} \quad b_2 = 0.5
+$$
+
+<Blank id="fwd-hidden" />
+
+<Gate requires="fwd-hidden">
+
+接着算输出层，然后看形状。
+
+<Blank id="fwd-out" />
+
+<Blank id="hidden-shape" />
+
+</Gate>
+
+<Gate requires="hidden-shape">
+
+## 2. 更难的图案：两条螺旋
+
+XOR 只有四个点。这里有 200 个，分成两条互相缠绕的臂。没有哪条直线能把它们分开，
+两条、三条也不行。先别按任何按钮：
+
+<Predict id="width-2" />
+
+</Gate>
+
+<Gate requires="width-2">
+
+下面的实验台一开始是 1 个隐藏层、8 个 tanh 单元。按 **训练**。**平面图** 视图用背景颜色显示网络的回答，每条臂一种颜色；切换到 **3D**，
+可以看到同一个回答画成平面上方的高度。
+
+<SpiralLab hide={{ params: ["params-1", "params-deep"] }} />
+
+现在改变宽度。设成每层 2 个单元，再训练一次。然后试试 32。
+只有 2 个单元时，网络只能把平面弯两次，螺旋的大部分它都分错了。
+单元足够多时，背景就开始沿着两条臂走了。
+
+<Stuck q="为什么每次按“新的随机权重”，它找到的答案都不一样？">
+
+每次运行都从不同的随机权重出发，而训练只会从起点一路往下坡走。
+所以两次运行可能停在不同的山谷里：边界不同，有时一次拟合得很好，另一次卡住了。
+这种随机性是正常的。真正训练时，如果需要精确重复一次运行，就会固定随机种子。
+
+</Stuck>
+
+<Stuck q="实验台怎么知道这么多权重各该往哪边调？">
+
+它对每个权重算出损失的梯度，然后逆着梯度走一小步，这正是
+第 2 关的梯度下降，只是步长的算法更聪明，你会在第 7 关见到。至于怎样给埋在隐藏层里的
+权重算出梯度，靠的是链式法则，一层一层地用。那是第 6 关。
+
+</Stuck>
+
+## 3. 它有多大？
+
+<figure style={{ margin: "1rem 0" }}>
+<svg viewBox="0 0 340 170" role="img" aria-label="一个有 2 个输入、3 个隐藏神经元和 1 个输出的网络。两个圆之间的每条线都是一个权重。" style={{ width: "100%", maxWidth: "380px", display: "block" }}>
+<line x1="40" y1="50" x2="160" y2="30" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="50" x2="160" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="50" x2="160" y2="130" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="110" x2="160" y2="30" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="110" x2="160" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="40" y1="110" x2="160" y2="130" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="160" y1="30" x2="280" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="160" y1="80" x2="280" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<line x1="160" y1="130" x2="280" y2="80" style={{ stroke: "var(--accent)", strokeWidth: 1.5, opacity: 0.7 }} />
+<circle cx="40" cy="50" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="40" cy="110" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="160" cy="30" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="160" cy="80" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="160" cy="130" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<circle cx="280" cy="80" r="13" style={{ fill: "var(--card)", stroke: "var(--fg)", strokeWidth: 1.5 }} />
+<text x="40" y="158" textAnchor="middle" style={{ fill: "var(--dim)", fontSize: "12px" }}>2 个输入</text>
+<text x="160" y="158" textAnchor="middle" style={{ fill: "var(--dim)", fontSize: "12px" }}>3 个隐藏神经元</text>
+<text x="300" y="158" textAnchor="end" style={{ fill: "var(--dim)", fontSize: "12px" }}>1 个输出</text>
+</svg>
+<figcaption style={{ color: "var(--dim)", fontSize: "0.85rem" }}>一个 2 → 3 → 1 的网络：6 条线进入隐藏层，3 条进入输出。每条线是一个权重。</figcaption>
+</figure>
+
+两个神经元之间的每条线是一个权重，输入之后的每个神经元都有一个偏置。
+
+<Blank id="params-1" />
+
+</Gate>
+
+<Gate requires="params-1">
+
+现在加一层。
+
+<Blank id="params-deep" />
+
+实验台里的参数个数现在解锁了。拿你的答案和它对一对。
+
+下面用 3D 展示同一个想法。它从第 1 节的例子（$x = [2, 1]$，ReLU）开始。然后选一个宽度和一个深度，
+数一数线：每条线都是一个权重。
+
+<ArchLab which="mlp" hide={{ params: ["params-1", "params-deep"] }} />
+
+## 4. 每个隐藏单元在做什么
+
+勾选 **显示第一层每个单元的直线**。第一层的每个单元都是第 3 关的那种神经元：它画
+一条直线，报告一个点在哪一边。它后面的层把这些报告组合起来。
+很多条直线，中间再加上弯折，几乎能描出任何形状：在这里，就是一条螺旋。
+
+<Deeper title="宽一点还是深一点？">
+
+原则上，一个很宽的隐藏层可以逼近任何合理的函数：单元加得足够多，它们的
+直线就能把平面切成任意多块。但“足够多”可能是个天文数字。
+
+深度能复用已经做过的工作。第二层看到的不是点，而是第一层的回答，所以它可以把
+第一层已经找到的碎片组合起来。正因为这样，同样多的参数，分到两三层里，
+往往比全放在一层里做得更多。在下面试试。
+
+深度也有代价：梯度要反向穿过每一层，而第 4 关讲过，它每过一层都可能变小。
+第 6 关和第 7 关会处理这个问题。
+
+</Deeper>
+
+<TryIt>
+
+比较 1 层 32 个单元和 3 层各 8 个单元。哪个参数更多？训练 1000 步之后，哪个把螺旋
+画得更好？然后切换到 ReLU：边界由直的线段拼成，而不是曲线。为什么？
+
+</TryIt>
+
+## 5. 自己写出来
+
+写出单隐藏层、用 tanh 的 MLP 的隐藏层。一切都是矩阵，所以一行就能处理
+一整批样本。在 NumPy 里，tanh 是 `np.tanh`：`np.tanh(np.array([0., 1.]))` 得到 `[0., 0.76]`，每个元素一个 tanh。
+
+<CodeBlank id="mlp-forward" />
+
+现在加深度。第二个隐藏层还是同一行代码，只是输入从 $X$ 换成了 $H_1$。
+这次用 ReLU：在 NumPy 里是 `np.maximum(0, …)`，和第 4 关一样。这是第 1 节那个网络的
+2 → 2 → 2 → 1 版本：
+
+$$
+H_1 = \text{ReLU}(X W_1 + b_1) \qquad H_2 = \text{ReLU}(H_1 W_2 + b_2) \qquad \text{out} = H_2 W_3 + b_3
+$$
+
+<CodeBlank id="mlp-deep" />
+
+</Gate>

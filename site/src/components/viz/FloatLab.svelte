@@ -6,6 +6,38 @@
    */
   import { decode, encode, facts, FORMATS, show, type Bits, type Fmt } from '@lib/floatbits'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'What the bits store': '比特里存的是什么',
+    'Type a number or pick one, then tap a bit to flip it.': '输入一个数或者选一个，然后点一下某一位把它翻转。',
+    'bits': '比特',
+    'sign': '符号位',
+    'sign bit': '符号位',
+    'exponent ({n} bits) = {v}': '指数位（{n} 位）= {v}',
+    'exponent bit {k}': '指数位第 {k} 位',
+    'mantissa ({n} bits) = {v}': '尾数（{n} 位）= {v}',
+    'mantissa bit {k}': '尾数第 {k} 位',
+    'exponent all 0s (a tiny “subnormal” number):': '指数位全是 0（一个极小的“次正规数”）：',
+    'exponent all 1s:': '指数位全是 1：',
+    'largest': '最大的数',
+    'gap after 1': '1 之后的间隔',
+    'smallest normal': '最小的正规数',
+    'numbers in [1, 2)': '[1, 2) 里有几个数',
+    'format': '格式',
+    'number': '数',
+    'number to store': '要存的数',
+    'these bits mean {v} in {fmt}': '这些比特在 {fmt} 里表示 {v}',
+    'too big or too small for this format': '对这个格式来说太大或太小',
+    'stored exactly': '存得一点不差',
+    'off by {e}': '差了 {e}',
+    'sign: 0 is +, 1 is −': '符号位：0 是 +，1 是 −',
+    'exponent: which power of 2': '指数位：2 的几次幂',
+    'mantissa: where between that power and the next': '尾数：落在这个幂和下一个幂之间的哪里',
+  })
 
   const START = { fmt: 'float16' as Fmt, typed: 0.1 }
   const PRESETS: [number, string][] = [[0.1, '0.1'], [6, '6'], [256.75, '256.75'], [65504, '65504'], [70000, '70000'], [1e-8, '1e−8']]
@@ -53,27 +85,27 @@
   const full = (v: number) => (Number.isFinite(v) ? String(Number(v.toPrecision(12))).replace('-', '−') : show(v))
 </script>
 
-<LabFrame title="What the bits store" hint="Type a number or pick one, then tap a bit to flip it." onreset={reset} resetDisabled={!changed}>
-  <div class="bits" aria-label="bits">
+<LabFrame title={t('What the bits store')} hint={t('Type a number or pick one, then tap a bit to flip it.')} onreset={reset} resetDisabled={!changed}>
+  <div class="bits" aria-label={t('bits')}>
     <div class="grp">
-      <div class="glab s">sign</div>
+      <div class="glab s">{t('sign')}</div>
       <div class="cells">
-        <button class="bit s" class:one={bits.sign} aria-pressed={!!bits.sign} aria-label="sign bit" onclick={() => flip('sign', 0)}>{bits.sign}</button>
+        <button class="bit s" class:one={bits.sign} aria-pressed={!!bits.sign} aria-label={t('sign bit')} onclick={() => flip('sign', 0)}>{bits.sign}</button>
       </div>
     </div>
     <div class="grp">
-      <div class="glab e">exponent ({F.E} bits) = {bits.exp}</div>
+      <div class="glab e">{t('exponent ({n} bits) = {v}', { n: F.E, v: bits.exp })}</div>
       <div class="cells">
         {#each expBits as b, k}
-          <button class="bit e" class:one={b} aria-pressed={!!b} aria-label={`exponent bit ${k}`} onclick={() => flip('exp', k)}>{b}</button>
+          <button class="bit e" class:one={b} aria-pressed={!!b} aria-label={t('exponent bit {k}', { k })} onclick={() => flip('exp', k)}>{b}</button>
         {/each}
       </div>
     </div>
     <div class="grp wide">
-      <div class="glab m">mantissa ({F.M} bits) = {bits.mant}</div>
+      <div class="glab m">{t('mantissa ({n} bits) = {v}', { n: F.M, v: bits.mant })}</div>
       <div class="cells">
         {#each mantBits as b, k}
-          <button class="bit m" class:one={b} aria-pressed={!!b} aria-label={`mantissa bit ${k}`} onclick={() => flip('mant', k)}>{b}</button>
+          <button class="bit m" class:one={b} aria-pressed={!!b} aria-label={t('mantissa bit {k}', { k })} onclick={() => flip('mant', k)}>{b}</button>
         {/each}
       </div>
     </div>
@@ -83,27 +115,27 @@
     {#if special === 'normal'}
       (−1)<sup>{bits.sign}</sup> × (1 + {bits.mant}/{2 ** F.M}) × 2<sup>{bits.exp} − {info.bias}</sup> = <b>{full(value)}</b>
     {:else if special === 'sub'}
-      exponent all 0s (a tiny “subnormal” number): (−1)<sup>{bits.sign}</sup> × {bits.mant}/{2 ** F.M} × 2<sup>{1 - info.bias}</sup> = <b>{full(value)}</b>
+      {t('exponent all 0s (a tiny “subnormal” number):')} (−1)<sup>{bits.sign}</sup> × {bits.mant}/{2 ** F.M} × 2<sup>{1 - info.bias}</sup> = <b>{full(value)}</b>
     {:else}
-      exponent all 1s: <b class="bad">{special === 'inf' ? (bits.sign ? '−inf' : 'inf') : 'nan'}</b>
+      {t('exponent all 1s:')} <b class="bad">{special === 'inf' ? (bits.sign ? '−inf' : 'inf') : 'nan'}</b>
     {/if}
   </div>
 
   <table class="facts">
     <tbody>
-      <tr><th>largest</th><td>{show(info.largest, 5)}</td><th>gap after 1</th><td>{show(info.gapAfter1, 3)}</td></tr>
-      <tr><th>smallest normal</th><td>{show(info.smallestNormal, 3)}</td><th>numbers in [1, 2)</th><td>{info.perOctave}</td></tr>
+      <tr><th>{t('largest')}</th><td>{show(info.largest, 5)}</td><th>{t('gap after 1')}</th><td>{show(info.gapAfter1, 3)}</td></tr>
+      <tr><th>{t('smallest normal')}</th><td>{show(info.smallestNormal, 3)}</td><th>{t('numbers in [1, 2)')}</th><td>{info.perOctave}</td></tr>
     </tbody>
   </table>
 
   {#snippet controls()}
     <div class="ctl">
-      <div class="fmts" role="group" aria-label="format">
+      <div class="fmts" role="group" aria-label={t('format')}>
         {#each Object.keys(FORMATS) as f}
           <button class="lab-btn fmt" class:on={fmt === f} aria-pressed={fmt === f} onclick={() => setFmt(f as Fmt)}>{f}</button>
         {/each}
       </div>
-      <label class="num">number <input type="text" inputmode="decimal" bind:value={text} oninput={onText} aria-label="number to store" /></label>
+      <label class="num">{t('number')} <input type="text" inputmode="decimal" bind:value={text} oninput={onText} aria-label={t('number to store')} /></label>
       <div class="presets">
         {#each PRESETS as [p, label]}
           <button class="lab-btn ghost" onclick={() => { text = String(p); store(p) }}>{label}</button>
@@ -114,20 +146,20 @@
 
   {#snippet readout()}
     {#if typed === null}
-      these bits mean {full(value)} in {fmt}
+      {t('these bits mean {v} in {fmt}', { v: full(value), fmt })}
     {:else if err === null}
-      {show(typed, 6)} in {fmt} → <b class="bad">{full(value)}</b>: too big or too small for this format
+      {show(typed, 6)} in {fmt} → <b class="bad">{full(value)}</b>: {t('too big or too small for this format')}
     {:else if err === 0}
-      {show(typed, 6)} in {fmt} → <b>{full(value)}</b>, stored exactly
+      {show(typed, 6)} in {fmt} → <b>{full(value)}</b>, {t('stored exactly')}
     {:else}
-      {show(typed, 6)} in {fmt} → <b>{full(value)}</b>, off by {show(err, 2)}
+      {show(typed, 6)} in {fmt} → <b>{full(value)}</b>, {t('off by {e}', { e: show(err, 2) })}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k s"></i>sign: 0 is +, 1 is −</span>
-    <span class="key"><i class="k e"></i>exponent: which power of 2</span>
-    <span class="key"><i class="k m"></i>mantissa: where between that power and the next</span>
+    <span class="key"><i class="k s"></i>{t('sign: 0 is +, 1 is −')}</span>
+    <span class="key"><i class="k e"></i>{t('exponent: which power of 2')}</span>
+    <span class="key"><i class="k m"></i>{t('mantissa: where between that power and the next')}</span>
   {/snippet}
 </LabFrame>
 

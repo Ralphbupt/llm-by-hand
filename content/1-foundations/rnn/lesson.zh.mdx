@@ -1,0 +1,167 @@
+---
+recap:
+  can:
+    - "手算一个 RNN：把输入和旧的隐藏状态混合起来，再取 tanh。"
+    - "解释为什么经过很多步后梯度会消失或爆炸：它是每一步一个因子的乘积。"
+    - "用 NumPy 写一个 RNN 循环，保留每一个隐藏状态，形状 (L, H)。"
+  keys:
+    - "$h_t = \\tanh(x_t \\, W_x + h_{t-1} \\, W_h + b)$，其中 $W_x$ 是 (D, H)，$W_h$ 是 (H, H)，b 是 (H,)"
+    - "每一步都用同样的 $W_x$、$W_h$ 和 $b$：权重的个数和序列长度无关"
+    - "往回走一步，梯度乘上 $w_h (1 - h^2)$；很多个这样的因子乘起来，会缩到 0 或变得非常大"
+  mistakes:
+    - "以为每一步都有新的权重：所有步共用一套权重。"
+    - "把因子加起来而不是乘起来：29 个 1.5 乘起来大约是 128,000，不是 45。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import RnnStepLab from '@viz/RnnStepLab.astro'
+import RnnGradLab from '@viz/RnnGradLab.astro'
+import MemoryLab from '@viz/MemoryLab.astro'
+import ArchLab from '@viz/ArchLab.astro'
+
+MLP 接收固定个数的输入。可是一个句子的长度不固定，词的顺序也很重要。
+**循环神经网络**（RNN）一次读序列里的一项。它把一小串数，也就是**隐藏状态**（hidden state）h，从一步带到下一步。
+网络就靠隐藏状态记住它到目前为止读过的东西。
+
+## 1. 一次一步
+
+每一步，网络把新的输入和隐藏状态混合起来，再让结果通过 tanh，把它保持在 −1 和 1 之间：
+
+$$
+h_t = \tanh(w_x \, x_t + w_h \, h_{t-1} + b)
+$$
+
+下面的隐藏状态只是一个数。序列是 1、0、0、0，h 从 0 开始。按**下一步**来运行它。
+
+<RnnStepLab hide={[{ id: "h1", t: 1 }, { id: "h2", t: 2 }]} />
+
+<Blank id="h1" />
+
+<Gate requires="h1">
+
+从第 2 步开始，输入是 0。唯一把那个 1 往前带的，是 $w_h \, h_{t-1}$。
+
+<Blank id="h2" />
+
+<Gate requires="h2">
+
+每一步大约保留原来的一半，所以第 1 步的那个 1 越来越小：0.76、0.36、0.18、0.09。
+
+<Blank id="weights" />
+
+<Stuck q="是不是每一步都有一个单独的网络？">
+
+不是。图里常常把网络画成每一步复制一份，并排放着。这种画法叫**展开**（unrolling），
+它有助于看清数据怎么流动。但每一份副本用的都是同样的 $w_x$、$w_h$ 和 $b$。在这个实验台里，4 步的序列和 4,000 步的序列
+用的是同样的 3 个权重。换成向量，就是同样的 3 个矩阵。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 2. 随时间训练
+
+<Gate requires="weights">
+
+要训练这个网络，最后一步的损失必须告诉第 1 步该改什么。反向传播沿着展开的各步往回走。
+每一步它都乘上同一类因子：$w_h$ 乘上 tanh 在那里的斜率，也就是 $1 - h^2$。
+
+$$
+\frac{\partial h_4}{\partial h_1} = \big(w_h (1 - h_2^2)\big)\big(w_h (1 - h_3^2)\big)\big(w_h (1 - h_4^2)\big)
+$$
+
+<Predict id="grad-4" />
+
+下一题去掉了 tanh，所以每个因子就只是 $w_h$。
+
+<Predict id="explode" />
+
+<RnnGradLab />
+
+每个因子是 $w_h$ 乘上一个 tanh 斜率，而斜率 $1 - h^2$ 总是在 0 和 1 之间。
+
+- 如果 $|w_h|$ 小于 1，每个因子都小于 1，一长串乘积就会缩向 0。
+  这就是**梯度消失**：最前面的几步几乎收不到训练信号。
+- 如果 $|w_h|$ 远大于 1，因子可能一直大于 1，乘积就会变得非常大：这是**梯度爆炸**。
+  tanh 挡不住这一点。它只在 h 接近 ±1 的地方有帮助，因为那里斜率接近 0。
+
+不管哪种情况，很多个因子的乘积几乎从不会停在 1 附近。上面那道 `explode` 题去掉了 tanh，好让
+算术简单些；但只要 $w_h (1 - h^2)$ 一直大于 1，加上 tanh 后梯度也会同样地变大。
+
+<Deeper title="梯度爆炸好治，梯度消失难治">
+
+梯度爆炸有一个简单的办法：如果梯度的长度超过某个上限，就把它缩小到这个上限。
+这叫**梯度裁剪**（gradient clipping），[`demo.py`](/files/rnn/demo.py) 就用了它（`clip_grad_norm_(…, 1.0)`）。
+
+梯度消失没有这样的办法。把 1e-9 这样的数放大，也会同样放大来自其他每一步的噪声。
+关于第 1 步的信息在往回传的路上就已经丢了。解决办法必须改变网络本身。那是支线 N4 的内容。
+
+</Deeper>
+
+下面把同一条链画成网络：序列 1、0、0、0，$w_x = 1$，$w_h = 0.5$，$b = 0$，和第 1 节的实验台一样。
+
+<ArchLab which="rnn" />
+
+</Gate>
+
+## 3. 记住第一个符号
+
+<Gate requires="explode">
+
+这里有一个网络必须记住东西的任务。一个序列以 A 或 B 开头，后面跟着 k − 1 个随机的额外符号（c、d 或 e）。
+到最后，网络必须说出第一个符号是哪个。瞎猜能得 50%。
+
+<Predict id="k40" />
+
+<MemoryLab kinds={["rnn"]} />
+
+k 到 20 为止，RNN 都能完美地学会这个任务。到 k = 40，它就停在瞎猜的水平，尽管规则一样简单。
+
+<Stuck q="为什么不训练得更久一些，或者用更大的学习率？">
+
+本该传到第 1 步的训练信号，是 39 个因子的乘积，每个都远小于 1。它比
+来自末尾那些随机符号的噪声小得多。更多的步数或更大的学习率，会把那些噪声放大同样多。
+网络永远“听不到”第 1 步很重要。
+
+</Stuck>
+
+<TryIt>
+
+在单步实验台里，把 $w_h$ 设成 1，跑完全部 4 步。现在那个 1 缩小得慢多了。再把 $w_h$ 设成 −1。每一步 h 的符号会怎样？
+
+</TryIt>
+
+## 4. 自己写一遍
+
+换成向量，x 是一串 D 个数，h 是一串 H 个数。和第 1 关以来的每一关一样，向量是行，
+一层就是“行 @ 矩阵”：
+
+$$
+h_t = \tanh(x_t \, W_x + h_{t-1} \, W_h + b)
+$$
+
+所以 $W_x$ 是 (D, H)：它把 D 个输入数变成 H 个。$W_h$ 是 (H, H)，b 有 H 个数。写成代码就是
+`x @ Wx + h @ Wh + b`。隐藏状态只有一个数时，$x_t W_x$ 就是 $w_x x_t$，也就是第 1 节的公式。
+
+写出循环里的那一行。
+
+<CodeBlank id="rnn-step" />
+
+<Gate requires="rnn-step">
+
+`rnn` 只保留最后一个 h。你常常需要每一步之后的隐藏状态，比如之后要把整个序列再读一遍
+（支线 N5 就是这样做的）。把它们收集到一个列表里：先写 `hs = []`，每次更新之后调用 `hs.append(h)`。
+最后，`np.stack(hs)` 把 L 行、每行 H 个数的列表变成一个形状为 (L, H) 的数组。
+
+<CodeBlank id="rnn-all" />
+
+</Gate>
+
+</Gate>

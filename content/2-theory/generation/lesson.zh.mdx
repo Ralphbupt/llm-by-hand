@@ -1,0 +1,289 @@
+---
+recap:
+  can:
+    - "用贪心、温度、top-k 或 top-p 把分数变成下一个词，并手算保留下来的概率。"
+    - "在束搜索里给整句打分，看出它什么时候比贪心好。"
+    - "数一数 KV 缓存省下多少工作：每一步只算一个新的 q、k、v，而不是全部重算。"
+  keys:
+    - "温度：对 `scores / T` 做 softmax；T 小会让分布更尖，T 大会让它更平"
+    - "top-k 和 top-p：先去掉一些词，再把留下的词除以它们的总和，让它们加起来等于 1"
+    - "top-p 保留一个词的条件是：排在它前面的词加起来小于 p，即 `cum - sorted_p < p`"
+    - "整句的概率 = 各个词的概率相乘；代码里改成把 ln 值相加"
+    - "写 n 个 token 时 k 的计算次数：没有缓存是 $1 + 2 + \\dots + n = \\tfrac{n(n+1)}{2}$，有缓存是 $n$"
+  mistakes:
+    - "截断之后忘了除以新的总和，留下的概率加起来不等于 1。"
+    - "在 top-p 里丢掉了越过 p 的那个词（写成 `cum < p`，而不是 `cum - sorted_p < p`）。"
+---
+import Blank from '@quiz/Blank.astro'
+import CodeBlank from '@quiz/CodeBlank.astro'
+import Predict from '@quiz/Predict.astro'
+import Gate from '@quiz/Gate.astro'
+import Deeper from '@text/Deeper.astro'
+import Stuck from '@text/Stuck.astro'
+import TryIt from '@text/TryIt.astro'
+import PickLab from '@viz/PickLab.astro'
+import BeamLab from '@viz/BeamLab.astro'
+import RepeatLab from '@viz/RepeatLab.astro'
+import TradeoffLab from '@viz/TradeoffLab.astro'
+
+第 17 关总是取分数最高的那个词（贪心）。这一关讲其他几种挑法。
+模型的工作到“给词表里每个词一个分数”就结束了。把这些分数变成下一个词，是另一个决定，而且它对文本影响很大。
+同一个模型可以写出平平常常的文字，也可以写出乱七八糟的文字，还可以一遍又一遍地写同样的词，
+区别只在于你怎么挑。
+
+这一关从头到尾只用一个小例子：在“the cat sat on the”之后，有五个候选词，分数如下。
+
+| 词 | mat | sofa | rug | roof | moon |
+|---|---|---|---|---|---|
+| 分数 | 2.0 | 1.5 | 1.0 | 0.0 | −1.0 |
+
+## 1. 贪心：总是取最好的词
+
+最简单的规则：用 softmax（第 10 关）把分数变成概率，取最可能的那个词。
+完全没有随机性。★ 标出贪心挑的词。
+
+<PickLab hide={{ prob: "greedy-p", renorm: "top2-sofa", cum: "topp-count" }} />
+
+<Blank id="greedy-p" />
+
+<Gate requires="greedy-p">
+
+第 10 关的温度在这里照样能用：在 softmax 之前，把每个分数都除以 T。
+T 小会让概率更尖，T 大会让概率更平。
+
+<Predict id="t-zero" />
+
+</Gate>
+
+## 2. top-k：只有最好的 k 个词有机会
+
+从全部五个词里采样，意味着“moon”有时会被选中。词表有 50,000 个词时，不太可能的词有好几千个。
+它们加在一起的概率并不小，所以有时会选中其中一个，句子就说不通了。
+
+**top-k** 只保留最可能的 k 个词，把其余的设为 0，再除以新的总和，让保留下来的概率重新加起来等于 1。
+然后再采样。把实验台切换到“top-k”。
+
+<Gate requires="t-zero">
+
+<Blank id="top2-sofa" />
+
+<Stuck q="去掉一些词之后，为什么还要再除一次？">
+
+保留下来的概率加起来不再等于 1。k = 2 时，mat 和 sofa 加起来大约是 0.46 + 0.28 = 0.74。
+按权重随机挑选时，权重必须加起来等于 1，所以每个都除以 0.7439。顺序不变，
+只是比例变了。
+
+</Stuck>
+
+</Gate>
+
+## 3. top-p：保留词，直到它们覆盖 p 的概率
+
+固定的 k 并不适合所有情况。在“the cat sat on the”之后，也许有十个词都说得通。在“2 + 2 =”之后，只有一个。
+**top-p**（也叫核采样，nucleus sampling）会自己调整：
+
+1. 把词按概率排序，最大的在前。
+2. 沿着列表往下走。如果排在一个词*前面*的词加起来小于 p，就保留这个词。
+   所以让总和越过 p 的那个词仍然保留，它后面的词全部去掉。
+3. 把保留的词除以它们新的总和。
+
+把实验台切换到“top-p”，p = 0.9。
+
+<Gate requires="top2-sofa">
+
+<Blank id="topp-count" />
+
+现在把它写出来。`np.argsort(-probs)` 给出按可能性从高到低排列的词的下标，`np.cumsum` 给出累计和：
+`np.cumsum([0.5, 0.3, 0.2])` 是 `[0.5, 0.8, 1.0]`。一个词*前面*那些词的总和，就是它的累计和
+减去它自己的概率。
+
+<CodeBlank id="topp-code" />
+
+</Gate>
+
+## 4. 束搜索：最好的词不一定是最好的开头
+
+贪心在每一步挑最好的*词*。这并不能得到最好的*句子*。下面是一棵两步的树。
+第一个词是 a、the 或 one；每个词后面的第二个词有各自的概率。
+
+<Gate requires="topp-code">
+
+<Blank id="beam-greedy" />
+
+<Predict id="beam-wider" />
+
+<Gate requires="beam-wider">
+
+**束搜索**（beam search）在每一步保留 `width` 个最好的半句，而不是只留一个；
+把每个半句都往下延伸一步，再保留最好的 `width` 个。宽度为 1 就是贪心。
+
+<BeamLab hide="beam-best" />
+
+<Blank id="beam-best" />
+
+</Gate>
+
+<Gate requires="beam-best">
+
+<Deeper title="在代码里，束搜索把对数相加，而不是相乘">
+
+一句话的概率是许多小于 1 的数的乘积。一个 100 个词的句子，如果每个词的 p = 0.1，
+它的概率就是 10⁻¹⁰⁰。模型用 32 位数计算，在 32 位数里这已经正好是 0 了（最小的大约是 10⁻⁴⁵）。
+最小的正常 64 位数大约是 10⁻³⁰⁸，再多几百个词就到了。一旦乘积变成 0，
+所有句子的得分就都一样了。
+
+所以束搜索改成把自然对数（ln）相加：ln(a × b) = ln a + ln b。那个 100 个词的句子得分是
+100 × ln 0.1 ≈ −230.3，一个普通的数。比较这些和，给句子排出的顺序和比较乘积完全一样。
+
+</Deeper>
+
+<Deeper title="为什么聊天模型很少用束搜索">
+
+束搜索找的是模型认为非常可能的句子。翻译时，正确答案大致只有一个，这正是你想要的。
+但用在开放式写作上，效果很差：最可能的文本又短、又平淡、又重复，
+因为“安全”的常用词总是得分很高。它还需要 `width` 倍的计算量。
+
+还有第二个问题：句子越长，乘的小于 1 的数越多，所以束搜索倾向于早早结束。
+实现时会把对数之和除以长度来弥补。
+
+</Deeper>
+
+</Gate>
+
+</Gate>
+
+## 5. 为什么贪心会重复自己
+
+现在换一个真正的模型，分三步搭起来：
+
+1. **规则。** 句子都遵循一个模式：“the ⟨动物⟩ ⟨动词⟩ ⟨on 或 in⟩ the ⟨地点⟩ .”，其中 cat、sat、on 和 mat 比其他选择更常见。
+2. **文本。** `demo.py` 按这些规则写出 3,000 个句子（21,000 个词）。
+3. **模型。** 最简单的语言模型：它看最后两个词，每个下一个词的概率，就是在文本里这个词跟在这两个词后面的频率。每次预测都拿出 4% 平分给全部 14 个词，所以在那里从没出现过的词也有可能出现，只是很少。
+
+<Gate requires="beam-best">
+
+<Predict id="repeat-predict" />
+
+<Gate requires="repeat-predict">
+
+<RepeatLab hide="penalty-cat" />
+
+贪心写出最常见的那个句子，然后又回到“. the”，正好是它出发的地方。
+同样的输入，同样的选择，永远循环下去。真实的模型也会这样循环，只是周期更长。
+
+**重复惩罚**（repetition penalty）会降低已经写过的词的分数。这里的版本是：词每被用过一次，就减去一个固定的量：
+分数 = ln p − 惩罚 × （写过的次数）。这种按次数计算的版本通常叫频率惩罚（frequency penalty）。
+另一种常见的版本是：不管一个词出现过多少次，只降低一次它的分数。把惩罚拖到 1.0，再选中
+第二个“cat”/“dog”的位置。
+
+<Blank id="penalty-cat" />
+
+<Stuck q="既然惩罚能解决循环，为什么不把它设得很大？">
+
+因为它会降低每个重复的词的分数，包括句子必须用到的那些词。在我们的规则里，“the”和“.”在每个句子里都必须出现。
+把惩罚推到 3，看看实验台：规则开始被打破了。
+实际中惩罚都设得很小，避免循环的工作主要靠采样（第 2 节和第 3 节）来做。
+
+</Stuck>
+
+</Gate>
+
+</Gate>
+
+## 6. 多样性与质量
+
+句子规则是我们自己定的，所以可以精确地给模型的输出打分：每个词都在规则允许的位置上吗？
+下面，每种策略都在“the”之后写 200 个六词的续写。
+
+<Gate requires="penalty-cat">
+
+<Predict id="tradeoff-predict" />
+
+<Gate requires="tradeoff-predict">
+
+<TradeoffLab />
+
+来自 `demo.py`（随机数是固定的，所以这些数不会变）：
+
+| 策略 | 不同的续写（共 200 个） | 符合规则 |
+|---|---|---|
+| 贪心 | 1 | 100% |
+| T = 0.5 | 47 | 100% |
+| T = 1 | 96 | 81% |
+| T = 2 | 192 | 20% |
+| top-k 3 | 53 | 98% |
+| top-p 0.9 | 62 | 100% |
+
+贪心完全正确，但只会说一句话。高温度什么都说，但大多是错的。top-p 保留所有
+说得通的词，去掉大量不太可能的词，所以它是常用的默认设置，通常还会配上一个略低于 1 的温度。
+
+<TryIt>
+
+在实验台上找一个设置：不同的续写超过 100 个，并且至少 95% 符合规则。
+在这里能做到吗？哪个设置最接近？
+
+</TryIt>
+
+<Blank id="topp-trigram" />
+
+</Gate>
+
+</Gate>
+
+## 7. 写作是一个循环
+
+这一页上的每种策略都在同一个循环里运行：用模型处理到目前为止写下的所有内容，挑一个 token，
+把它接上去，再运行一次。token 从 0 开始数。如果写得很朴素，预测第 100 个 token 的那一步会把
+第 0 到第 99 个 token 的工作全部重算一遍，而这些工作前面的步骤早就做过了。
+
+其中大部分都不需要重做。在带因果掩码的模型里（第 15 关），每个 token 的 k 和 v 只取决于它自己和它前面的 token，
+而这些 token 一旦写下就不会再变。所以真实的模型在算出每个 token 的 k 和 v 时就把它们存起来，存在
+**KV 缓存**（KV cache）里。之后每一步只把最新的 token 交给模型，只算这个 token 的 q、k 和 v。
+
+看一个小例子。模型已经处理过 token 0、1 和 2，它们的 k 和 v 都在缓存里。
+模型刚刚挑出了 token 3。为了预测 token 4，它把 token 3 交给模型。
+
+| | 没有缓存 | 有缓存 |
+|---|---|---|
+| 交给模型的 token | 0、1、2、3 | 3 |
+| 要算 q 的 | 4 个 token | 1 个 token |
+| 要算 k 和 v 的 | 4 个 token | 1 个 token，另外 3 行来自缓存 |
+| 分数 | 4 × 4，但只用最后一行 | 1 × 4：正好是最后那一行 |
+
+<Gate requires="topp-trigram">
+
+<Blank id="q-rows" />
+
+<Gate requires="q-rows">
+
+没有缓存时，每多一个 token，工作量就多一些。一个一个地写出 token 0 到 99，要先算 1 个 token 的 k，
+然后 2 个，然后 3 个，依此类推，一直到 100 个。
+
+<Blank id="kv-total" />
+
+</Gate>
+
+<Gate requires="kv-total">
+
+<Blank id="kv-new" />
+
+[第 20 关](/learn/inference-cost/)会告诉你这个缓存有多大，以及模型缩小它的一种方法。
+
+</Gate>
+
+</Gate>
+
+<Gate requires="kv-new">
+
+## 8. 合在一起
+
+一个真实的采样器会把这一页的两样工具组合起来：把分数除以温度（第 10 关），只保留前 k 个，
+再把结果变成加起来等于 1 的概率。`np.sort(x)[::-1]` 从大到小排序，所以
+`np.sort(x)[::-1][k - 1]` 就是第 k 大的分数。和第 15 关的掩码一样，`np.where(cond, a, b)` 在
+`cond` 为 True 的地方取 a，其他地方都取 b；分数为 −∞ 的词在 softmax 之后概率是 0。
+
+<CodeBlank id="filter-code" />
+
+这就是从分数到文本的完整路径。[第 19 关](/learn/modern-llm/)回到块本身：看看如今的模型改了它的哪三个部分。
+
+</Gate>

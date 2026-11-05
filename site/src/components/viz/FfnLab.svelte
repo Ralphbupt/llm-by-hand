@@ -7,6 +7,25 @@
   import MatrixGrid from './MatrixGrid.svelte'
   import VectorCanvas from './VectorCanvas.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'The feed-forward network works on one word at a time': '前馈网络一次只处理一个词',
+    'Move a word and watch which hidden units become nonzero. Point at or tap a row to follow one word.': '移动一个词，看哪些隐藏单元变成非零。把鼠标指向某一行（手机上点一下），跟踪这一个词。',
+    'hidden units after ReLU': 'ReLU 之后的隐藏单元',
+    'hidden units after ReLU (3, 4)': 'ReLU 之后的隐藏单元 (3, 4)',
+    '{w}: {n} of 4 units on': '{w}：4 个单元中有 {n} 个开着',
+    'unit {j}: {v} before ReLU': '单元 {j}：ReLU 之前是 {v}',
+    '{n} on': '{n} 个开',
+    'output (3, 2)': '输出 (3, 2)',
+    '{w}: before ReLU [{a}], after [{b}]. Only this row’s numbers were used.': '{w}：ReLU 之前 [{a}]，之后 [{b}]。只用到了这一行自己的数。',
+    'Point at or tap a word. A unit is on when its number before ReLU is above 0; ReLU turns everything else into 0.': '把鼠标指向一个词（手机上点一下）。ReLU 之前的数大于 0，这个单元就是开的；其余的都被 ReLU 变成 0。',
+    'unit on (above 0 before ReLU)': '单元开（ReLU 之前大于 0）',
+    'unit off (ReLU made it 0)': '单元关（被 ReLU 变成 0）',
+  })
 
   const words = ['cat', 'dog', 'car']
   const X0 = [[2, 0], [1, 1], [0, 2]]
@@ -25,8 +44,8 @@
 </script>
 
 <LabFrame
-  title="The feed-forward network works on one word at a time"
-  hint="Move a word and watch which hidden units become nonzero. Point at or tap a row to follow one word."
+  title={t('The feed-forward network works on one word at a time')}
+  hint={t('Move a word and watch which hidden units become nonzero. Point at or tap a row to follow one word.')}
   onreset={() => { X = X0.map((r) => [...r]); word = null }}
   resetDisabled={!changed}
 >
@@ -37,35 +56,35 @@
     </div>
     <div class="col">
       <MatrixGrid value={X} label="X (3, 2)" rowLabels={words} hiRows={hi} onhover={(c) => (word = c?.i ?? null)} />
-      <div class="units" onpointerleave={() => (word = null)} role="group" aria-label="hidden units after ReLU">
-        <div class="label">hidden units after ReLU (3, 4)</div>
+      <div class="units" onpointerleave={() => (word = null)} role="group" aria-label={t('hidden units after ReLU')}>
+        <div class="label">{t('hidden units after ReLU (3, 4)')}</div>
         {#each H as row, i}
           <div class="urow" class:hi={word === i} onpointerenter={() => (word = i)} onfocus={() => (word = i)} onclick={() => (word = i)}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); word = i } }}
-            role="button" tabindex="0" aria-label={`${words[i]}: ${row.filter((v) => v > 0).length} of 4 units on`}>
+            role="button" tabindex="0" aria-label={t('{w}: {n} of 4 units on', { w: words[i], n: row.filter((v) => v > 0).length })}>
             <span class="w">{words[i]}</span>
             {#each row as v, j}
-              <span class="u" class:on={v > 0} title={`unit ${j}: ${f(pre[i][j])} before ReLU`}>{f(v)}</span>
+              <span class="u" class:on={v > 0} title={t('unit {j}: {v} before ReLU', { j, v: f(pre[i][j]) })}>{f(v)}</span>
             {/each}
-            <span class="n">{row.filter((v) => v > 0).length} on</span>
+            <span class="n">{t('{n} on', { n: row.filter((v) => v > 0).length })}</span>
           </div>
         {/each}
       </div>
-      <MatrixGrid value={out} label="output (3, 2)" rowLabels={words} hiRows={hi} />
+      <MatrixGrid value={out} label={t('output (3, 2)')} rowLabels={words} hiRows={hi} />
     </div>
   </div>
 
   {#snippet readout()}
     {#if word !== null}
-      {words[word]}: before ReLU [{pre[word].map(f).join(', ')}], after [{H[word].map(f).join(', ')}]. Only this row’s numbers were used.
+      {t('{w}: before ReLU [{a}], after [{b}]. Only this row’s numbers were used.', { w: words[word], a: pre[word].map(f).join(', '), b: H[word].map(f).join(', ') })}
     {:else}
-      <span class="idle">Point at or tap a word. A unit is on when its number before ReLU is above 0; ReLU turns everything else into 0.</span>
+      <span class="idle">{t('Point at or tap a word. A unit is on when its number before ReLU is above 0; ReLU turns everything else into 0.')}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="on"></i>unit on (above 0 before ReLU)</span>
-    <span class="key"><i></i>unit off (ReLU made it 0)</span>
+    <span class="key"><i class="on"></i>{t('unit on (above 0 before ReLU)')}</span>
+    <span class="key"><i></i>{t('unit off (ReLU made it 0)')}</span>
   {/snippet}
 </LabFrame>
 

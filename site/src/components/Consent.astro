@@ -9,6 +9,8 @@
 <script>
   import { getConsent, initAnalytics, setConsent } from '@lib/analytics'
   import { watchAnalytics } from '@lib/analyticsWatch'
+  import { pageLang, translator } from '@lib/i18n'
+  const t = translator(pageLang())
 
   initAnalytics()
   watchAnalytics()
@@ -18,11 +20,11 @@
     const bar = document.createElement('div')
     bar.className = 'consent-bar'
     bar.setAttribute('role', 'region')
-    bar.setAttribute('aria-label', 'Analytics')
+    bar.setAttribute('aria-label', t('Analytics'))
     bar.innerHTML =
-      '<p>May we count visits with Google Analytics, to see which levels help? No ads, nothing you type is sent, and you can change this in Settings.</p>' +
-      '<div class="consent-acts"><button type="button" data-consent="granted">Allow</button>' +
-      '<button type="button" data-consent="denied">No thanks</button></div>'
+      `<p>${t('May we count visits with Google Analytics, to see which levels help? No ads, nothing you type is sent, and you can change this in Settings.')}</p>` +
+      `<div class="consent-acts"><button type="button" data-consent="granted">${t('Allow')}</button>` +
+      `<button type="button" data-consent="denied">${t('No thanks')}</button></div>`
     bar.addEventListener('click', (e) => {
       const v = (e.target as HTMLElement).closest<HTMLElement>('[data-consent]')?.dataset.consent
       if (v !== 'granted' && v !== 'denied') return

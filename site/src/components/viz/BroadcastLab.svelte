@@ -5,14 +5,34 @@
    * Point at, tap or focus a result cell to see which two numbers made it.
    */
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'A is stretched to the right, B is stretched down.': 'A 向右拉伸，B 向下拉伸。',
+    'The same row is added to every row of A.': '同一行加到 A 的每一行上。',
+    'Each row of A gets its own number.': 'A 的每一行各加一个自己的数。',
+    'mask': '掩码',
+    'One mask row (the last word is padding) blocks that column for every row.': '一行掩码（最后一个词是填充）把每一行的这一列都挡住了。',
+    'Neither size is 1 and they differ: 2 vs 3. Broadcasting fails.': '两个大小都不是 1，而且不相等：2 和 3。广播失败。',
+    'Broadcasting: stretch, then add': '广播：先拉伸，再相加',
+    'Pick a case, then point at or tap a cell of the result.': '选一个例子，然后指向或点一下结果里的某一格。',
+    'result': '结果',
+    'result row {i}, column {j}': '结果第 {i} 行第 {j} 列',
+    'Error: {a} and {b} don’t match, and neither is 1.': '报错：{a} 和 {b} 不相等，也都不是 1。',
+    'stretched copy, not stored': '拉伸出来的副本，并没有存下来',
+    'the cell you picked and the two numbers that made it': '你选的那一格，和算出它的两个数',
+  })
   type Case = { name: string; a: number[][]; b: number[][]; bLabel?: string; note: string }
   const col = (v: number[]) => v.map((x) => [x])
   const CASES: Case[] = [
-    { name: '(4,1) + (1,5)', a: col([0, 1, 2, 3]), b: [[0, 10, 20, 30, 40]], note: 'A is stretched to the right, B is stretched down.' },
-    { name: '(3,4) + (1,4)', a: [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]], b: [[100, 200, 300, 400]], note: 'The same row is added to every row of A.' },
-    { name: '(3,4) + (3,1)', a: [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]], b: col([100, 200, 300]), note: 'Each row of A gets its own number.' },
-    { name: 'mask (1,4) → (4,4)', a: [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]], b: [[0, 0, 0, -99]], bLabel: 'mask', note: 'One mask row (the last word is padding) blocks that column for every row.' },
-    { name: '(3,2) + (1,3)', a: [[1, 2], [3, 4], [5, 6]], b: [[10, 20, 30]], note: 'Neither size is 1 and they differ: 2 vs 3. Broadcasting fails.' },
+    { name: '(4,1) + (1,5)', a: col([0, 1, 2, 3]), b: [[0, 10, 20, 30, 40]], note: t('A is stretched to the right, B is stretched down.') },
+    { name: '(3,4) + (1,4)', a: [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]], b: [[100, 200, 300, 400]], note: t('The same row is added to every row of A.') },
+    { name: '(3,4) + (3,1)', a: [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]], b: col([100, 200, 300]), note: t('Each row of A gets its own number.') },
+    { name: `${t('mask')} (1,4) → (4,4)`, a: [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]], b: [[0, 0, 0, -99]], bLabel: t('mask'), note: t('One mask row (the last word is padding) blocks that column for every row.') },
+    { name: '(3,2) + (1,3)', a: [[1, 2], [3, 4], [5, 6]], b: [[10, 20, 30]], note: t('Neither size is 1 and they differ: 2 vs 3. Broadcasting fails.') },
   ]
   let k = $state(0)
   let cell = $state<{ i: number; j: number } | null>(null)
@@ -30,7 +50,7 @@
     !!cell && (m.length === 1 || i === cell.i) && (m[0].length === 1 || j === cell.j) && (m.length === 1 ? i === 0 : true) && (m[0].length === 1 ? j === 0 : true)
 </script>
 
-<LabFrame title="Broadcasting: stretch, then add" hint="Pick a case, then point at or tap a cell of the result.">
+<LabFrame title={t('Broadcasting: stretch, then add')} hint={t('Pick a case, then point at or tap a cell of the result.')}>
   {#if ok}
     <div class="row">
       <div class="m">
@@ -56,13 +76,13 @@
       </div>
       <span class="op">=</span>
       <div class="m">
-        <div class="lbl">result ({R}, {C})</div>
+        <div class="lbl">{t('result')} ({R}, {C})</div>
         <table onpointerleave={() => (cell = null)}>
           <tbody>
             {#each Array(R) as _, i}
               <tr>{#each Array(C) as _, j}
                 <td class="res" class:hi={cell && cell.i === i && cell.j === j} tabindex="0"
-                  aria-label={`result row ${i}, column ${j}`}
+                  aria-label={t('result row {i}, column {j}', { i, j })}
                   onpointerenter={() => (cell = { i, j })} onclick={() => (cell = { i, j })} onfocus={() => (cell = { i, j })}>{at(c.a, i, j) + at(c.b, i, j)}</td>
               {/each}</tr>
             {/each}
@@ -77,7 +97,7 @@
       <span class="op">+</span>
       <div class="m"><div class="lbl">B ({rb}, {cb})</div>
         <table><tbody>{#each c.b as r}<tr>{#each r as v}<td>{v}</td>{/each}</tr>{/each}</tbody></table></div>
-      <span class="bad">Error: {ca} and {cb} don’t match, and neither is 1.</span>
+      <span class="bad">{t('Error: {a} and {b} don’t match, and neither is 1.', { a: ca, b: cb })}</span>
     </div>
   {/if}
 
@@ -89,15 +109,15 @@
 
   {#snippet readout()}
     {#if cell && ok}
-      result[{cell.i}][{cell.j}] = A[{ra === 1 ? 0 : cell.i}][{ca === 1 ? 0 : cell.j}] + {c.bLabel ?? 'B'}[{rb === 1 ? 0 : cell.i}][{cb === 1 ? 0 : cell.j}] = {at(c.a, cell.i, cell.j)} + {at(c.b, cell.i, cell.j)} = <b>{at(c.a, cell.i, cell.j) + at(c.b, cell.i, cell.j)}</b>
+      {t('result')}[{cell.i}][{cell.j}] = A[{ra === 1 ? 0 : cell.i}][{ca === 1 ? 0 : cell.j}] + {c.bLabel ?? 'B'}[{rb === 1 ? 0 : cell.i}][{cb === 1 ? 0 : cell.j}] = {at(c.a, cell.i, cell.j)} + {at(c.b, cell.i, cell.j)} = <b>{at(c.a, cell.i, cell.j) + at(c.b, cell.i, cell.j)}</b>
     {:else}
       <span class="idle">{c.note}</span>
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k-ghost"></i>stretched copy, not stored</span>
-    <span class="key"><i class="k-hi"></i>the cell you picked and the two numbers that made it</span>
+    <span class="key"><i class="k-ghost"></i>{t('stretched copy, not stored')}</span>
+    <span class="key"><i class="k-hi"></i>{t('the cell you picked and the two numbers that made it')}</span>
   {/snippet}
 </LabFrame>
 

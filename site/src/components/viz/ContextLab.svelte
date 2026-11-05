@@ -7,9 +7,23 @@
   import { onMount } from 'svelte'
   import { has, subscribe } from '@lib/progress'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // A value that a question on the page asks for stays "?" until that question is solved.
-  let { hide = {} }: { hide?: Record<string, string | undefined> } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: Record<string, string | undefined>; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'fruit': '水果',
+    'tech': '科技',
+    'sweet': '甜',
+    'action': '动作',
+    'Same word, two sentences': '同一个词，两句话',
+    'Check the box to average every word in the sentence with equal weights, a simple first version of attention.': '勾选方框，把句子里的每个词按相等的权重平均。这是注意力的一个简单的初版。',
+    'Average with the neighbors (equal weights)': '和邻居取平均（权重相等）',
+    'Now “apple” leans toward fruit in the first sentence and toward tech in the second. Level 14 replaces equal weights with weights the model computes.': '现在“apple”在第一句里偏向水果，在第二句里偏向科技。第 14 关会把相等的权重换成模型自己算出来的权重。',
+    'With a lookup table, “apple” gets exactly the same vector in both sentences: fruit 1, tech 1.': '用查找表时，“apple”在两句话里得到完全相同的向量：水果 1，科技 1。',
+  })
   let solved = $state<Record<string, boolean>>({})
   onMount(() => {
     const sync = () => {
@@ -37,8 +51,8 @@
 </script>
 
 <LabFrame
-  title="Same word, two sentences"
-  hint="Check the box to average every word in the sentence with equal weights, a simple first version of attention."
+  title={t('Same word, two sentences')}
+  hint={t('Check the box to average every word in the sentence with equal weights, a simple first version of attention.')}
   onreset={() => (mix = false)}
   resetDisabled={!mix}
 >
@@ -48,7 +62,7 @@
       <div class="card">
         <p class="sent">{#each s as w, i}{i ? ' ' : ''}<span class:apple={w === 'apple'}>{w}</span>{/each}</p>
         <table>
-          <thead><tr><th></th>{#each DIMS as d}<th>{d}</th>{/each}</tr></thead>
+          <thead><tr><th></th>{#each DIMS as d}<th>{t(d)}</th>{/each}</tr></thead>
           <tbody>
             {#each s as w}
               <tr class:apple={w === 'apple'}><td>{w}</td>{#each VOCAB[w] as v}<td>{v}</td>{/each}</tr>
@@ -61,14 +75,14 @@
   </div>
 
   {#snippet controls()}
-    <label class="tog"><input type="checkbox" bind:checked={mix} /> Average with the neighbors (equal weights)</label>
+    <label class="tog"><input type="checkbox" bind:checked={mix} /> {t('Average with the neighbors (equal weights)')}</label>
   {/snippet}
 
   {#snippet readout()}
     {#if mix}
-      Now “apple” leans toward fruit in the first sentence and toward tech in the second. Level 14 replaces equal weights with weights the model computes.
+      {t('Now “apple” leans toward fruit in the first sentence and toward tech in the second. Level 14 replaces equal weights with weights the model computes.')}
     {:else}
-      With a lookup table, “apple” gets exactly the same vector in both sentences: fruit 1, tech 1.
+      {t('With a lookup table, “apple” gets exactly the same vector in both sentences: fruit 1, tech 1.')}
     {/if}
   {/snippet}
 </LabFrame>

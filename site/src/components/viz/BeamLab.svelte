@@ -7,9 +7,38 @@
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
   import { has, subscribe } from '@lib/progress'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // sequence totals stay "?" until the question about the best sequence is solved
-  let { hide }: { hide?: string } = $props()
+  let { hide, lang = 'en' }: { hide?: string; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'Beam search: keep the best few partial answers': '束搜索：保留最好的几个半句',
+    'Choose a beam width, then press Next step to keep the best first words and then the best two-word sequence.': '选一个束宽度，然后按“下一步”：先保留最好的几个第一个词，再保留最好的两词序列。',
+    'Beam search tree: first words, then two-word sequences, with the kept beams highlighted': '束搜索树：第一个词，然后是两词序列，保留下来的束被高亮',
+    'start': '开始',
+    'first word': '第一个词',
+    'second word': '第二个词',
+    'p(seq.)': 'p(序列)',
+    'p(sequence)': 'p(序列)',
+    'dropped': '已丢弃',
+    'Beam width': '束宽度',
+    'beam width': '束宽度',
+    ' (greedy)': '（贪心）',
+    '‹ Back': '‹ 上一步',
+    'Next step ›': '下一步 ›',
+    'Press “Next step”. Beam width {w} keeps the {w} most likely first word.': '按“下一步”。束宽度为 {w} 时，保留最可能的 {w} 个第一个词。',
+    'Press “Next step”. Beam width {w} keeps the {w} most likely first words.': '按“下一步”。束宽度为 {w} 时，保留最可能的 {w} 个第一个词。',
+    'Kept:': '保留：',
+    '. The others are dropped and never come back. Next: try every second word after each kept one.': '。其他的被丢弃，再也不会回来。下一步：在每个保留的词后面试遍所有第二个词。',
+    'Best kept sequence:': '保留下来的最好序列：',
+    'Greedy never looked at “the”, so it never saw “the dog”.': '贪心从没看过“the”，所以它从没见到“the dog”。',
+    ' Sequence totals show “?” until you answer the question below.': ' 序列的概率显示为“?”，等你回答了下面的问题才会显示。',
+    'kept beam': '保留的束',
+    'best sequence': '最好的序列',
+    'p(sequence) = p(first) × p(second)': 'p(序列) = p(第一个词) × p(第二个词)',
+  })
   let solved = $state(false)
   onMount(() => {
     if (!hide) return
@@ -52,17 +81,17 @@
 </script>
 
 <LabFrame
-  title="Beam search: keep the best few partial answers"
-  hint="Choose a beam width, then press Next step to keep the best first words and then the best two-word sequence."
+  title={t('Beam search: keep the best few partial answers')}
+  hint={t('Choose a beam width, then press Next step to keep the best first words and then the best two-word sequence.')}
   onreset={() => setWidth(1)}
   resetDisabled={width === 1 && step === 0}
 >
   <div class="treewrap" bind:clientWidth={cw}>
-  <svg class="tree" use:readable viewBox="0 0 {G.vw} 300" role="img" aria-label="Beam search tree: first words, then two-word sequences, with the kept beams highlighted">
-    {#if G.start}<text x="8" y="14" class="hd">start</text>{/if}
-    <text x={G.hd1} y="14" class="hd">first word</text>
-    <text x={G.hd2} y="14" class="hd">second word</text>
-    <text x={G.totx} y="14" class="hd end">{narrow ? 'p(seq.)' : 'p(sequence)'}</text>
+  <svg class="tree" use:readable viewBox="0 0 {G.vw} 300" role="img" aria-label={t('Beam search tree: first words, then two-word sequences, with the kept beams highlighted')}>
+    {#if G.start}<text x="8" y="14" class="hd">{t('start')}</text>{/if}
+    <text x={G.hd1} y="14" class="hd">{t('first word')}</text>
+    <text x={G.hd2} y="14" class="hd">{t('second word')}</text>
+    <text x={G.totx} y="14" class="hd end">{narrow ? t('p(seq.)') : t('p(sequence)')}</text>
     {#each FIRST as [w1, p1], i}
       {@const y1 = 30 + i * 90 + 45}
       <!-- root → first word -->
@@ -74,8 +103,8 @@
         <text x={G.b1x + G.b1w / 2} y={y1 + 4} class="w mid">{w1}</text>
       </g>
       {#if step >= 1 && !isKept(w1)}
-        {#if narrow}<text x={G.b1x + G.b1w / 2} y={y1 + 28} class="x mid">dropped</text>
-        {:else}<text x="182" y={y1 + 4} class="x">dropped</text>{/if}
+        {#if narrow}<text x={G.b1x + G.b1w / 2} y={y1 + 28} class="x mid">{t('dropped')}</text>
+        {:else}<text x="182" y={y1 + 4} class="x">{t('dropped')}</text>{/if}
       {/if}
       {#each SECOND[w1] as [w2, p2], j}
         {@const y2 = 30 + i * 90 + j * 30 + 0}
@@ -99,30 +128,30 @@
   </div>
 
   {#snippet controls()}
-    <div class="widths" role="group" aria-label="Beam width">
-      <span class="wl">beam width</span>
+    <div class="widths" role="group" aria-label={t('Beam width')}>
+      <span class="wl">{t('beam width')}</span>
       {#each [1, 2, 3] as w}
-        <button type="button" class:on={width === w} aria-pressed={width === w} onclick={() => setWidth(w)}>{w}{w === 1 ? ' (greedy)' : ''}</button>
+        <button type="button" class:on={width === w} aria-pressed={width === w} onclick={() => setWidth(w)}>{w}{w === 1 ? t(' (greedy)') : ''}</button>
       {/each}
     </div>
-    <button type="button" class="lab-btn" onclick={() => (step = Math.max(0, step - 1))} disabled={step === 0}>‹ Back</button>
-    <button type="button" class="lab-btn primary" onclick={() => (step = Math.min(2, step + 1))} disabled={step === 2}>Next step ›</button>
+    <button type="button" class="lab-btn" onclick={() => (step = Math.max(0, step - 1))} disabled={step === 0}>{t('‹ Back')}</button>
+    <button type="button" class="lab-btn primary" onclick={() => (step = Math.min(2, step + 1))} disabled={step === 2}>{t('Next step ›')}</button>
   {/snippet}
 
   {#snippet readout()}
     {#if step === 0}
-      Press “Next step”. Beam width {width} keeps the {width} most likely first word{width > 1 ? 's' : ''}.
+      {t(width > 1 ? 'Press “Next step”. Beam width {w} keeps the {w} most likely first words.' : 'Press “Next step”. Beam width {w} keeps the {w} most likely first word.', { w: width })}
     {:else if step === 1}
-      Kept: <b>{keptFirst.join(', ')}</b>. The others are dropped and never come back. Next: try every second word after each kept one.
+      {t('Kept:')} <b>{keptFirst.join(', ')}</b>{t('. The others are dropped and never come back. Next: try every second word after each kept one.')}
     {:else}
-      Best kept sequence: <b>{best.w1} {best.w2}</b>{masked ? '' : `, p = ${best.p.toFixed(2)}`}.
-      {width === 1 ? 'Greedy never looked at “the”, so it never saw “the dog”.' : ''}
+      {t('Best kept sequence:')} <b>{best.w1} {best.w2}</b>{masked ? '' : `, p = ${best.p.toFixed(2)}`}{lang === 'zh' ? '。' : '.'}
+      {width === 1 ? t('Greedy never looked at “the”, so it never saw “the dog”.') : ''}
     {/if}
-    {#if masked && step === 2}<span class="idle"> Sequence totals show “?” until you answer the question below.</span>{/if}
+    {#if masked && step === 2}<span class="idle">{t(' Sequence totals show “?” until you answer the question below.')}</span>{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="k"></i>kept beam</span><span class="lg"><i class="c"></i>dropped</span><span class="lg"><i class="b"></i>best sequence</span><span>p(sequence) = p(first) × p(second)</span>
+    <span class="lg"><i class="k"></i>{t('kept beam')}</span><span class="lg"><i class="c"></i>{t('dropped')}</span><span class="lg"><i class="b"></i>{t('best sequence')}</span><span>{t('p(sequence) = p(first) × p(second)')}</span>
   {/snippet}
 </LabFrame>
 

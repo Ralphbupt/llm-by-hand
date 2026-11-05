@@ -8,6 +8,45 @@
    */
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'your B': '你的 B',
+    'crossover: the two times are equal at B = {b}': '交叉点：B = {b} 时两个时间相等',
+    'One decode step for B users: reading time and arithmetic time': 'B 个用户的一步解码：读取时间和算术时间',
+    'Move the slider to add users. Then give each user a longer conversation.': '拖动滑块增加用户。再给每个用户更长的对话。',
+    'Time of one step against the number of users. Read line from {r} ms, arithmetic line from 0 ms.': '一步的时间随用户数的变化。读取线从 {r} ms 开始，算术线从 0 ms 开始。',
+    'They meet at B = {b}.': '两条线在 B = {b} 处相交。',
+    'They do not meet.': '两条线不相交。',
+    'Above B = {b} the caches no longer fit in 80 GB.': 'B 超过 {b} 后，缓存放不进 80 GB 了。',
+    'users in one step, B': '一步里的用户数 B',
+    'time per step (ms)': '每步时间（ms）',
+    'over 80 GB': '超过 80 GB',
+    'read: weights': '读取：权重',
+    '+ every cache': '+ 每份缓存',
+    ' + every cache': ' + 每份缓存',
+    'arithmetic: B × 2N': '算术：B × 2N',
+    'equal at B = {b}': 'B = {b} 时相等',
+    'step {s} ms ↑': '一步 {s} ms ↑',
+    'users B': '用户数 B',
+    'number of users in one step': '一步里的用户数',
+    'Tokens of conversation per user': '每个用户的对话 token 数',
+    'tokens per user': '每个用户的 token 数',
+    'B = {b}: read {r} ms, arithmetic {m} ms, so a step takes': 'B = {b}：读取 {r} ms，算术 {m} ms，所以一步要花',
+    '.': '。',
+    '{n} tokens/s per user,': '每个用户每秒 {n} 个 token，',
+    '{n} in total.': '总共每秒 {n} 个。',
+    'Memory:': '显存：',
+    '{n} GB of weights': '{n} GB 权重',
+    '{n} GB of cache': '{n} GB 缓存',
+    '= {n} GB of {m}.': '= {n} GB，共 {m} GB。',
+    'This does not fit on an 80 GB GPU:': '一块 80 GB 的 GPU 放不下：',
+    'at most {n} users fit.': '最多放得下 {n} 个用户。',
+    'The lines don’t cross: reading is the limit for every B.': '两条线不相交：不管 B 是多少，瓶颈都是读取。',
+  })
 
   const N = 7e9, BW = 1e12, FL = 1e14
   const T_W = ((N * 2) / BW) * 1000          // 14 ms: read the weights once
@@ -64,17 +103,17 @@
 
 <!-- shown only when the lines cross: a legend with "your B" alone looks left over -->
 {#snippet legend()}
-  <span class="lg"><i class="k cur"></i>your B</span>
-  <span class="lg"><i class="k ok"></i>crossover: the two times are equal at B = {Math.round(meet)}</span>
+  <span class="lg"><i class="k cur"></i>{t('your B')}</span>
+  <span class="lg"><i class="k ok"></i>{t('crossover: the two times are equal at B = {b}', { b: Math.round(meet) })}</span>
 {/snippet}
 
 <LabFrame
-  title="One decode step for B users: reading time and arithmetic time"
-  hint="Move the slider to add users. Then give each user a longer conversation."
+  title={t('One decode step for B users: reading time and arithmetic time')}
+  hint={t('Move the slider to add users. Then give each user a longer conversation.')}
   onreset={reset} resetDisabled={!changed} legend={meets ? legend : undefined}
 >
   <svg use:readable class="serve-chart" viewBox={`0 0 ${W} ${H}`} role="img"
-    aria-label={`Time of one step against the number of users. Read line from ${f2(T_W)} ms, arithmetic line from 0 ms. ${meets ? `They meet at B = ${Math.round(meet)}.` : 'They do not meet.'}${fitsAll ? '' : ` Above B = ${bFit} the caches no longer fit in 80 GB.`}`}>
+    aria-label={`${t('Time of one step against the number of users. Read line from {r} ms, arithmetic line from 0 ms.', { r: f2(T_W) })} ${meets ? t('They meet at B = {b}.', { b: Math.round(meet) }) : t('They do not meet.')}${fitsAll ? '' : ` ${t('Above B = {b} the caches no longer fit in 80 GB.', { b: bFit })}`}`}>
     <defs><clipPath id="serve-clip"><rect x={L} y={T} width={W - L - R} height={H - T - BOT} /></clipPath></defs>
     {#each [0, 20, 40, 60] as v}
       <line x1={L} x2={W - R} y1={py(v)} y2={py(v)} class="grid" />
@@ -85,8 +124,8 @@
     {/each}
     <line x1={L} x2={W - R} y1={py(0)} y2={py(0)} class="axis" />
     <line x1={L} x2={L} y1={T} y2={py(0)} class="axis" />
-    <text x={(L + W - R) / 2} y={H - 4} text-anchor="middle" class="albl">users in one step, B</text>
-    <text x="10" y={(T + H - BOT) / 2} text-anchor="middle" class="albl" transform={`rotate(-90 10 ${(T + H - BOT) / 2})`}>time per step (ms)</text>
+    <text x={(L + W - R) / 2} y={H - 4} text-anchor="middle" class="albl">{t('users in one step, B')}</text>
+    <text x="10" y={(T + H - BOT) / 2} text-anchor="middle" class="albl" transform={`rotate(-90 10 ${(T + H - BOT) / 2})`}>{t('time per step (ms)')}</text>
 
     <g clip-path="url(#serve-clip)">
       <path d={readPath} class="ln read" />
@@ -95,30 +134,30 @@
     </g>
     {#if !fitsAll}
       <line x1={px(bFit)} x2={px(bFit)} y1={T} y2={py(0)} class="memline" />
-      <text x={px(bFit) + 4} y={py(0) - 5} class="tag full-t">over 80 GB</text>
+      <text x={px(bFit) + 4} y={py(0) - 5} class="tag full-t">{t('over 80 GB')}</text>
     {/if}
     <line x1={px(B)} x2={px(B)} y1={T} y2={py(0)} class="cur" />
     {#if readTag.x2 !== undefined}
-      <text text-anchor="end" class="tag read"><tspan x={readTag.x} y={readTag.y}>read: weights</tspan><tspan x={readTag.x2} y={readTag.y2}>+ every cache</tspan></text>
+      <text text-anchor="end" class="tag read"><tspan x={readTag.x} y={readTag.y}>{t('read: weights')}</tspan><tspan x={readTag.x2} y={readTag.y2}>{t('+ every cache')}</tspan></text>
     {:else}
-      <text x={readTag.x} y={readTag.y} text-anchor={readTag.anchor} class="tag read">read: weights{ctx ? ' + every cache' : ''}</text>
+      <text x={readTag.x} y={readTag.y} text-anchor={readTag.anchor} class="tag read">{t('read: weights')}{ctx ? t(' + every cache') : ''}</text>
     {/if}
-    <text x={px(BMAX) - 2} y={py(BMAX * T_M) - 6} text-anchor="end" class="tag math">arithmetic: B × 2N</text>
+    <text x={px(BMAX) - 2} y={py(BMAX * T_M) - 6} text-anchor="end" class="tag math">{t('arithmetic: B × 2N')}</text>
 
     {#if meets}
       <circle cx={px(meet)} cy={py(meet * T_M)} r="6" class="meet" />
-      {#if !nearMeet}<text x={meet > 150 ? W - R : px(meet) + 9} y={py(meet * T_M) + (meet > 150 ? 24 : 16)} text-anchor={meet > 150 ? 'end' : 'start'} class="tag ok">equal at B = {Math.round(meet)}</text>{/if}
+      {#if !nearMeet}<text x={meet > 150 ? W - R : px(meet) + 9} y={py(meet * T_M) + (meet > 150 ? 24 : 16)} text-anchor={meet > 150 ? 'end' : 'start'} class="tag ok">{t('equal at B = {b}', { b: Math.round(meet) })}</text>{/if}
     {/if}
 
     {#if read <= YMAX}<circle cx={px(B)} cy={py(read)} r="3.5" class="dot read" />{/if}
     {#if math <= YMAX}<circle cx={px(B)} cy={py(math)} r="3.5" class="dot math" />{/if}
-    {#if step > YMAX}<text x={px(B) + (B > 200 ? -4 : 4)} y={T + 10} text-anchor={B > 200 ? 'end' : 'start'} class="tag cur-t">step {f2(step)} ms ↑</text>{/if}
+    {#if step > YMAX}<text x={px(B) + (B > 200 ? -4 : 4)} y={T + 10} text-anchor={B > 200 ? 'end' : 'start'} class="tag cur-t">{t('step {s} ms ↑', { s: f2(step) })}</text>{/if}
   </svg>
 
   {#snippet controls()}
-    <label class="knob">users B <input type="range" min="1" max={BMAX} step="1" bind:value={B} aria-label="number of users in one step" /> <b>{B}</b></label>
-    <span class="seg" role="group" aria-label="Tokens of conversation per user">
-      <span class="seglbl">tokens per user</span>
+    <label class="knob">{t('users B')} <input type="range" min="1" max={BMAX} step="1" bind:value={B} aria-label={t('number of users in one step')} /> <b>{B}</b></label>
+    <span class="seg" role="group" aria-label={t('Tokens of conversation per user')}>
+      <span class="seglbl">{t('tokens per user')}</span>
       {#each CTXS as c}
         <button type="button" class="lab-btn" aria-pressed={ctx === c} onclick={() => (ctx = c)}>{c.toLocaleString('en-US')}</button>
       {/each}
@@ -126,13 +165,13 @@
   {/snippet}
 
   {#snippet readout()}
-    B = {B}: read {f2(read)} ms, arithmetic {f2(math)} ms, so a step takes <b>{f2(step)} ms</b>.
-    <span class="nw">{(1000 / step).toFixed(1)} tokens/s per user,</span>
-    <span class="nw">{Math.round((B * 1000) / step).toLocaleString('en-US')} in total.</span>
-    <br />Memory: <span class="nw">{memW.toFixed(0)} GB of weights</span> + <span class="nw">{memC.toFixed(1)} GB of cache</span>
-    <span class="nw">= {(memW + memC).toFixed(1)} GB of {MEM}.</span>
-    {#if over}<br /><b>This does not fit on an 80 GB GPU:</b> at most {bFit} users fit.{/if}
-    {#if !meets}<br />The lines don’t cross: reading is the limit for every B.{/if}
+    {t('B = {b}: read {r} ms, arithmetic {m} ms, so a step takes', { b: B, r: f2(read), m: f2(math) })} <b>{f2(step)} ms</b>{t('.')}
+    <span class="nw">{t('{n} tokens/s per user,', { n: (1000 / step).toFixed(1) })}</span>
+    <span class="nw">{t('{n} in total.', { n: Math.round((B * 1000) / step).toLocaleString('en-US') })}</span>
+    <br />{t('Memory:')} <span class="nw">{t('{n} GB of weights', { n: memW.toFixed(0) })}</span> + <span class="nw">{t('{n} GB of cache', { n: memC.toFixed(1) })}</span>
+    <span class="nw">{t('= {n} GB of {m}.', { n: (memW + memC).toFixed(1), m: MEM })}</span>
+    {#if over}<br /><b>{t('This does not fit on an 80 GB GPU:')}</b> {t('at most {n} users fit.', { n: bFit })}{/if}
+    {#if !meets}<br />{t('The lines don’t cross: reading is the limit for every B.')}{/if}
   {/snippet}
 
 </LabFrame>

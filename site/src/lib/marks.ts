@@ -4,6 +4,7 @@
  */
 import { allMisses, levelScore, type LevelScore } from './progress'
 import type { LevelIndex } from './score'
+import { translator, type Lang } from './i18n'
 
 let cached: LevelIndex | null = null
 export function readLevelIndex(): LevelIndex {
@@ -29,35 +30,39 @@ export const STAR_NOTE = {
   1: 'Cleared, with some questions unsolved',
 } as const
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 /**
  * The end card's two lines for a level: `note` (what the stars mean here, or what is still missing) and `nums`.
  * `mustWhere` names the section of each mustSolve part (from the level index). HTML-free plain text.
  */
-export function endCardText(sc: LevelScore, mustWhere: Record<string, string> = {}): { note: string; nums: string } {
-  const opt = sc.optionalTotal ? ` · Optional: ${sc.optionalSolved} of ${sc.optionalTotal}` : ''
-  const skip = sc.skipped ? ` · Skipped parts: ${sc.skipped}` : ''
+export function endCardText(sc: LevelScore, mustWhere: Record<string, string> = {}, lang: Lang = 'en'): { note: string; nums: string } {
+  const t = translator(lang)
+  const opt = sc.optionalTotal ? t(' · Optional: {a} of {b}', { a: sc.optionalSolved, b: sc.optionalTotal }) : ''
+  const skip = sc.skipped ? t(' · Skipped parts: {n}', { n: sc.skipped }) : ''
+  const solved = t('Solved yourself: {a} · With the answer shown: {b}', { a: sc.solved, b: sc.shown })
   if (!sc.cleared && sc.missing.length) {
-    const where = [...new Set(sc.missing.map((id) => (mustWhere[id] ? `“${mustWhere[id]}”` : id)))]
-    const parts = `${sc.missing.length === 1 ? 'the boss part' : `the ${sc.missing.length} boss parts`} in ${where.join(' and ')}`
-    return { note: `Not cleared yet: solve ${parts} too. Skip for now can't pass ${sc.missing.length === 1 ? 'it' : 'them'}.`, nums: `Solved yourself: ${sc.solved} · With the answer shown: ${sc.shown}${skip}` }
+    const where = [...new Set(sc.missing.map((id) => (mustWhere[id] ? `“${mustWhere[id]}”` : id)))].join(t(' and '))
+    const note = sc.missing.length === 1
+      ? t("Not cleared yet: solve the boss part in {where} too. Skip for now can't pass it.", { where })
+      : t("Not cleared yet: solve the {n} boss parts in {where} too. Skip for now can't pass them.", { n: sc.missing.length, where })
+    return { note, nums: `${solved}${skip}` }
   }
   let note: string
-  if (sc.testedOut) note = 'Skipped with the short test: you solved its questions on your own'
-  else if (sc.stars === 1) note = `Cleared, with ${plural(sc.unsolved.length, 'question', 'questions')} still unsolved`
+  if (sc.testedOut) note = t('Skipped with the short test: you solved its questions on your own')
+  else if (sc.stars === 1) note = t(sc.unsolved.length === 1 ? 'Cleared, with {n} question still unsolved' : 'Cleared, with {n} questions still unsolved', { n: sc.unsolved.length })
   // optional questions left: "every question" would not be true
-  else if (sc.stars === 3 && sc.optionalSolved < sc.optionalTotal) note = 'Every required question solved on your own'
-  else note = STAR_NOTE[(sc.stars || 1) as 1 | 2 | 3]
-  const unsolved = sc.unsolved.length ? ` · Unsolved: ${sc.unsolved.length}` : ''
-  return { note, nums: `Solved yourself: ${sc.solved} · With the answer shown: ${sc.shown}${unsolved}${skip}${opt}` }
+  else if (sc.stars === 3 && sc.optionalSolved < sc.optionalTotal) note = t('Every required question solved on your own')
+  else note = t(STAR_NOTE[(sc.stars || 1) as 1 | 2 | 3])
+  const unsolved = sc.unsolved.length ? t(' · Unsolved: {n}', { n: sc.unsolved.length }) : ''
+  return { note, nums: `${solved}${unsolved}${skip}${opt}` }
 }
 
 /**
  * Mark every element with data-level="<slug>": class "done" when cleared,
  * data-stars ("★★☆") and data-grade ("3" own, "2" with answers, "1" with skips) for styling.
  */
-export function markLevels(root: ParentNode = document): number {
+export function markLevels(root: ParentNode = document, lang: Lang = 'en'): number {
+  const t = translator(lang)
   let cleared = 0
   root.querySelectorAll<HTMLElement>('[data-level]').forEach((el) => {
     const s = scoreOf(el.dataset.level!)
@@ -67,7 +72,7 @@ export function markLevels(root: ParentNode = document): number {
       cleared++
       el.dataset.stars = starText(s.stars)
       el.dataset.grade = String(s.stars)
-      el.title = `${STAR_NOTE[s.stars as 1 | 2 | 3]}`
+      el.title = t(STAR_NOTE[s.stars as 1 | 2 | 3])
     } else {
       delete el.dataset.stars
       delete el.dataset.grade

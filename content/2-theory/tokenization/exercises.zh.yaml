@@ -1,0 +1,136 @@
+vocab-size:
+  prompt: "文本是“hello”时，词表里有几个字符？"
+  after: "e、h、l、o。两个 l 只算一次：词表列出的是不同的字符。"
+  hints:
+    - "5 是 token 的个数。词表只保留不同的字符；l 出现了两次。"
+    - ["词表把每个不同的字符列一次，即使它出现了两次。", "写出“hello”的字母，去掉重复的。"]
+
+id-l:
+  prompt: "在“hello”里，“l”的 id 是多少？"
+  after: "词表是排好序的：e → 0，h → 1，l → 2，o → 3。所以“hello”变成 [1, 0, 2, 2, 3]。"
+  hints:
+    - "那是 l 在这个词里的位置，从 1 开始数。id 来自排好序的词表。"
+    - "1 是 h。把词表按字母排序：e、h、l、o，从 0 开始数。"
+    - ["把不同的字符按字母排序，然后从 0 开始编号。", "排好序的词表以 e 开头。l 排在哪里？"]
+
+stoi-code:
+  prompt: "构造 stoi：一个从每个字符到它的 id（它在 chars 里的位置）的字典。"
+  template: |
+    chars = sorted(set("hello"))     # ['e', 'h', 'l', 'o']
+    stoi = ____
+    print(stoi)
+  tests:
+    - "e→0, h→1, l→2, o→3"
+  hints:
+    - ["检查方向：键是字符，值是 id。{i: c …} 就成了 itos。", "enumerate 给出的是（位置, 字符）对，顺序就是这样。"]
+    - ["enumerate(chars) 给出每个字符和它的位置。", "字典推导式：{key: value for … in enumerate(chars)}。"]
+  after: "enumerate 给出（位置, 字符）对，所以循环变量叫 i, c。字典把它们反过来：字符是键，id 是值。把键和值对调就得到 itos，也就是回去的路。"
+
+encode:
+  prompt: "写出 encode：把一个字符串变成一列 id。"
+  tests:
+    - "h e l l o → 1 0 2 2 3"
+    - "由这些字符组成的任何字符串都可以"
+    - "decode 把 encode 还原回去"
+  hints:
+    - "你查的东西不是单个字符。在 stoi 里查每个字符 c。"
+    - ["encode 必须返回一列 id，而不是单个值。", "每个字符一个 id：在 stoi 里查每个字符。"]
+    - ["编码就是在 stoi 里查 s 的每个字符，把 id 收集到一个列表里。", "列表推导式一行就能做到，每个字符查一次 stoi。", "写成列表推导式，把每个字符叫作 c。"]
+  after: "每个字符按顺序查一次，所以列表里 id 的个数和字符串的字符数一样。不在 stoi 里的字符会引发 KeyError：字符分词器只能读它见过的字符。"
+
+unk-word:
+  prompt: "一个按词切分的分词器只认识：the、a、cat、dog、sat、ran、on、mat、rug、“.”。它怎样编码“the cats sat .”？"
+  options: ["4 个 token，但“cats”变成一个未知 token", "它发现 cats = cat + s", "5 个 token"]
+  hints:
+    - "按词切分的分词器只会在它的列表里查词。它没有拆分一个词的规则。"
+    - "数一数“the cats sat .”里的词：每个词最多一个 token。不在列表里的词会怎样？"
+  reveal: "“cats”不在列表里，所以它变成一个特殊的 <unk> token：[the, <unk>, sat, .]。模型没法把它和其他任何未知的词区分开。它对“cat”知道的一切都用不上了。"
+
+pair-at:
+  prompt: "词：cat ×4、cats ×2、hat ×3、hats ×1。切成字符后，a + t 这一对一共出现几次（每个词按它出现的次数算）？"
+  after: "四个词里都有 a + t：4 + 2 + 3 + 1 = 10。第二常见的一对 c + a 出现 4 + 2 = 6 次。"
+  hints:
+    - "4 是不同的词的个数。每个词按它出现的次数算：cat 4 次，cats 2 次，依此类推。"
+    - "6 是 c + a（cat 和 cats）。hat 和 hats 里也有 a + t。"
+    - ["在每个词里找 a + t 这一对。", "cat 里有“at”，出现了 4 次。检查另外三个词。"]
+
+merge2-count:
+  prompt: "合并 a + t 之后，这些词是 c·at ×4、c·at·s ×2、h·at ×3、h·at·s ×1。现在 c + at 这一对出现几次？"
+  after: "c·at 在 cat（4）和 cats（2）里：6。其他的对是 h + at（4）和 at + s（3），所以 c + at 胜出。"
+  hints:
+    - "4 只数了“cat”。“cats”也以 c·at 开头。"
+    - "10 数的是“at”本身。现在数“c”后面紧跟着“at”的次数。"
+    - ["第一次合并之后，这些词是 c·at、c·at·s、h·at、h·at·s。现在哪一对最常见？", "哪些词以 c·at 开头？把它们的次数加起来。"]
+
+tokens-cats:
+  prompt: "按顺序的合并是：1) a + t → at，2) c + at → cat，3) h + at → hat。“cats”是几个 token？"
+  after: "c a t s → c at s（合并 1）→ cat s（合并 2）。合并 3 用不上。两个 token：“cat”和“s”。"
+  hints:
+    - "这三次合并里没有 cat + s，所以“s”还是单独的。"
+    - "那是合并之前。先应用合并 1，然后合并 2，然后合并 3。"
+    - ["从字符 c a t s 开始。", "按学到的顺序，一次一个地应用合并。"]
+
+tokens-that:
+  prompt: "同样的三次合并（a + t → at，c + at → cat，h + at → hat）。“that”从没出现在单词列表里。它是几个 token？"
+  after: "t h a t → t h at（合并 1）→ “at”前面没有 c（跳过合并 2）→ t hat（合并 3）。两个 token：“t”和“hat”。一个新词就是已知片段的一种新组合。"
+  hints:
+    - "合并 1 之后你有 t h at。合并 3 是 h + at。它能用上吗？"
+    - "那是字符的个数。先应用合并 1（a + t），再应用合并 2 和 3。"
+    - ["从字符 t h a t 开始。", "按顺序应用合并：a+t，然后 c+at，然后 h+at。哪些能用上？"]
+
+merge-fn:
+  prompt: "补全 merge：把 seg 里每一处相邻的 (a, b) 换成一个 token a + b。"
+  tests:
+    - "c a t s → c at s"
+    - "token 可以比一个字符长"
+    - "合并之后，两个 token 都跳过：a a a → aa a"
+    - "a 和 t 都在，但从不挨着 → 不变"
+  hints:
+    - "把 i + 1 < len(seg) 的检查放在最前面，这样只有 seg[i + 1] 存在时才会去读它。"
+    - ["两个 token 都对上时才合并，不是只对上一个。", "第二个 token 也要检查：紧跟在位置 i 后面的那个。"]
+    - ["你要找的是从位置 i 开始的 (a, b) 这一对。", "两个检查：位置 i 上的 token，和紧跟在它后面的 token。"]
+  after: "两个 token 都必须对上。i + 1 < len(seg) 的检查放在前面，所以 seg[i + 1] 一定存在。合并之后 i 前进 2，所以一个 token 永远不会被用在两次合并里：a a a → aa a。"
+
+more-merges:
+  prompt: "BPE 在一个 40 个词的列表上运行，你一直合并下去。每次合并给词表加一个 token。所有词的 token 总数会怎样？"
+  options: ["一直变少", "保持不变", "跟着词表一起变多"]
+  hints:
+    - "一次合并把两个相邻的 token 换成一个。这对一个词的长度有什么影响？"
+    - "词表变大了，但每个词被切成更少、更长的片段。数一数“cats”在合并前后各有几个片段。"
+  reveal: "一直变少：一开始 1,068 个 token，合并 5 次后 826 个，20 次后 450 个，40 次后 263 个。每次合并都把一些对拼在一起，所以序列变短，而词表变大。这就是你要调的权衡。"
+
+emb-params:
+  prompt: "一个有 50,000 个 token 的词表，嵌入表里每个 token 512 个数。这张表一共存了多少个数，以百万为单位？"
+  unit: 百万
+  after: "50,000 × 512 = 25,600,000 个数，这只是查找表。给下一个 token 打分的最后一层还需要同样多，除非模型在那里复用嵌入表；很多模型就是这样做的，以省下这些参数。"
+  hints:
+    - "数对了，但答案要以百万为单位：25,600,000 就是 25.6 百万。"
+    - "是行数乘以列数，不是相加：50,000 个 token 每个一行 512 个数。"
+    - ["这张表每个 token 一行，每行 512 个数。", "行数 × 每行的数就是总数。答案要以百万为单位。"]
+
+pair-counts:
+  prompt: "写出循环的内部：对一个出现 n 次的词 seg，给它的每个相邻对的计数加 n。这些词是 cat ×4、cats ×2、hat ×3、hats ×1。两行。"
+  template: |
+    segs = [list("cat"), list("cats"), list("hat"), list("hats")]
+    counts = [4, 2, 3, 1]
+
+    def pairs(segs, counts):
+        pc = {}
+        for seg, n in zip(segs, counts):
+            ____
+        return pc
+
+    pc = pairs(segs, counts)
+    print(pc)
+  tests:
+    - "4 个不同的对，每个都是一个 (左, 右) 键：a t、c a、h a、t s"
+    - "a + t：4 + 2 + 3 + 1 = 10"
+    - "t + s：只在 cats ×2 和 hats ×1 里"
+    - "合并 1 之后，c + at 出现 4 + 2 = 6 次"
+  hints:
+    - ["一对第一次出现时，它还不在 pc 里，所以往上加会出错。", "字典的 get(key, 0) 对还不存在的键给出 0。"]
+    - "zip(seg, seg[1:]) 给出的是对，所以要拆成两个名字：a, b。"
+    - ["a + t 应该数到 10，每个词出现一次就算一次。你加的是 1 而不是 n 吗？", "每个词出现 n 次，所以它的每一对都算 n 次。"]
+    - "只有 4 个不同的对。用每一对作为键，而不是每个单独的 token。"
+    - ["先写一个循环遍历 seg 的相邻对，再用一行把 n 加到这一对的计数上。", "zip(seg, seg[1:]) 给出每一个相邻对。把每一对拆成两个名字。", "在循环里，新的计数是旧的计数（这一对是新的就是 0）加上 n。用 get。"]
+  after: "zip(seg, seg[1:]) 把每个 token 和它后面的那个配成对。一个出现 n 次的词给它的每一对都加 n，所以计数跟着词出现的次数走。get(…, 0) 处理一对第一次被看到的情况。"

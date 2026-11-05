@@ -11,9 +11,39 @@
   import { onThemeChange, reducedMotion } from '@lib/settings'
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
 
   // the parameter count stays "?" until every listed question is solved
-  let { hide = {} }: { hide?: { params?: string[] } } = $props()
+  let { hide = {}, lang = 'en' }: { hide?: { params?: string[] }; lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'A network learns two spirals': '一个网络学习两条螺旋',
+    'Pick the size of the network, then press Train. The background shows the network’s answer at every point.': '选好网络的大小，再按“训练”。背景显示网络在每个点上的回答。',
+    'Map': '平面图',
+    "Spiral data and the network's decision": '螺旋数据和网络的判断',
+    'Untrained: every point is about 0.5. Press Train.': '还没训练：每个点都约等于 0.5。按“训练”。',
+    'p(arm 1)': 'p(臂 1)',
+    "The network's output probability as a surface over the input plane, with the training points on it": '网络输出的概率，画成输入平面上方的曲面，训练点落在曲面上',
+    'Height is the network’s answer p(arm 1) at every point: a point of arm 1 should sit high, a point of arm 2 low.': '高度是网络在每个点上的回答 p(臂 1)：臂 1 的点应该在高处，臂 2 的点应该在低处。',
+    'Color is the network’s answer at every point; the stronger the color, the surer the network.': '颜色是网络在每个点上的回答；颜色越深，网络越有把握。',
+    'Loss curve': '损失曲线',
+    'loss': '损失',
+    'steps →': '步数 →',
+    'Train to draw the loss': '训练后会画出损失',
+    'hidden layers': '隐藏层数',
+    'units per layer': '每层单元数',
+    'activation': '激活函数',
+    'Pause': '暂停',
+    'Train': '训练',
+    '+200 steps': '+200 步',
+    'New random weights': '新的随机权重',
+    'show each first-layer unit’s line': '显示第一层每个单元的直线',
+    'step {n} · loss {loss} · {pct}% of {N} correct · parameters {params}': '第 {n} 步 · 损失 {loss} · {N} 个点中对了 {pct}% · 参数 {params}',
+    'arm 1': '臂 1',
+    'arm 2': '臂 2',
+    'background: the network’s answer, stronger = surer': '背景：网络的回答，颜色越深越有把握',
+  })
   let solved = $state(true)
   onMount(() => {
     const ids = hide.params ?? []
@@ -194,9 +224,9 @@
 </script>
 
 <LabFrame
-  title="A network learns two spirals"
-  hint="Pick the size of the network, then press Train. The background shows the network’s answer at every point."
-  views={[{ id: 'map', label: 'Map' }, { id: '3d', label: '3D' }]}
+  title={t('A network learns two spirals')}
+  hint={t('Pick the size of the network, then press Train. The background shows the network’s answer at every point.')}
+  views={[{ id: 'map', label: t('Map') }, { id: '3d', label: '3D' }]}
   bind:view
   onreset={resetAll}
   resetDisabled={!changed}
@@ -204,7 +234,7 @@
   <div class="top">
     <figure class="pic">
       <div class="canvaswrap" class:gone={view !== 'map'}>
-        <canvas bind:this={canvas} width="440" height="440" aria-label="Spiral data and the network's decision"></canvas>
+        <canvas bind:this={canvas} width="440" height="440" aria-label={t("Spiral data and the network's decision")}></canvas>
         <span class="ax ax-x">x₁ →</span>
         <span class="ax ax-y">x₂ ↑</span>
         <!-- ticks on both axes, as on the gradient-descent map: −1, 0 and 1 for x₁ along the bottom, x₂ up the left -->
@@ -217,24 +247,24 @@
         <Surface3D
           f={netP} xRange={[LO, HI]} yRange={[LO, HI]} zRange={[0, 1]} res={36} height={1}
           dots={dots} rebuildKey={surfaceKey} ramp="prob"
-          note={losses.length === 0 ? { text: 'Untrained: every point is about 0.5. Press Train.', x: 0, y: 0 } : null} axes={{ x: 'x₁', y: 'x₂', z: 'p(arm 1)' }}
-          ariaLabel="The network's output probability as a surface over the input plane, with the training points on it"
+          note={losses.length === 0 ? { text: t('Untrained: every point is about 0.5. Press Train.'), x: 0, y: 0 } : null} axes={{ x: 'x₁', y: 'x₂', z: t('p(arm 1)') }}
+          ariaLabel={t("The network's output probability as a surface over the input plane, with the training points on it")}
         />
       {/if}
       <figcaption>
-        {#if view === '3d'}Height is the network’s answer p(arm 1) at every point: a point of arm 1 should sit high, a point of arm 2 low.
-        {:else}Color is the network’s answer at every point; the stronger the color, the surer the network.{/if}
+        {#if view === '3d'}{t('Height is the network’s answer p(arm 1) at every point: a point of arm 1 should sit high, a point of arm 2 low.')}
+        {:else}{t('Color is the network’s answer at every point; the stronger the color, the surer the network.')}{/if}
       </figcaption>
     </figure>
 
     <div class="side">
-      <svg class="curve" viewBox="0 0 100 44" use:readable aria-label="Loss curve">
+      <svg class="curve" viewBox="0 0 100 44" use:readable aria-label={t('Loss curve')}>
         <line x1="8" y1="38" x2="99" y2="38" class="axl" />
         <line x1="8" y1="3" x2="8" y2="38" class="axl" />
-        <text x="10" y="7" class="tick">loss</text>
+        <text x="10" y="7" class="tick">{t('loss')}</text>
         <text x="7" y="38" class="tick end">0</text>
-        <text x="99" y="43" class="tick end">steps →</text>
-        {#if losses.length > 1}<polyline points={curve} />{:else}<text x="53" y="23" class="empty">Train to draw the loss</text>{/if}
+        <text x="99" y="43" class="tick end">{t('steps →')}</text>
+        {#if losses.length > 1}<polyline points={curve} />{:else}<text x="53" y="23" class="empty">{t('Train to draw the loss')}</text>{/if}
       </svg>
       <div class="shapes">
         {#each shapeChain as s, i}<span>{s}{i < shapeChain.length - 1 ? ',' : ''}</span>{/each}
@@ -245,38 +275,38 @@
   {#snippet controls()}
     <div class="arch">
       <div class="row">
-        <span class="k">hidden layers</span>
+        <span class="k">{t('hidden layers')}</span>
         {#each [1, 2, 3] as d}
           <button class="lab-btn sm" class:on={depth === d} aria-pressed={depth === d} onclick={() => setArch(d, width, act)}>{d}</button>
         {/each}
       </div>
       <div class="row">
-        <span class="k">units per layer</span>
+        <span class="k">{t('units per layer')}</span>
         {#each [2, 4, 8, 16, 32] as w}
           <button class="lab-btn sm" class:on={width === w} aria-pressed={width === w} onclick={() => setArch(depth, w, act)}>{w}</button>
         {/each}
       </div>
       <div class="row">
-        <span class="k">activation</span>
+        <span class="k">{t('activation')}</span>
         {#each ['tanh', 'relu'] as a}
           <button class="lab-btn sm" class:on={act === a} aria-pressed={act === a} onclick={() => setArch(depth, width, a as 'tanh' | 'relu')}>{a === 'relu' ? 'ReLU' : 'tanh'}</button>
         {/each}
       </div>
     </div>
-    <button class="lab-btn primary" onclick={toggle}>{running ? 'Pause' : 'Train'}</button>
-    <button class="lab-btn" onclick={burst}>+200 steps</button>
-    <button class="lab-btn" onclick={init}>New random weights</button>
-    <label class="chk"><input type="checkbox" bind:checked={showLines} /> show each first-layer unit’s line</label>
+    <button class="lab-btn primary" onclick={toggle}>{running ? t('Pause') : t('Train')}</button>
+    <button class="lab-btn" onclick={burst}>{t('+200 steps')}</button>
+    <button class="lab-btn" onclick={init}>{t('New random weights')}</button>
+    <label class="chk"><input type="checkbox" bind:checked={showLines} /> {t('show each first-layer unit’s line')}</label>
   {/snippet}
 
   {#snippet readout()}
-    step {ui.steps} · loss {ui.steps ? ui.loss.toFixed(3) : '–'} · {(ui.acc * 100).toFixed(0)}% of {N} correct · parameters {solved ? nParams : '?'}
+    {t('step {n} · loss {loss} · {pct}% of {N} correct · parameters {params}', { n: ui.steps, loss: ui.steps ? ui.loss.toFixed(3) : '–', pct: (ui.acc * 100).toFixed(0), N, params: solved ? nParams : '?' })}
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k1"></i>arm 1</span>
-    <span class="key"><i class="k3"></i>arm 2</span>
-    <span class="key">background: the network’s answer, stronger = surer</span>
+    <span class="key"><i class="k1"></i>{t('arm 1')}</span>
+    <span class="key"><i class="k3"></i>{t('arm 2')}</span>
+    <span class="key">{t('background: the network’s answer, stronger = surer')}</span>
   {/snippet}
 </LabFrame>
 

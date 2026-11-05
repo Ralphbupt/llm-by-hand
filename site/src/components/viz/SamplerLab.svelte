@@ -12,13 +12,58 @@
   import { onThemeChange, reducedMotion } from '@lib/settings'
   import Points3D from '../viz3d/Points3D.svelte'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  // `t` is the noise step here, so the translator is `tx`
+  const tx = useT({
+    'Spiral': '螺旋',
+    'Ring': '圆环',
+    'Moons': '双月',
+    'Any shape': '任意形状',
+    'spiral': '螺旋',
+    'ring': '圆环',
+    'moons': '双月',
+    'shapes': '这些形状',
+    'Reverse sampling: from noise back to a shape': '反向采样：从噪声回到形状',
+    'Pick a shape, then press Step. Each step the network guesses the noise and removes a little of it.': '选一个形状，然后按“走一步”。每一步，网络都猜出噪声，再去掉其中一点。',
+    'Cloud at step t': '第 t 步的点云',
+    '3D: time going down': '3D：时间向下',
+    'Points being sampled, over the target shape': '正在采样的点，叠在目标形状上',
+    'Loading the trained network…': '正在加载训练好的网络…',
+    "Reverse sampling through time: noise at the top, the shape at the bottom, each line one point's path": '随时间进行的反向采样：噪声在顶部，形状在底部，每条线是一个点的路径',
+    "Noise starts at the top (t = {T}); each step moves the slice of points down one level. Gray lines are 20 points' paths so far; the highlighted line is the point in the numbers. The target shape at the bottom is where they should land.": '噪声从顶部开始（t = {T}）；每走一步，那一层点就往下移一格。灰线是 20 个点到目前为止的路径；高亮的那条是右边数字跟踪的点。底部的目标形状就是它们应该落到的地方。',
+    'Could not load the trained network: {error}': '加载训练好的网络失败：{error}',
+    'of {T}': '/ {T}',
+    'the point we follow, step t = {a} → {b}': '我们跟踪的点，第 t = {a} → {b} 步',
+    'noise guess': '噪声猜测',
+    'fresh z': '新的 z',
+    'none (last step)': '无（最后一步）',
+    'Every point starts as random noise. Press Step.': '每个点都从随机噪声开始。按“走一步”。',
+    'What to draw': '要画什么',
+    'Step': '走一步',
+    '❚❚ Pause': '❚❚ 暂停',
+    '▶ Play': '▶ 播放',
+    'To the end': '走到底',
+    'New noise': '换一份噪声',
+    'loading…': '加载中…',
+    't = {T}: pure noise.': 't = {T}：纯噪声。',
+    'Press Step to take one step back.': '按“走一步”往回走一步。',
+    't = 0: done. The points should now sit on the {s}.': 't = 0：完成。这些点现在应该落在{s}上。',
+    't = {t}: {k} of {T} steps taken.': 't = {t}：已走 {k} / {T} 步。',
+    'the target shape': '目标形状',
+    'the points at step t': '第 t 步的点',
+    'the point we follow': '我们跟踪的点',
+  })
 
   const SPAN = 3.2, N = 300
   const CHOICES: { label: string; cls: number; shape: ShapeName | null }[] = [
-    { label: 'Spiral', cls: 0, shape: 'spiral' },
-    { label: 'Ring', cls: 1, shape: 'ring' },
-    { label: 'Moons', cls: 2, shape: 'moons' },
-    { label: 'Any shape', cls: 3, shape: null },
+    { label: tx('Spiral'), cls: 0, shape: 'spiral' },
+    { label: tx('Ring'), cls: 1, shape: 'ring' },
+    { label: tx('Moons'), cls: 2, shape: 'moons' },
+    { label: tx('Any shape'), cls: 3, shape: null },
   ]
 
   let m = $state.raw<CondNet | null>(null)
@@ -126,9 +171,9 @@
 </script>
 
 <LabFrame
-  title="Reverse sampling: from noise back to a shape"
-  hint="Pick a shape, then press Step. Each step the network guesses the noise and removes a little of it."
-  views={[{ id: '2d', label: 'Cloud at step t' }, { id: '3d', label: '3D: time going down' }]}
+  title={tx('Reverse sampling: from noise back to a shape')}
+  hint={tx('Pick a shape, then press Step. Each step the network guesses the noise and removes a little of it.')}
+  views={[{ id: '2d', label: tx('Cloud at step t') }, { id: '3d', label: tx('3D: time going down') }]}
   bind:view
   onreset={resetAll}
   resetDisabled={choice === 0 && seed === 1 && t === T0 && view === '2d'}
@@ -136,56 +181,55 @@
   <div class="grid">
     <div class="pic">
       <div class="boardwrap" class:gone={view === '3d'}>
-        <canvas bind:this={cv} class="board" aria-label="Points being sampled, over the target shape"></canvas>
-        {#if !m && !error}<p class="loading">Loading the trained network…</p>{/if}
+        <canvas bind:this={cv} class="board" aria-label={tx('Points being sampled, over the target shape')}></canvas>
+        {#if !m && !error}<p class="loading">{tx('Loading the trained network…')}</p>{/if}
       </div>
       {#if view === '3d'}
         <Points3D points={cloud3d} trails={trails3d} range={SPAN} axes={['x', 'y', 't']} height="min(30rem, 92vw)"
-          ariaLabel="Reverse sampling through time: noise at the top, the shape at the bottom, each line one point's path" />
-        <p class="vcap">Noise starts at the top (t = {T0}); each step moves the slice of points down one level.
-          Gray lines are 20 points' paths so far; the highlighted line is the point in the numbers. The target shape at the bottom is where they should land.</p>
+          ariaLabel={tx("Reverse sampling through time: noise at the top, the shape at the bottom, each line one point's path")} />
+        <p class="vcap">{tx("Noise starts at the top (t = {T}); each step moves the slice of points down one level. Gray lines are 20 points' paths so far; the highlighted line is the point in the numbers. The target shape at the bottom is where they should land.", { T: T0 })}</p>
       {/if}
     </div>
     <div class="side">
-      {#if error}<p class="err">Could not load the trained network: {error}</p>{/if}
-      <div class="big">t = <b>{t}</b> <span class="of">of {T0}</span></div>
+      {#if error}<p class="err">{tx('Could not load the trained network: {error}', { error: error ?? '' })}</p>{/if}
+      <div class="big">t = <b>{t}</b> <span class="of">{tx('of {T}', { T: T0 })}</span></div>
       {#if last}
         <div class="calc">
-          <div class="cap">the point we follow, step t = {last.t} → {last.t - 1}</div>
+          <div class="cap">{tx('the point we follow, step t = {a} → {b}', { a: last.t, b: last.t - 1 })}</div>
           <div class="row"><span>x_t</span><b>{fp(last.x)}</b></div>
-          <div class="row"><span>noise guess</span><b>{fp(last.eps)}</b></div>
+          <div class="row"><span>{tx('noise guess')}</span><b>{fp(last.eps)}</b></div>
           <div class="row"><span>mean</span><b>{fp(last.mean)}</b></div>
-          <div class="row"><span>fresh z</span><b>{last.z ? fp(last.z) : 'none (last step)'}</b></div>
+          <div class="row"><span>{tx('fresh z')}</span><b>{last.z ? fp(last.z) : tx('none (last step)')}</b></div>
           <div class="row"><span>x_(t−1)</span><b class="you">{fp(last.next)}</b></div>
         </div>
       {:else}
-        <p class="dim">Every point starts as random noise. Press Step.</p>
+        <p class="dim">{tx('Every point starts as random noise. Press Step.')}</p>
       {/if}
     </div>
   </div>
 
   {#snippet controls()}
-    <div class="seg" role="group" aria-label="What to draw">
+    <div class="seg" role="group" aria-label={tx('What to draw')}>
       {#each CHOICES as ch, i}
         <button type="button" class="lab-btn" class:on={choice === i} aria-pressed={choice === i} onclick={() => { choice = i; restart() }}>{ch.label}</button>
       {/each}
     </div>
     <div class="seg">
-      <button type="button" class="lab-btn primary" onclick={step} disabled={!m || t < 1}>Step</button>
-      <button type="button" class="lab-btn" onclick={play} disabled={!m}>{playing ? '❚❚ Pause' : '▶ Play'}</button>
-      <button type="button" class="lab-btn" onclick={toEnd} disabled={!m || t < 1}>To the end</button>
-      <button type="button" class="lab-btn" onclick={() => { seed += 1; restart() }} disabled={!m}>New noise</button>
+      <button type="button" class="lab-btn primary" onclick={step} disabled={!m || t < 1}>{tx('Step')}</button>
+      <button type="button" class="lab-btn" onclick={play} disabled={!m}>{playing ? tx('❚❚ Pause') : tx('▶ Play')}</button>
+      <button type="button" class="lab-btn" onclick={toEnd} disabled={!m || t < 1}>{tx('To the end')}</button>
+      <button type="button" class="lab-btn" onclick={() => { seed += 1; restart() }} disabled={!m}>{tx('New noise')}</button>
     </div>
   {/snippet}
 
   {#snippet readout()}
-    {#if !m}loading…{:else if t === T0}t = {T0}: pure noise. {t >= 1 ? 'Press Step to take one step back.' : ''}{:else if t === 0}t = 0: done. The points should now sit on the {CHOICES[choice].shape ?? 'shapes'}.{:else}t = {t}: {T0 - t} of {T0} steps taken.{/if}
+    {#if !m}{tx('loading…')}{:else if t === T0}{tx('t = {T}: pure noise.', { T: T0 })} {t >= 1 ? tx('Press Step to take one step back.') : ''}{:else if t === 0}{tx('t = 0: done. The points should now sit on the {s}.', { s: tx(CHOICES[choice].shape ?? 'shapes') })}{:else}{tx('t = {t}: {k} of {T} steps taken.', { t, k: T0 - t, T: T0 })}{/if}
   {/snippet}
 
   {#snippet legend()}
-    <span><i class="sw target"></i>the target shape</span>
-    <span><i class="sw cloud"></i>the points at step t</span>
-    <span><i class="sw you"></i>the point we follow</span>
+    <span><i class="sw target"></i>{tx('the target shape')}</span>
+    <span><i class="sw cloud"></i>{tx('the points at step t')}</span>
+    <span><i class="sw you"></i>{tx('the point we follow')}</span>
   {/snippet}
 </LabFrame>
 

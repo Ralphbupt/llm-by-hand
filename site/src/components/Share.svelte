@@ -1,14 +1,16 @@
 <script lang="ts">
   /**
    * Share a level: the system share sheet where there is one (phones), otherwise a small menu with
-   * "Copy link", "Copy text" and, once the level is cleared, "Save image" (a 1200×630 card drawn on a canvas).
+   * t('Copy link'), "Copy text" and, once the level is cleared, t('Save image') (a 1200×630 card drawn on a canvas).
    * Links use the page's own origin, so they become real links once the site is deployed.
    */
   import { onMount } from 'svelte'
   import { subscribe } from '@lib/progress'
   import { scoreOf } from '@lib/marks'
+  import { href, translator, type Lang } from '@lib/i18n'
 
-  let { slug, level, title, question, compact = false }: { slug: string; level: string; title: string; question: string; compact?: boolean } = $props()
+  let { slug, level, title, question, compact = false, lang = 'en' }: { slug: string; level: string; title: string; question: string; compact?: boolean; lang?: Lang } = $props()
+  const t = translator(lang)
 
   let open = $state(false)
   let note = $state('')
@@ -27,12 +29,12 @@
     return () => { off(); document.removeEventListener('pointerdown', outside) }
   })
 
-  const url = () => `${location.origin}/learn/${slug}/`
+  const url = () => `${location.origin}${href(lang, `/learn/${slug}/`)}`
   const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n)
   const text = () =>
     stars
-      ? `I cleared level ${level} · ${title} on LLM by Hand ${starText(stars)}, computing every number by hand.`
-      : `Level ${level} · ${title}: ${question} Learning it by computing every number by hand on LLM by Hand.`
+      ? t('I cleared level {l} on LLM by Hand {stars}, computing every number by hand.', { l: `${level} · ${title}`, stars: starText(stars) })
+      : t('Level {l}: {q} Learning it by computing every number by hand on LLM by Hand.', { l: `${level} · ${title}`, q: question })
 
   async function share() {
     note = ''
@@ -52,7 +54,7 @@
     const s = what === 'link' ? url() : `${text()} ${url()}`
     try {
       await navigator.clipboard.writeText(s)
-      note = what === 'link' ? 'Link copied.' : 'Text copied.'
+      note = what === 'link' ? t('Link copied.') : t('Text copied.')
     } catch {
       note = s
     }
@@ -63,17 +65,18 @@
   }
 
   function wrap(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, max: number, lh: number) {
-    const words = s.split(' ')
+    // words, spaces, and single Chinese characters (Chinese breaks between any two characters)
+    const parts = s.match(/\s+|[\u2e80-\u9fff\uff00-\uffef]|[^\s\u2e80-\u9fff\uff00-\uffef]+/g) ?? []
     let line = ''
-    for (const w of words) {
-      const t = line ? `${line} ${w}` : w
-      if (ctx.measureText(t).width > max && line) {
-        ctx.fillText(line, x, y)
+    for (const w of parts) {
+      const t = line + w
+      if (ctx.measureText(t.trimEnd()).width > max && line.trim()) {
+        ctx.fillText(line.trimEnd(), x, y)
         y += lh
-        line = w
+        line = w.trimStart()
       } else line = t
     }
-    ctx.fillText(line, x, y)
+    ctx.fillText(line.trimEnd(), x, y)
     return y
   }
 
@@ -95,7 +98,7 @@
     const display = "'Bricolage Grotesque Variable', system-ui, sans-serif"
     g.fillStyle = accent
     g.font = `700 30px ${display}`
-    g.fillText(`Level ${level}`, 80, 120)
+    g.fillText(t('Level {n}', { n: level }), 80, 120)
     g.fillStyle = fg
     g.font = `750 76px ${display}`
     let y = wrap(g, title, 80, 210, 1040, 84)
@@ -113,25 +116,25 @@
     g.fillText('LLM by Hand', 1120, 540)
     g.fillStyle = dim
     g.font = `400 24px system-ui, sans-serif`
-    g.fillText('computing every number by hand', 1120, 578)
+    g.fillText(t('computing every number by hand'), 1120, 578)
     const a = document.createElement('a')
     a.href = cv.toDataURL('image/png')
     a.download = `llm-by-hand-${slug}.png`
     a.click()
-    note = 'Image saved.'
+    note = t('Image saved.')
   }
 </script>
 
 <div class="share" class:compact>
-  <button bind:this={btn} class="sbtn" aria-label="Share" aria-expanded={open} aria-haspopup="menu" onclick={share}>
+  <button bind:this={btn} class="sbtn" aria-label={t('Share')} aria-expanded={open} aria-haspopup="menu" onclick={share}>
     <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /></svg>
-    <span class="slabel">Share</span>
+    <span class="slabel">{t('Share')}</span>
   </button>
   {#if open}
     <div class="menu" role="menu" bind:this={menu}>
-      <button role="menuitem" onclick={() => copy('link')}>Copy link</button>
-      <button role="menuitem" onclick={() => copy('text')}>Copy text with link</button>
-      {#if stars}<button role="menuitem" onclick={saveImage}>Save image</button>{/if}
+      <button role="menuitem" onclick={() => copy('link')}>{t('Copy link')}</button>
+      <button role="menuitem" onclick={() => copy('text')}>{t('Copy text with link')}</button>
+      {#if stars}<button role="menuitem" onclick={saveImage}>{t('Save image')}</button>{/if}
       {#if note}<p class="note">{note}</p>{/if}
     </div>
   {/if}

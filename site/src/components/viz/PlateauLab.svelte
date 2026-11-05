@@ -7,6 +7,38 @@
   import { reducedMotion } from '@lib/settings'
   import { readable } from '@lib/readable'
   import LabFrame from './LabFrame.svelte'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
+
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'loss on every position': '损失算每个位置',
+    'loss on the answer digits only': '损失只算答案数字',
+    'Two real training runs, epoch by epoch': '两次真实的训练，一轮一轮地看',
+    'Drag the epoch slider or press Play. Switch runs to compare the two loss settings.': '拖动轮数滑块，或者按播放。切换训练，比较两种损失设置。',
+    'Could not load the training runs. Reload the page to try again.': '没能载入训练数据。刷新页面再试一次。',
+    'Loading the training runs…': '正在载入训练数据…',
+    'Accuracy on 1,000 unseen problems, by epoch. At epoch {e}: {a}%.': '1,000 道没见过的题上的准确率，按轮显示。第 {e} 轮：{a}%。',
+    '95% goal': '目标 95%',
+    'unseen problems fully correct': '没见过的题全对的比例',
+    'Training loss by epoch. At epoch {e}: {l}.': '训练损失，按轮显示。第 {e} 轮：{l}。',
+    'epoch →': '轮 →',
+    'training loss': '训练损失',
+    'Eight problems the model never trained on, answered by the model after epoch {e}:': '模型从没训练过的八道题，第 {e} 轮之后模型的回答：',
+    'right': '对',
+    'wrong': '错',
+    '❚❚ Pause': '❚❚ 暂停',
+    '▶ Play': '▶ 播放',
+    'epoch': '轮',
+    'Which run': '哪一次训练',
+    'run': '训练',
+    'epoch {e} · unseen accuracy': '第 {e} 轮 · 没见过的题的准确率',
+    '· training loss': '· 训练损失',
+    'Loading…': '正在载入…',
+    'this run ({r})': '这次训练（{r}）',
+    'the other run': '另一次训练',
+  })
 
   type Row = { epoch: number; loss: number; acc: number; answers: string[] }
   type Run = { probes: string[]; truth: string[]; epochs: Row[] }
@@ -46,7 +78,7 @@
   const lpath = (rows: Row[]) => rows.slice(0, MAX).map((r, i) => `${i ? 'L' : 'M'}${sx(r.epoch).toFixed(1)},${ly(r.loss).toFixed(1)}`).join(' ')
   const cur = $derived(runs ? runs[mode].epochs[ep - 1] : null)
   const other = $derived(mode === 'all' ? 'answer' : 'all')
-  const runName = (m: string) => (m === 'all' ? 'loss on every position' : 'loss on the answer digits only')
+  const runName = (m: string) => (m === 'all' ? t('loss on every position') : t('loss on the answer digits only'))
   // area under this run's curve up to the current epoch: the part already "played"
   const area = (rows: Row[]) => {
     const r = rows.slice(0, ep)
@@ -56,22 +88,22 @@
 </script>
 
 <LabFrame
-  title="Two real training runs, epoch by epoch"
-  hint="Drag the epoch slider or press Play. Switch runs to compare the two loss settings."
+  title={t('Two real training runs, epoch by epoch')}
+  hint={t('Drag the epoch slider or press Play. Switch runs to compare the two loss settings.')}
   onreset={reset} resetDisabled={mode === 'all' && ep === 7 && !playing}
 >
   {#if failed}
-    <p class="dim">Could not load the training runs. Reload the page to try again.</p>
+    <p class="dim">{t('Could not load the training runs. Reload the page to try again.')}</p>
   {:else if !runs || !cur}
     <div class="skeleton" aria-hidden="true"></div>
-    <p class="dim">Loading the training runs…</p>
+    <p class="dim">{t('Loading the training runs…')}</p>
   {:else}
-    <svg use:readable viewBox="0 0 {W} {H}" role="img" aria-label={`Accuracy on 1,000 unseen problems, by epoch. At epoch ${ep}: ${(cur.acc * 100).toFixed(1)}%.`}>
+    <svg use:readable viewBox="0 0 {W} {H}" role="img" aria-label={t('Accuracy on 1,000 unseen problems, by epoch. At epoch {e}: {a}%.', { e: ep, a: (cur.acc * 100).toFixed(1) })}>
       {#each [0, 0.25, 0.5, 0.75, 0.95, 1] as g}
         <line x1={P.l} x2={W - P.r} y1={sy(g)} y2={sy(g)} class:goal={g === 0.95} class="grid" />
         <!-- 95% sits right under 100%, so it gets its label on the right instead of the axis -->
         {#if g === 0.95}
-          <text x={W - P.r - 4} y={sy(g) + 13} class="tick goal-t" text-anchor="end">95% goal</text>
+          <text x={W - P.r - 4} y={sy(g) + 13} class="tick goal-t" text-anchor="end">{t('95% goal')}</text>
         {:else}
           <text x={P.l - 6} y={sy(g) + 5} class="tick" text-anchor="end">{Math.round(g * 100)}%</text>
         {/if}
@@ -79,7 +111,7 @@
       {#each [1, 10, 20, 30, 40, 50, 60] as e}
         <text x={sx(e)} y={H - 12} class="tick" text-anchor="middle">{e}</text>
       {/each}
-      <text x={W - P.r - 4} y={sy(0) - 8} class="axt" text-anchor="end">unseen problems fully correct</text>
+      <text x={W - P.r - 4} y={sy(0) - 8} class="axt" text-anchor="end">{t('unseen problems fully correct')}</text>
       <path d={path(runs[other].epochs)} class="other" />
       <path d={area(runs[mode].epochs)} class="area" />
       <path d={path(runs[mode].epochs)} class="main ahead" />
@@ -88,7 +120,7 @@
       <circle cx={sx(ep)} cy={sy(cur.acc)} r="5" class="dot" />
     </svg>
 
-    <svg use:readable viewBox="0 0 {W} {LH}" role="img" aria-label={`Training loss by epoch. At epoch ${ep}: ${cur.loss.toFixed(3)}.`}>
+    <svg use:readable viewBox="0 0 {W} {LH}" role="img" aria-label={t('Training loss by epoch. At epoch {e}: {l}.', { e: ep, l: cur.loss.toFixed(3) })}>
       {#each [0, 0.5, 1, 1.5] as g}
         <line x1={P.l} x2={W - P.r} y1={ly(g)} y2={ly(g)} class="grid" />
         {#if g === 0 || g === 1}<text x={P.l - 6} y={ly(g) + 4} class="tick" text-anchor="end">{g}</text>{/if}
@@ -96,8 +128,8 @@
       {#each [1, 10, 20, 30, 40, 50, 60] as e}
         <text x={sx(e)} y={LH - 20} class="tick" text-anchor="middle">{e}</text>
       {/each}
-      <text x={W - P.r} y={LH - 2} class="axt" text-anchor="end">epoch →</text>
-      <text x={W - P.r - 4} y={LP.t + 16} class="axt" text-anchor="end">training loss</text>
+      <text x={W - P.r} y={LH - 2} class="axt" text-anchor="end">{t('epoch →')}</text>
+      <text x={W - P.r - 4} y={LP.t + 16} class="axt" text-anchor="end">{t('training loss')}</text>
       <path d={lpath(runs[other].epochs)} class="other" />
       <path d={lpath(runs[mode].epochs)} class="main ahead" />
       <path d={lpath(runs[mode].epochs.slice(0, ep))} class="main" />
@@ -105,41 +137,41 @@
       <circle cx={sx(ep)} cy={ly(cur.loss)} r="5" class="dot" />
     </svg>
 
-    <div class="probes-h">Eight problems the model never trained on, answered by the model after epoch {ep}:</div>
+    <div class="probes-h">{t('Eight problems the model never trained on, answered by the model after epoch {e}:', { e: ep })}</div>
     <div class="probes">
       {#each runs[mode].probes as p, i}
         {@const right = cur.answers[i] === runs[mode].truth[i]}
         <div class="pr" class:ok={right}>
           <span class="mono">{p}=</span><b class="mono">{cur.answers[i] || '∅'}</b>
-          <span class="mk" aria-label={right ? 'right' : 'wrong'}>{right ? '✓' : '✗'}</span>
+          <span class="mk" aria-label={right ? t('right') : t('wrong')}>{right ? '✓' : '✗'}</span>
         </div>
       {/each}
     </div>
   {/if}
 
   {#snippet controls()}
-    <button type="button" class="lab-btn primary play" onclick={play} disabled={!runs}>{playing ? '❚❚ Pause' : '▶ Play'}</button>
-    <label class="knob"><span>epoch <b>{ep}</b></span><input type="range" min="1" max={MAX} bind:value={ep} oninput={stop} aria-label="epoch" /></label>
-    <span class="seg" role="group" aria-label="Which run">
-      <span class="seglbl">run</span>
-      <button type="button" class="lab-btn" aria-pressed={mode === 'all'} onclick={() => (mode = 'all')}>loss on every position</button>
-      <button type="button" class="lab-btn" aria-pressed={mode === 'answer'} onclick={() => (mode = 'answer')}>loss on the answer digits only</button>
+    <button type="button" class="lab-btn primary play" onclick={play} disabled={!runs}>{playing ? t('❚❚ Pause') : t('▶ Play')}</button>
+    <label class="knob"><span>{t('epoch')} <b>{ep}</b></span><input type="range" min="1" max={MAX} bind:value={ep} oninput={stop} aria-label={t('epoch')} /></label>
+    <span class="seg" role="group" aria-label={t('Which run')}>
+      <span class="seglbl">{t('run')}</span>
+      <button type="button" class="lab-btn" aria-pressed={mode === 'all'} onclick={() => (mode = 'all')}>{t('loss on every position')}</button>
+      <button type="button" class="lab-btn" aria-pressed={mode === 'answer'} onclick={() => (mode = 'answer')}>{t('loss on the answer digits only')}</button>
     </span>
   {/snippet}
 
   {#snippet readout()}
     {#if cur}
-      epoch {ep} · unseen accuracy <b>{(cur.acc * 100).toFixed(1)}%</b> · training loss <b>{cur.loss.toFixed(3)}</b>
+      {t('epoch {e} · unseen accuracy', { e: ep })} <b>{(cur.acc * 100).toFixed(1)}%</b> {t('· training loss')} <b>{cur.loss.toFixed(3)}</b>
     {:else}
-      Loading…
+      {t('Loading…')}
     {/if}
   {/snippet}
 
   {#snippet legend()}
-    <span class="lg"><i class="ln"></i>this run ({runName(mode)})</span>
-    <span class="lg"><i class="ln oth"></i>the other run</span>
-    <span class="lg"><i class="ln goal"></i>95% goal</span>
-    <span class="lg"><b class="okc">✓</b> right <b class="bad">✗</b> wrong</span>
+    <span class="lg"><i class="ln"></i>{t('this run ({r})', { r: runName(mode) })}</span>
+    <span class="lg"><i class="ln oth"></i>{t('the other run')}</span>
+    <span class="lg"><i class="ln goal"></i>{t('95% goal')}</span>
+    <span class="lg"><b class="okc">✓</b> {t('right')} <b class="bad">✗</b> {t('wrong')}</span>
   {/snippet}
 </LabFrame>
 

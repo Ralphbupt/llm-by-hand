@@ -1,0 +1,182 @@
+param-count:
+  prompt: "model = nn.Sequential(nn.Linear(2, 6), nn.Tanh(), nn.Linear(6, 1))。一个 Linear 层对每一对输入和输出有一个权重，每个输出有一个偏置。这个模型一共要学多少个数？"
+  after: "第一层：2 × 6 = 12 个权重 + 6 个偏置 = 18。第二层：6 × 1 = 6 个权重 + 1 个偏置 = 7。一共 25，和 NumPy 那边的 W1、b1、W2、b2 一样。Tanh 没有参数。"
+  hints:
+    - "18 只是第一层。再加上第二层：6 个权重和 1 个偏置。"
+    - "接近了。第二层有 6 × 1 = 6 个权重，再加 1 个偏置。"
+    - "是不是漏了一个偏置？第一层 12 + 6，第二层 6 + 1。"
+    - ["每一层分开数：权重（输入数 × 输出数），再加每个输出一个偏置。", "第一层：2 × 6 个权重和 6 个偏置。第二层：6 × 1 个权重和 1 个偏置。"]
+
+linear-shape:
+  prompt: "在 NumPy 里，W1 的形状是 (2, 6)：2 个输入，6 个输出。nn.Linear(2, 6).weight 的形状是什么？"
+  after: "(6, 2)。PyTorch 每个输出存一行，计算 x @ W.T + b。同样的数，转置了。"
+  hints:
+    - "这是 NumPy 的布局。PyTorch 用相反的布局存权重：每个输出一行。"
+    - ["PyTorch 存 Linear 层的权重时，每个输出一行。", "nn.Linear(2, 6) 有 6 个输出、2 个输入。"]
+
+pred-forget:
+  prompt: "你的训练循环里有 loss.backward() 和 opt.step()，但你忘了 `opt.zero_grad()`。会怎样？"
+  options: ["什么都不会发生。PyTorch 每一步之后会自动清空梯度", "每一步用的都是到目前为止所有梯度的总和，所以训练会出问题", "报错：这个梯度已经用过了"]
+  reveal: "每一步用的都是到目前为止所有梯度的总和。什么都不会崩，所以这个 bug 很难找：只是损失表现得很奇怪。通常步子会变得太大，损失一会儿高一会儿低，或者变得非常大。"
+  hints:
+    - "backward() 往 .grad 里加。除非你调用 `zero_grad()`，否则没有什么会清空 .grad。"
+    - "没有任何东西会报错：往 .grad 里加是允许的。问题在于更新时用的是什么。"
+
+grad-twice:
+  prompt: "w = 1，x = 2，y = 6，损失 = (w·x − y)²，所以每次 backward 算出的梯度是 −16。你连续调用两次 loss.backward()，中间没有 `zero_grad`。现在 w.grad 是多少？"
+  after: "−16 + (−16) = −32。第二次 backward 加在了第一次上面。这时用 lr = 0.05 做一次 opt.step()，w 会移动 1.6，而不是 0.8。"
+  hints:
+    - "这是一次 backward 的梯度。第二次调用会加到已有的值上。"
+    - "大小对了，符号反了。两次的梯度都是 −16。"
+    - ["backward() 把它的梯度加进 w.grad，从不替换。", "w.grad 从 0 开始。两次调用各加 −16。"]
+
+accum-code:
+  prompt: "backward 往 w.grad 里加，和 PyTorch 一样。写出 `zero_grad`，让 train(…, clear=True) 走到 w = 3。"
+  template: |
+    class Param:
+        def __init__(self, v):
+            self.data = float(v)
+            self.grad = 0.0
+
+    def backward(w, x, y):
+        # 相当于对 loss = (w*x - y)**2 调用 loss.backward()：它往 w.grad 里“加”
+        w.grad += 2 * (w.data * x - y) * x
+
+    def zero_grad(w):
+        ____
+
+    def train(steps, lr, clear):
+        w = Param(1.0)
+        for _ in range(steps):
+            if clear:
+                zero_grad(w)
+            backward(w, 2.0, 6.0)
+            w.data -= lr * w.grad
+        return w.data
+
+    print("with zero_grad:   ", round(train(10, 0.05, True), 3))
+    print("without zero_grad:", round(train(10, 0.05, False), 3))
+  tests:
+    - "一步：w = 1 − 0.05 × (−16) = 1.8"
+    - "第二步只用它自己的梯度 −9.6：w = 2.28"
+    - "干净地走 50 步之后，w 停在 3"
+  hints:
+    - "第一步对了，第二步不对：旧的梯度还在 w.grad 里。把它设回 0。"
+    - ["有个名字没有定义。在 `zero_grad` 里面，参数叫 w。", "要重置的那个数是参数的一个属性。看看 Param 这个类。"]
+    - ["`zero_grad` 应该把存着的梯度设回 0。", "在 `zero_grad` 里面，参数叫 w。看看 Param 这个类：哪个属性存着梯度？"]
+  after: "backward 只会往 w.grad 里加，所以每次新的 backward 之前，`zero_grad` 必须把它设回 0.0。这样每一步只用它自己的梯度。没有它，旧梯度会留下来，步子就太大了。"
+
+broadcast-shape:
+  prompt: "pred 的形状是 (4, 1)，y 的形状是 (4,)。pred − y 的形状是什么？"
+  after: "(4, 4)。广播把那一列横着拉伸、把那一行竖着拉伸，于是每个预测值都和每个标签比了一遍。不报错，但损失是错的。"
+  hints:
+    - "这是你想要的。但广播从右边开始对齐形状：(4, 1) 对 (1, 4)。"
+    - "广播从不丢掉一个维度。从右边开始比较形状：(4, 1) 和 (4,) → (4, 1) 和 (1, 4)。"
+    - ["从右边开始比较形状；缺少的轴算作大小 1。", "(4,) 变成 (1, 4)。每个大小为 1 的轴都拉伸到和另一边对上。"]
+
+dw2-code:
+  prompt: "写出最后一层权重的梯度。它必须和上面 PyTorch 给出的 W2 梯度一致。"
+  template: |
+    def sigmoid(z):
+        return 1 / (1 + np.exp(-z))
+
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+    y = np.array([[0], [1], [1], [0]], dtype=float)
+    W1 = np.array([[0.5, -0.4, 0.3], [0.2, 0.6, -0.5]])
+    b1 = np.array([0.0, 0.1, -0.1])
+    W2 = np.array([[0.7], [-0.3], [0.5]])
+    b2 = np.array([0.05])
+
+    def grad_W2(X, y, W1, b1, W2, b2):
+        a1 = np.tanh(X @ W1 + b1)          # (4, 3)
+        p = sigmoid(a1 @ W2 + b2)          # (4, 1)
+        dz2 = (p - y) / len(X)             # (4, 1)：sigmoid + 交叉熵，取平均
+        return ____
+
+    print(grad_W2(X, y, W1, b1, W2, b2))
+  tests:
+    - "每个权重一个梯度：(3, 1)，和 W2 的形状一样"
+    - "PyTorch 给出的是 [0.014675, −0.005854, 0.004884]"
+  hints:
+    - "形状对不上。a1 是 (4, 3)，dz2 是 (4, 1)。其中一个必须转置，让两个 4 在中间相遇。哪一个能得到 (3, 1)？"
+    - ["梯度的形状必须和 W2 一样，是 (3, 1)。", "a1 是 (4, 3)，dz2 是 (4, 1)。把其中一个转置，让两个 4 在中间相遇。"]
+    - ["梯度的形状是 W2 的形状 (3, 1)。a1 (4, 3) 和 dz2 (4, 1) 的哪种乘积能得到 (3, 1)？", "每个权重要对 4 个样本求和：（它的输入）×（它后面的 dz）。这就是一次带一个转置的矩阵乘法。"]
+  after: "第 6 关的规则 1：dW = input.T @ dz。最后一层的输入是 a1，所以 (3, 4) @ (4, 1) → (3, 1)，正是 W2 的形状。4 个样本在中间相遇，被加在一起。"
+
+forward-code:
+  prompt: "在 forward 里写出隐藏层 h。用盒子自己的权重（self.W1、self.b1）和 tanh。"
+  template: |
+    class TinyMLP:
+        def __init__(self):
+            self.W1 = np.array([[1.0, -1.0], [0.5, 2.0]])   # (2 个输入, 2 个隐藏单元)
+            self.b1 = np.array([0.0, 1.0])
+            self.W2 = np.array([[1.0], [-1.0]])             # (2 个隐藏单元, 1 个输出)
+            self.b2 = np.array([0.5])
+
+        def forward(self, x):
+            h = ____
+            return h @ self.W2 + self.b2
+
+        def __call__(self, x):      # model(x) 会运行 forward(x)
+            return self.forward(x)
+
+    model = TinyMLP()
+    print(model(np.array([[1.0, 0.0]])))   # tanh(1) ≈ 0.76，所以大约是 0.76 + 0.5
+  tests:
+    - "x @ W1 + b1 = [1, 0]；tanh 得到 [0.76, 0]；然后 0.76 × 1 + 0 × (−1) + 0.5 ≈ 1.26"
+    - "x @ W1 + b1 = [0, 1]；tanh 得到 [0, 0.76]；然后 −0.76 + 0.5 ≈ −0.26"
+  hints:
+    - ["有个名字没有定义。在类里面，要通过 self 才能拿到权重。", "写 self.W1 和 self.b1，而不是 W1 和 b1。"]
+    - ["和第 5 关一样的层：输入乘权重，加偏置，再用 tanh。", "在类里面，权重要通过 self 拿到，就像在 `__init__` 里那样。然后用 NumPy 的 tanh。"]
+  after: "这和第 5 关的隐藏层一样，tanh(x @ W1 + b1)。在类里面，权重属于这个对象，所以要通过 self 拿到它们。"
+
+plain-list:
+  prompt: "继续之前先猜一猜：一个模型把它的 3 个块放在普通的 Python 列表里，self.blocks = [Block(), Block(), Block()]，并在 forward 里调用它们。训练它时会怎样？"
+  options: ["正常训练：这些块是模型的一部分", "运行时不报错，但这些块的权重从来不变", "创建模型时 PyTorch 就报错"]
+  reveal: "它能跑，损失是一个正常的数，可这些块从来学不到东西。model.parameters() 不会往普通列表里看，所以优化器从来看不到它们的权重。改用 nn.ModuleList 就好了。"
+
+first-run:
+  prompt: "在你的电脑上运行 `first_run.py`（第 8 节的代码）。100 步之后它打印出的损失是多少？"
+  after: "你的第一次 PyTorch 训练。随机种子让你的初始权重和其他人的一样，所以你得到的损失也一样。"
+  hints:
+    - ["照原样复制代码，包括 `torch.manual_seed(0)` 和 lr=0.5。换了随机种子或学习率，损失就会不同。", "循环结束后，它打印一个保留 3 位小数的数。输入那个数。"]
+
+loop-code:
+  prompt: "写出内层循环的循环体：训练一步的三个调用，按正确的顺序。"
+  template: |
+    class Param:
+        def __init__(self, v):
+            self.data = float(v)
+            self.grad = 0.0
+
+    def zero_grad(w, b):              # 相当于 opt.zero_grad()
+        w.grad = 0.0
+        b.grad = 0.0
+
+    def backward(w, b, x, y):         # 相当于对 (w·x + b − y)² 调用 loss.backward()：它往里“加”
+        dz = 2 * (w.data * x + b.data - y)
+        w.grad += dz * x
+        b.grad += dz
+
+    def step(w, b, lr):               # 相当于 opt.step()
+        w.data -= lr * w.grad
+        b.data -= lr * b.grad
+
+    def train(epochs, lr=0.05):
+        w, b = Param(0.0), Param(0.0)
+        data = [(1.0, 3.0), (2.0, 5.0)]   # y = 2x + 1
+        for _ in range(epochs):
+            for x, y in data:
+                ____
+        return [round(w.data, 6), round(b.data, 6)]
+
+    print(train(500))                  # 应该接近 [2, 1]
+  tests:
+    - "一轮（两步）之后：w = 1.12，b = 0.71"
+    - "两轮之后：w = 1.5768，b = 0.9969"
+    - "500 轮之后，这条直线是 y = 2x + 1"
+  hints:
+    - ["每个调用单独一行，缩进和 ____ 所在的那一行一样。", "三行，每行都从 `for x, y in data:` 下面同一列开始。"]
+    - ["第一轮的损失就已经不对了。检查这三个调用的顺序。", "先清掉旧梯度，再算新梯度，再更新。"]
+    - ["一步就是：清零梯度，算新的梯度，更新权重。", "用 train 上面定义的三个函数。每个调用要的参数就是它定义里写的那些，这些名字在循环里都有。"]
+  after: "清零、计算、更新：先 `zero_grad`，再 backward，再 step。backward 往 .grad 里加，所以 `zero_grad` 必须在它前面。step 必须在 backward 后面，否则它用的是旧梯度。"

@@ -1,10 +1,55 @@
 /** Shared helpers for ordering and labelling levels (build time). */
+import fs from 'node:fs'
+import path from 'node:path'
+import { load as parseYaml } from 'js-yaml'
 import { getCollection, type CollectionEntry } from 'astro:content'
+import { tr, type Lang } from './i18n'
 
-export type Level = CollectionEntry<'lessons'>
+export type Level = CollectionEntry<'lessons'> & {
+  /** this level's page exists in the language asked for (else the page shows the English lesson) */
+  translated?: boolean
+  /** the translated entry, to render (only when `translated`) */
+  zh?: CollectionEntry<'lessonsZh'>
+  /** the English body, when `body` is a translation */
+  enBody?: string
+}
 
-export async function allLevels(): Promise<Level[]> {
-  return (await getCollection('lessons')).sort((a, b) => a.data.order - b.data.order)
+/** content/levels.<lang>.yaml: the title, short title, question and boss line of every level, by slug */
+type LevelText = Partial<Record<'title' | 'short' | 'question' | 'boss', string>>
+function levelTexts(lang: Lang): Record<string, LevelText> {
+  if (lang === 'en') return {}
+  const p = path.join(process.cwd(), '..', 'content', `levels.${lang}.yaml`)
+  return fs.existsSync(p) ? ((parseYaml(fs.readFileSync(p, 'utf8')) ?? {}) as Record<string, LevelText>) : {}
+}
+
+/**
+ * Every level, in course order. In another language, each level's text fields come from its translation
+ * (content/levels.<lang>.yaml and lesson.<lang>.mdx); a level not translated yet keeps its English body.
+ */
+export async function allLevels(lang: Lang = 'en'): Promise<Level[]> {
+  const en = (await getCollection('lessons')).sort((a, b) => a.data.order - b.data.order)
+  if (lang === 'en') return en
+  const texts = levelTexts(lang)
+  const zh = new Map((await getCollection('lessonsZh')).map((e) => [e.id, e]))
+  return en.map((e) => {
+    const z = zh.get(e.id)
+    const t = texts[e.id] ?? {}
+    return {
+      ...e,
+      body: z ? z.body : e.body,
+      enBody: e.body,
+      translated: !!z,
+      zh: z,
+      data: {
+        ...e.data,
+        ...Object.fromEntries(Object.entries(t).filter(([, v]) => !!v)),
+        // a translated title without its own short title: the English short title would not fit, so use the title
+        ...(t.title && !t.short ? { short: undefined } : {}),
+        ...(z?.data.recap ? { recap: z.data.recap } : {}),
+        ...(z ? { glossarySkip: z.data.glossarySkip } : {}),
+      },
+    }
+  })
 }
 
 export const PART_NAME = { foundations: 'Foundations', theory: 'Theory', engineering: 'Engineering' } as const
@@ -24,9 +69,9 @@ export const BRANCH_NOTE = {
 export const RUN_NAME = { browser: 'runs in your browser', local: 'runs on your computer', mixed: 'runs in your browser · last part on your computer', cloud: 'needs a cloud GPU' } as const
 
 /** "Theory", "Theory · Diffusion" */
-export function sectionName(l: Level): string {
-  const p = PART_NAME[l.data.part]
-  return l.data.branch ? `${p} · ${BRANCH_NAME[l.data.branch]}` : p
+export function sectionName(l: Level, lang: Lang = 'en'): string {
+  const p = tr(lang, PART_NAME[l.data.part])
+  return l.data.branch ? `${p} · ${tr(lang, BRANCH_NAME[l.data.branch])}` : p
 }
 
 /** The fields lib/nav.ts needs, from a level entry. */

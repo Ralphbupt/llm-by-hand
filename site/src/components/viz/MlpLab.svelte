@@ -3,11 +3,42 @@
   import LabFrame from './LabFrame.svelte'
   import { readable } from '@lib/readable'
   import { reducedMotion } from '@lib/settings'
+  import { provideLang, useT } from '@lib/i18nSvelte'
+  import type { Lang } from '@lib/i18n'
   /**
    * MLP lab: a 2→6→1 network learns XOR live. Training really runs gradient descent in the browser,
    * 20 steps per frame; the background is the current decision boundary.
    * Turn the activation off and it can never learn: two linear layers stacked are still one line.
    */
+  let { lang = 'en' }: { lang?: Lang } = $props()
+  provideLang(lang)
+  const t = useT({
+    'A 2 → 6 → 1 network learns XOR': '一个 2 → 6 → 1 的网络学习 XOR',
+    'Press Train and watch the background bend around the four points. Then turn the activation off and try again.': '按“训练”，看背景怎样绕着四个点弯曲。然后关掉激活函数，再试一次。',
+    'What the network answers for every point of the plane, with the four XOR points': '网络对平面上每个点的回答，以及四个 XOR 点',
+    'Loss curve': '损失曲线',
+    'loss': '损失',
+    'steps →': '步数 →',
+    'Train to draw the loss': '训练后会画出损失',
+    'loss while training (last 200 records)': '训练中的损失（最近 200 条记录）',
+    'input': '输入',
+    'target': '目标值',
+    'output': '输出',
+    'Pause': '暂停',
+    'Train': '训练',
+    'Run 500 steps': '跑 500 步',
+    'New random weights': '新的随机权重',
+    'activation on (tanh)': '开启激活函数（tanh）',
+    'steps': '步数',
+    'loss (cross-entropy)': '损失（交叉熵）',
+    '✓ all 4 correct': '✓ 4 个全对',
+    '✗ not learned yet': '✗ 还没学会',
+    'background: how sure the network is of 1': '背景：网络有多确定是 1',
+    'target 1': '目标值 1',
+    'target 0': '目标值 0',
+    'a wrong answer': '答错的点',
+  })
+
   const XS = [[0, 0], [0, 1], [1, 0], [1, 1]]
   const YS = [0, 1, 1, 0]
   const H = 6      // measured: with H=6, lr=1 it learns within 500 steps every time; H=4 gets stuck ~2% of the time
@@ -143,12 +174,12 @@
 </script>
 
 <LabFrame
-  title="A 2 → 6 → 1 network learns XOR"
-  hint="Press Train and watch the background bend around the four points. Then turn the activation off and try again."
+  title={t('A 2 → 6 → 1 network learns XOR')}
+  hint={t('Press Train and watch the background bend around the four points. Then turn the activation off and try again.')}
 >
   <div class="pic">
     <div class="boardwrap">
-      <svg viewBox="0 0 100 100" class="board" use:readable aria-label="What the network answers for every point of the plane, with the four XOR points">
+      <svg viewBox="0 0 100 100" class="board" use:readable aria-label={t('What the network answers for every point of the plane, with the four XOR points')}>
         {#each ui.grid as row, r}
           {#each row as p, c}
             <rect x={(c / GRID) * 100} y={(r / GRID) * 100} width={100 / GRID + 0.4} height={100 / GRID + 0.4} style="--p: {p}" />
@@ -165,23 +196,23 @@
     </div>
 
     <div class="side">
-      <svg viewBox="0 0 100 44" class="curve" use:readable aria-label="Loss curve">
+      <svg viewBox="0 0 100 44" class="curve" use:readable aria-label={t('Loss curve')}>
         <line x1="8" y1="38" x2="99" y2="38" class="ax" />
         <line x1="8" y1="3" x2="8" y2="38" class="ax" />
-        <text x="10" y="7" class="tick">loss</text>
+        <text x="10" y="7" class="tick">{t('loss')}</text>
         <text x="7" y="38" class="tick end">0</text>
-        <text x="99" y="43" class="tick end">steps →</text>
+        <text x="99" y="43" class="tick end">{t('steps →')}</text>
         {#if losses.length > 1}
           <polyline points={curve} />
         {:else}
-          <text x="53" y="23" class="empty">Train to draw the loss</text>
+          <text x="53" y="23" class="empty">{t('Train to draw the loss')}</text>
         {/if}
       </svg>
-      <div class="cap">loss while training (last 200 records)</div>
+      <div class="cap">{t('loss while training (last 200 records)')}</div>
 
       <div class="scroll">
         <table>
-          <thead><tr><th>input</th><th>target</th><th>output</th></tr></thead>
+          <thead><tr><th>{t('input')}</th><th>{t('target')}</th><th>{t('output')}</th></tr></thead>
           <tbody>
             {#each XS as x, n}
               <tr>
@@ -197,22 +228,22 @@
   </div>
 
   {#snippet controls()}
-    <button onclick={start} class="lab-btn primary">{running ? 'Pause' : 'Train'}</button>
-    <button class="lab-btn" onclick={() => burst(500)}>Run 500 steps</button>
-    <button class="lab-btn" onclick={reset}>New random weights</button>
-    <label class="sw"><input type="checkbox" bind:checked={act} onchange={reset} /> activation on (tanh)</label>
+    <button onclick={start} class="lab-btn primary">{running ? t('Pause') : t('Train')}</button>
+    <button class="lab-btn" onclick={() => burst(500)}>{t('Run 500 steps')}</button>
+    <button class="lab-btn" onclick={reset}>{t('New random weights')}</button>
+    <label class="sw"><input type="checkbox" bind:checked={act} onchange={reset} /> {t('activation on (tanh)')}</label>
   {/snippet}
 
   {#snippet readout()}
-    steps {ui.steps} · loss (cross-entropy) {ui.steps ? ui.loss.toFixed(4) : '—'} ·
-    <span class:good={ok} class:bad={!ok}>{ok ? '✓ all 4 correct' : '✗ not learned yet'}</span>
+    {t('steps')} {ui.steps} · {t('loss (cross-entropy)')} {ui.steps ? ui.loss.toFixed(4) : '—'} ·
+    <span class:good={ok} class:bad={!ok}>{ok ? t('✓ all 4 correct') : t('✗ not learned yet')}</span>
   {/snippet}
 
   {#snippet legend()}
-    <span class="key"><i class="k-bg"></i>background: how sure the network is of 1</span>
-    <span class="key"><i class="k-one"></i>target 1</span>
-    <span class="key"><i class="k-zero"></i>target 0</span>
-    <span class="key"><i class="k-miss"></i>a wrong answer</span>
+    <span class="key"><i class="k-bg"></i>{t('background: how sure the network is of 1')}</span>
+    <span class="key"><i class="k-one"></i>{t('target 1')}</span>
+    <span class="key"><i class="k-zero"></i>{t('target 0')}</span>
+    <span class="key"><i class="k-miss"></i>{t('a wrong answer')}</span>
   {/snippet}
 </LabFrame>
 
