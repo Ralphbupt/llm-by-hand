@@ -78,7 +78,7 @@ export function hasReal(id: string): boolean {
 const pageOf = (id: string) => qualify(id).split('/')[0]
 
 /**
- * Is this unlocked? Used by Gates and labs. Everything is unlocked in debug "open" mode, in reading mode,
+ * Is this solved, as far as a lab is concerned? Labs mask a value until its question is solved. Everything is unlocked in debug "open" mode, in reading mode,
  * and on a level the learner tested out of.
  */
 export function has(id: string): boolean {
@@ -87,7 +87,7 @@ export function has(id: string): boolean {
 
 export { readingMode }
 
-/** Turn reading mode on or off (a setting), and tell every Gate and lab to look again. */
+/** Turn reading mode on or off (a setting), and tell every lab to look again. */
 export function setReadingMode(on: boolean) {
   setSettings({ reading: on })
   window.dispatchEvent(new CustomEvent(EVENT, { detail: { id: null } }))

@@ -2,7 +2,7 @@
 /**
  * "Already know this? Test out": a quiet link at the top of a level that opens a panel with a few of the
  * level's own questions (the real quiz components, same ids as on the page). Solving all of them on your own,
- * after opening the panel, records a test-out: the level counts as cleared with three stars and every Gate opens.
+ * after opening the panel, records a test-out: the level counts as cleared with three stars and its masked lab values show.
  * The link hides once the level is cleared, and in reading mode.
  */
 import Blank from './Blank.astro'
@@ -29,7 +29,7 @@ const n = items.length
         <button type="button" class="to-close" data-testout-close>{t('Close')}</button>
       </div>
       <p class="to-lede">
-        {t(n === 1 ? 'Solve this question on your own.' : 'Solve these {n} questions on your own.', { n })} {t('Answer all of them correctly and the level counts as cleared with three stars, and every part of the page opens. Showing an answer doesn’t count.')}
+        {t(n === 1 ? 'Solve this question on your own.' : 'Solve these {n} questions on your own.', { n })} {t('Answer all of them correctly and the level counts as cleared with three stars. Showing an answer doesn’t count.')}
       </p>
       <p class="to-status" data-testout-status aria-live="polite"></p>
       {items.map((id) => (
@@ -78,7 +78,7 @@ const n = items.length
       // nothing to test out of: already cleared (unless the panel is open and showing its result), or reading mode
       root!.hidden = readingMode() || (!!scoreOf(slug)?.cleared && panel.hidden)
       root!.classList.toggle('is-done', done)
-      if (done) status.textContent = t('✓ Test passed. This level counts as cleared with three stars, and every part is open.')
+      if (done) status.textContent = t('✓ Test passed. This level counts as cleared with three stars.')
       else if (st.shown > 0) status.textContent = t('You showed an answer, so this test can’t count. Do the level step by step instead; nothing is lost.')
       else status.textContent = t('{a} of {b} solved on your own', { a: st.solved, b: st.total })
       status.dataset.state = done ? 'done' : st.shown > 0 ? 'off' : ''

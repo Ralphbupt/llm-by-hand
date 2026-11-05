@@ -236,7 +236,7 @@ const glossary = (await loadGlossary(lang)).filter((t) => t.mark !== false && (!
     </div>
 
     <div class="reading-pill" role="status">
-      <span><b>{t('Reading mode')}</b><span class="rp-note">{t(' · every part open, no stars')}</span></span>
+      <span><b>{t('Reading mode')}</b><span class="rp-note">{t(' · every lab value shown, no stars')}</span></span>
       <button type="button" data-reading-off>{t('Turn off')}</button>
     </div>
 
@@ -266,7 +266,7 @@ const glossary = (await loadGlossary(lang)).filter((t) => t.mark !== false && (!
       const lang = pageLang()
       const t = translator(lang)
       const terms: TermInfo[] = JSON.parse(document.getElementById('glossary-data')?.textContent || '[]')
-      const SKIP = 'h1,h2,h3,h4,h5,h6,code,pre,kbd,.katex,astro-island,a,button,summary,label,input,textarea,.head,.boss,.debug-panel,.gate > .locked,.lvl-done,.lvl-trips,.foot,.kbd-hint,.gl-term,svg,.testout,.warmup,.recap'
+      const SKIP = 'h1,h2,h3,h4,h5,h6,code,pre,kbd,.katex,astro-island,a,button,summary,label,input,textarea,.head,.boss,.debug-panel,.lvl-done,.lvl-trips,.foot,.kbd-hint,.gl-term,svg,.testout,.warmup,.recap'
       const main = document.querySelector('main')
       if (main && terms.length) {
         const nodes: Text[] = []
@@ -538,7 +538,7 @@ const glossary = (await loadGlossary(lang)).filter((t) => t.mark !== false && (!
       function nextUnsolved(): HTMLElement | null {
         const all = [...document.querySelectorAll<HTMLElement>('main .blank:not(.done), main .code:not(.done), main .predict:not(.revealed)')]
         // the warm-up and the test-out panel are optional; N walks the lesson itself
-        return all.find((el) => !el.closest('.gate.is-locked > .content, .warmup, .testout')) ?? null
+        return all.find((el) => !el.closest('.warmup, .testout')) ?? null
       }
       document.addEventListener('keydown', (e) => {
         if (e.metaKey || e.ctrlKey || e.altKey) return

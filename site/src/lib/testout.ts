@@ -1,6 +1,6 @@
 /**
  * "Already know this? Test out": a few of the level's own questions. Solving all of them on your own
- * clears the level (three stars) and opens every Gate on the page. Pure helpers, used at build time and in the browser.
+ * clears the level (three stars) and shows its masked lab values. Pure helpers, used at build time and in the browser.
  */
 
 /** Ids of quiz components in an MDX body, grouped by `## ` section (text before the first `##` is section 0). */

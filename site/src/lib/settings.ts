@@ -1,7 +1,7 @@
 /**
  * Reader settings, stored in this browser: theme, text size, motion, reading mode.
  * They are applied as attributes on <html> (data-theme, data-scale, data-motion, data-reading); global.css does the rest.
- * Reading mode opens every part and records nothing (progress.ts asks readingMode()).
+ * Reading mode shows every masked lab value and records nothing (progress.ts asks readingMode()).
  * An inline script in each page's <head> applies them before the first paint (see settingsBootScript).
  */
 export type Theme = 'auto' | 'light' | 'dark'
@@ -45,7 +45,7 @@ export function apply(s: Settings = getSettings()) {
   else el.removeAttribute('data-reading')
 }
 
-/** Reading mode: every Gate open, every masked lab value shown, nothing recorded, no stars. */
+/** Reading mode: every masked lab value shown, nothing recorded, no stars. */
 export function readingMode(): boolean {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '{}').reading === true

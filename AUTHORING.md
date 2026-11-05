@@ -41,7 +41,7 @@ recap:                # optional: the recap card at the end of the level (see be
 
 - **Test out**: a quiet “Already know this? Test out” link under the question opens a panel with a few of the level’s
   own questions (the real quiz components, same ids). Solving all of them on your own, after opening the panel, clears the
-  level with ★★★ and opens every Gate on the page; a shown answer means the test-out can’t count. It is stored in
+  level with ★★★ and shows its masked lab values; a shown answer means the test-out can’t count. It is stored in
   stats as `testOuts[slug]`. Without `testOut:` the default is the checkpoint plus up to two other non-Predict
   questions, each the last question of its `##` section, spread over the level. List ids that are solvable without
   the lab above them (they state their own numbers). The link hides once the level is cleared and in reading mode.
@@ -67,7 +67,7 @@ recap:                # optional: the recap card at the end of the level (see be
   left out automatically. An `after` note that points at the page (“in the lab”, “above”) is dropped in the warm-up.
   The warm-up starts folded to one line on phones, in reading mode, and when the learner jumped here (nothing tried
   on the main level just before).
-- **Reading mode** (Settings): every Gate opens and every masked lab value shows; nothing is recorded and no stars are
+- **Reading mode** (Settings): every masked lab value shows; nothing is recorded and no stars are
   given. Labs only need `has()` from `@lib/progress`, which already respects it.
 
 ## Every level has
@@ -76,7 +76,7 @@ recap:                # optional: the recap card at the end of the level (see be
 - an interactive lab where the picture and the numbers move together
 - at least one `Predict` (commit to a guess before seeing the answer)
 - at least three `Blank`s (number or shape) and one `CodeBlank`
-- `Gate`s, so the next part opens only after the question above is answered
+- `Gate`s around each part after a question. Every part is open from the start: questions earn stars, they never block reading
 - one `TryIt`, at least one `Deeper`, at least one `Stuck`
 - a `demo.py` that prints every number the page asks about
 
@@ -147,7 +147,7 @@ solution, but `site/src/lib/quiz.ts` strips it before the page is built, so the 
 is no “Show answer”. A boss checkpoint never has a `solution`, and neither does any other boss part (an id that
 starts `boss-`, or a prompt that starts “The boss”). List every in-browser boss part that is not the checkpoint in the
 frontmatter `mustSolve: [...]` (and in `testOut`): the level counts as cleared only when the checkpoint and every
-`mustSolve` part are solved, so “Skip for now” can’t carry a learner past them (checked). Other templates on the level must not contain the lines of
+`mustSolve` part are solved, so reading past them can’t clear the level (checked). Other templates on the level must not contain the lines of
 a boss `reference` (checked). When a boss answer is a set of numbers (level 21 `boss-forward`), the page stores only a
 hash of a code the script prints, never the numbers.
 

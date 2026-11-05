@@ -149,7 +149,7 @@
       </label>
       <label class="check">
         <input type="checkbox" checked={reading} onchange={(e) => { reading = e.currentTarget.checked; setReadingMode(reading) }} />
-        {t('Reading mode: open every part, no stars')}
+        {t('Reading mode: show every lab value, no stars')}
       </label>
       <p class="sub">{t('Your answers and stars stay as they are. Nothing new is saved while it is on.')}</p>
       {#if hasAnalytics}

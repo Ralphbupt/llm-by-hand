@@ -43,8 +43,8 @@ export function endCardText(sc: LevelScore, mustWhere: Record<string, string> = 
   if (!sc.cleared && sc.missing.length) {
     const where = [...new Set(sc.missing.map((id) => (mustWhere[id] ? `“${mustWhere[id]}”` : id)))].join(t(' and '))
     const note = sc.missing.length === 1
-      ? t("Not cleared yet: solve the boss part in {where} too. Skip for now can't pass it.", { where })
-      : t("Not cleared yet: solve the {n} boss parts in {where} too. Skip for now can't pass them.", { n: sc.missing.length, where })
+      ? t("Not cleared yet: solve the boss part in {where} too.", { where })
+      : t("Not cleared yet: solve the {n} boss parts in {where} too.", { n: sc.missing.length, where })
     return { note, nums: `${solved}${skip}` }
   }
   let note: string
